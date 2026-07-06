@@ -1,6 +1,10 @@
 const { getProfile, updateProfile, uploadAvatar } = require("../../api/auth");
 const { getCart } = require("../../api/cart");
 const { requireCompleteProfile, requireLogin } = require("../../utils/auth-guard");
+const { assetUrl } = require("../../utils/config");
+
+const DEFAULT_AVATAR = assetUrl("/assets/products/avatar.png");
+const PROFILE_HERO_BG = assetUrl("/assets/products/profile-hero-bg.jpg");
 
 const DEFAULT_ORDER_ACTIONS = [
   { label: "待付款", count: 0, url: "/pages/orders/index?status=待支付", icon: "/assets/icons/order-veg.svg" },
@@ -20,12 +24,13 @@ function buildOrderActions(stats) {
 Page({
   data: {
     loading: true,
-    avatarUrl: "/assets/products/avatar.png",
+    heroBg: PROFILE_HERO_BG,
+    avatarUrl: DEFAULT_AVATAR,
     displayName: "未登录用户",
     profileTip: "登录后可同步订单、地址和售后进度",
     isLoggedIn: false,
     editVisible: false,
-    editAvatarUrl: "/assets/products/avatar.png",
+    editAvatarUrl: DEFAULT_AVATAR,
     editAvatarTempPath: "",
     editNickName: "",
     savingProfile: false,
@@ -50,7 +55,7 @@ Page({
     if (!app.isLoggedIn || !app.isLoggedIn()) {
       this.setData({
         loading: false,
-        avatarUrl: "/assets/products/avatar.png",
+        avatarUrl: DEFAULT_AVATAR,
         displayName: "未登录用户",
         profileTip: "登录后可同步订单、地址和售后进度",
         isLoggedIn: false,
@@ -62,7 +67,7 @@ Page({
       const profile = await getProfile();
       this.setData({
         loading: false,
-        avatarUrl: profile.avatarUrl || "/assets/products/avatar.png",
+        avatarUrl: profile.avatarUrl || DEFAULT_AVATAR,
         displayName: profile.nickName || "微信用户",
         profileTip: "资料已同步，换设备登录也会保持一致",
         isLoggedIn: true,
@@ -74,7 +79,7 @@ Page({
       }
       this.setData({
         loading: false,
-        avatarUrl: "/assets/products/avatar.png",
+        avatarUrl: DEFAULT_AVATAR,
         displayName: "未登录用户",
         profileTip: "登录后可同步订单、地址和售后进度",
         isLoggedIn: false,

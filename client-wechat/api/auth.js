@@ -7,7 +7,7 @@ function getBaseUrl() {
 }
 
 function normalizeAvatarUrl(avatarUrl) {
-  if (!avatarUrl || avatarUrl.startsWith("http") || avatarUrl.startsWith("/assets")) {
+  if (!avatarUrl || avatarUrl.startsWith("http")) {
     return avatarUrl;
   }
   return `${getBaseUrl()}${avatarUrl}`;

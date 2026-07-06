@@ -1,10 +1,15 @@
 const { getProfile, updateProfile, uploadAvatar } = require("../../api/auth");
+const { assetUrl } = require("../../utils/config");
+
+const DEFAULT_AVATAR = assetUrl("/assets/products/avatar.png");
+const SETUP_BG = assetUrl("/assets/products/hero.png");
 
 Page({
   data: {
     loading: true,
     redirect: "",
-    avatarUrl: "/assets/products/avatar.png",
+    setupBg: SETUP_BG,
+    avatarUrl: DEFAULT_AVATAR,
     avatarTempPath: "",
     nickName: "",
     mode: "setup",
@@ -35,7 +40,7 @@ Page({
     try {
       const profile = await getProfile();
       this.setData({
-        avatarUrl: profile.avatarUrl || "/assets/products/avatar.png",
+        avatarUrl: profile.avatarUrl || DEFAULT_AVATAR,
         nickName: profile.nickName || ""
       });
     } catch (error) {

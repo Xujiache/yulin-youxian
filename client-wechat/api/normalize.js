@@ -1,13 +1,15 @@
+const { API_BASE_URL } = require("../utils/config");
+
 function normalizeAssetUrl(url) {
   if (!url) {
     return url;
   }
-  if (/^https?:\/\//.test(url) || url.startsWith("/assets/")) {
+  if (/^https?:\/\//.test(url)) {
     return url;
   }
-  if (url.startsWith("/uploads/")) {
+  if (url.startsWith("/assets/") || url.startsWith("/uploads/")) {
     const app = getApp();
-    const baseUrl = (app.globalData && app.globalData.apiBaseUrl) || "";
+    const baseUrl = (app.globalData && app.globalData.apiBaseUrl) || API_BASE_URL;
     return baseUrl ? `${baseUrl}${url}` : url;
   }
   return url;

@@ -8,7 +8,7 @@ function getBaseUrl() {
 }
 
 function normalizeUploadUrl(url) {
-  if (!url || url.startsWith("http") || url.startsWith("/assets")) {
+  if (!url || url.startsWith("http")) {
     return url;
   }
   return `${getBaseUrl()}${url}`;

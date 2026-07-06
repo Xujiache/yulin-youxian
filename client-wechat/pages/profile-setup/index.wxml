@@ -1,7 +1,7 @@
 <view class="setup-page">
   <skeleton wx:if="{{loading}}" type="form" />
   <view class="setup-hero">
-    <image class="setup-bg" src="/assets/products/hero.png" mode="aspectFill" />
+    <image class="setup-bg" src="{{setupBg}}" mode="aspectFill" />
     <view class="setup-mask"></view>
     <view class="setup-copy">
       <text class="setup-title">{{pageTitle}}</text>

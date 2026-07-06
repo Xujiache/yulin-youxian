@@ -1,7 +1,7 @@
 <view class="profile-page">
   <skeleton wx:if="{{loading}}" type="profile" has-tabbar="{{true}}" />
   <view class="profile-hero">
-    <image class="hero-bg" src="/assets/products/profile-hero-bg.jpg" mode="aspectFill" />
+    <image class="hero-bg" src="{{heroBg}}" mode="aspectFill" />
     <view class="hero-shade"></view>
     <view class="profile-content hero-content" bindtap="handleProfileAction">
       <image class="avatar" src="{{avatarUrl}}" mode="aspectFill" />

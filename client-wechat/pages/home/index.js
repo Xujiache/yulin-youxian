@@ -1,6 +1,7 @@
 const { getHome } = require("../../api/catalog");
 const { addCartItem, getCart } = require("../../api/cart");
 const { requireCompleteProfile } = require("../../utils/auth-guard");
+const { assetUrl } = require("../../utils/config");
 
 Page({
   data: {
@@ -28,7 +29,7 @@ Page({
         {
           title: home.bannerTitle || "今日新鲜到店",
           subtitle: home.bannerSubtitle || "下单后由门店自行配送",
-          imageUrl: "/assets/products/hero.png",
+          imageUrl: assetUrl("/assets/products/hero.png"),
           linkType: "none",
           linkTarget: ""
         }

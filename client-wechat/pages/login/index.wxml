@@ -7,7 +7,7 @@
 
   <view class="login-panel">
     <view class="brand-area">
-      <image class="brand-image" src="/assets/products/hero.png" mode="aspectFill" />
+      <image class="brand-image" src="{{brandImage}}" mode="aspectFill" />
       <view class="brand-mask"></view>
       <view class="brand-copy">
         <text class="brand-title">禹邻优鲜</text>

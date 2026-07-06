@@ -1,8 +1,11 @@
+const { assetUrl } = require("../../utils/config");
+
 Page({
   data: {
     loading: true,
     redirect: "",
-    submitting: false
+    submitting: false,
+    brandImage: assetUrl("/assets/products/hero.png")
   },
 
   onLoad(options) {
