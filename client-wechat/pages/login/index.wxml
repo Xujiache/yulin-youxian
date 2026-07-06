@@ -1,0 +1,26 @@
+<view class="login-page">
+  <skeleton wx:if="{{loading}}" type="form" />
+  <view class="page-header login-header">
+    <image class="back-icon" src="/assets/icons/back-green.svg" mode="aspectFit" bindtap="goBack" />
+    <text class="page-title centered-title">登录</text>
+  </view>
+
+  <view class="login-panel">
+    <view class="brand-area">
+      <image class="brand-image" src="/assets/products/hero.png" mode="aspectFill" />
+      <view class="brand-mask"></view>
+      <view class="brand-copy">
+        <text class="brand-title">禹邻优鲜</text>
+        <text class="brand-subtitle">登录后同步订单、地址、购物车和售后进度</text>
+      </view>
+    </view>
+
+    <view class="form-card">
+      <text class="login-title">微信快捷登录</text>
+      <text class="login-desc">我们仅用于识别你的订单和配送信息。首次登录后，需要设置头像和昵称。</text>
+      <button class="login-button" loading="{{submitting}}" bindtap="handleLogin">
+        {{submitting ? '登录中' : '微信登录'}}
+      </button>
+    </view>
+  </view>
+</view>

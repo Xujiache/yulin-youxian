@@ -1,0 +1,6 @@
+{
+  "usingComponents": {
+    "app-tabbar": "../../components/app-tabbar/index",
+    "quantity-stepper": "../../components/quantity-stepper/index"
+  }
+}

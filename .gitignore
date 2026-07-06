@@ -1,0 +1,18 @@
+# Java
+target/
+
+# Node
+node_modules/
+dist/
+
+# Logs
+*.log
+server/data/
+
+# Local IDE/runtime files
+.idea/
+.vscode/
+.DS_Store
+
+# WeChat developer tool local config
+project.private.config.json

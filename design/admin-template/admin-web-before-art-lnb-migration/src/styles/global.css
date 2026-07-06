@@ -1,0 +1,40 @@
+:root {
+  color: #191c1e;
+  background: #f8f9fb;
+  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Helvetica Neue", Arial, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: #f8f9fb;
+}
+
+.page-title {
+  margin: 0 0 16px;
+  color: #191c1e;
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.card-section {
+  padding: 18px;
+  background: #ffffff;
+  border: 1px solid #edf0ee;
+  border-radius: 8px;
+}
+
+.price-text {
+  color: #006d37;
+  font-weight: 700;
+}

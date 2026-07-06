@@ -1,0 +1,191 @@
+<!DOCTYPE html><html lang="zh-CN"><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>鲜达生鲜 - 申请退款</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;700&amp;family=Plus+Jakarta+Sans:wght@600;700&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "surface-container-highest": "#e1e2e4",
+                        "surface-dim": "#d9dadc",
+                        "on-background": "#191c1e",
+                        "on-secondary-fixed": "#121f08",
+                        "on-primary-fixed": "#00210c",
+                        "surface-container-high": "#e7e8ea",
+                        "primary-container": "#27ae60",
+                        "surface": "#f8f9fb",
+                        "outline": "#6d7a6e",
+                        "on-tertiary": "#ffffff",
+                        "inverse-on-surface": "#f0f1f3",
+                        "on-error-container": "#93000a",
+                        "error-container": "#ffdad6",
+                        "surface-variant": "#e1e2e4",
+                        "on-tertiary-container": "#2c3329",
+                        "tertiary": "#596055",
+                        "on-tertiary-fixed-variant": "#42493e",
+                        "secondary-fixed": "#d7e8c3",
+                        "secondary-fixed-dim": "#bbcca9",
+                        "on-tertiary-fixed": "#171d14",
+                        "primary-fixed-dim": "#61de8a",
+                        "outline-variant": "#bccabc",
+                        "on-secondary": "#ffffff",
+                        "surface-container": "#edeef0",
+                        "tertiary-fixed": "#dee5d6",
+                        "on-primary-container": "#00391a",
+                        "inverse-primary": "#61de8a",
+                        "on-primary": "#ffffff",
+                        "surface-bright": "#f8f9fb",
+                        "on-secondary-container": "#5a694c",
+                        "background": "#f8f9fb",
+                        "primary": "#006d37",
+                        "on-primary-fixed-variant": "#005228",
+                        "on-error": "#ffffff",
+                        "primary-fixed": "#7efba4",
+                        "surface-container-lowest": "#ffffff",
+                        "tertiary-container": "#949b8e",
+                        "on-surface": "#191c1e",
+                        "on-secondary-fixed-variant": "#3d4b30",
+                        "error": "#ba1a1a",
+                        "inverse-surface": "#2e3132",
+                        "secondary-container": "#d7e8c3",
+                        "on-surface-variant": "#3d4a3f",
+                        "secondary": "#546346",
+                        "surface-container-low": "#f2f4f6",
+                        "tertiary-fixed-dim": "#c2c9bb",
+                        "surface-tint": "#006d37"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "card-padding": "12px",
+                        "touch-target-min": "44px",
+                        "gutter-md": "8px",
+                        "section-gap": "20px",
+                        "container-margin": "12px"
+                    },
+                    "fontFamily": {
+                        "body-md": ["Be Vietnam Pro"],
+                        "headline-lg-mobile": ["Plus Jakarta Sans"],
+                        "body-lg": ["Be Vietnam Pro"],
+                        "display-price": ["Plus Jakarta Sans"],
+                        "label-sm": ["Be Vietnam Pro"],
+                        "headline-lg": ["Plus Jakarta Sans"],
+                        "headline-md": ["Plus Jakarta Sans"]
+                    },
+                    "fontSize": {
+                        "body-md": ["14px", { "lineHeight": "22px", "fontWeight": "400" }],
+                        "headline-lg-mobile": ["18px", { "lineHeight": "24px", "fontWeight": "600" }],
+                        "body-lg": ["16px", { "lineHeight": "24px", "fontWeight": "400" }],
+                        "display-price": ["24px", { "lineHeight": "32px", "fontWeight": "700" }],
+                        "label-sm": ["12px", { "lineHeight": "16px", "fontWeight": "500" }],
+                        "headline-lg": ["20px", { "lineHeight": "28px", "fontWeight": "600" }],
+                        "headline-md": ["18px", { "lineHeight": "26px", "fontWeight": "600" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        body { -webkit-tap-highlight-color: transparent; }
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
+</head>
+<body class="bg-background text-on-background font-body-md min-h-screen flex flex-col pb-[80px]">
+<!-- TopAppBar -->
+<header class="flex items-center justify-between px-card-padding w-full h-14 z-50 bg-surface dark:bg-surface-dim docked full-width top-0 sticky top-0 flat no shadows">
+<button class="w-touch-target-min h-touch-target-min flex items-center justify-center text-on-surface-variant hover:opacity-80 scale-95 active:transition-transform">
+<span class="material-symbols-outlined">arrow_back</span>
+</button>
+<div class="flex items-center justify-center flex-1">
+<span class="font-headline-lg-mobile text-headline-lg-mobile font-bold text-primary dark:text-primary-fixed-dim">申请退款</span>
+</div>
+<div class="w-touch-target-min h-touch-target-min"></div>
+</header>
+<main class="flex-1 px-container-margin py-section-gap flex flex-col gap-section-gap">
+<!-- Product Info Card -->
+<section class="bg-surface-container-lowest rounded-xl p-card-padding shadow-[0_4px_12px_rgba(0,0,0,0.04)]">
+<h2 class="font-headline-md text-headline-md text-on-surface mb-3">退款商品</h2>
+<div class="flex gap-3">
+<img class="w-20 h-20 rounded-lg object-cover" data-alt="Close up photography of fresh, bright red organic strawberries in a minimalist woven basket. Soft, high-key lighting creates a vibrant and appetizing look. The background is a clean, slightly blurred light gray surface, emphasizing the freshness and quality of the produce in a modern grocery setting." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCvrlDOlLLPFcsOzC1_3JJALRV5yv7ga2JZKKRaRN3L31wRQ3s-2fD0IxF-YwpLdf9MgO2DnHFg5xgnjo-PDXCgTpXs3qv3Eizt8__SjZnqioTcDDMNEfyVD0Y7jbWz447ridHEN6WJOPNzEdkYuYV2qg7xySKFaUi-p9B7UFpDe7WN2mARiaM3gSIfn088fVABH8QhVAjm6R5mdLey9yYhRru4dWgpQWXP9oDFnoQBjamHtCxpBWTJ-A">
+<div class="flex-1 flex flex-col justify-between py-1">
+<div>
+<h3 class="font-body-lg text-body-lg font-medium text-on-surface line-clamp-2">精选红颜草莓 新鲜采摘 约500g</h3>
+<p class="font-body-md text-body-md text-on-surface-variant mt-1">规格: 500g/盒</p>
+</div>
+<div class="flex justify-between items-center mt-2">
+<span class="font-display-price text-[18px] leading-[24px] font-bold text-on-surface">¥49.90</span>
+<span class="font-body-md text-body-md text-on-surface-variant">x1</span>
+</div>
+</div>
+</div>
+</section>
+<!-- Refund Details Form -->
+<section class="bg-surface-container-lowest rounded-xl shadow-[0_4px_12px_rgba(0,0,0,0.04)] overflow-hidden">
+<div class="p-card-padding border-b border-surface-container-highest">
+<label class="flex justify-between items-center cursor-pointer min-h-[32px]">
+<span class="font-body-lg text-body-lg text-on-surface">退款原因</span>
+<div class="flex items-center gap-2 text-on-surface-variant">
+<span class="font-body-md text-body-md" id="reason-display">请选择</span>
+<span class="material-symbols-outlined">chevron_right</span>
+</div>
+<select class="absolute opacity-0 w-0 h-0" id="reason-select" onchange="document.getElementById('reason-display').innerText = this.options[this.selectedIndex].text;">
+<option disabled="" selected="" value="">请选择退款原因</option>
+<option value="1">商品质量问题 (变质/破损)</option>
+<option value="2">少件/漏发</option>
+<option value="3">发错货</option>
+<option value="4">包装破损</option>
+<option value="5">其他</option>
+</select>
+</label>
+</div>
+<div class="p-card-padding border-b border-surface-container-highest">
+<div class="flex justify-between items-center min-h-[32px]">
+<span class="font-body-lg text-body-lg text-on-surface">退款金额</span>
+<span class="font-display-price text-[20px] leading-[28px] font-bold text-primary">¥49.90</span>
+</div>
+<p class="font-label-sm text-label-sm text-on-surface-variant mt-1">不可修改，最多¥49.90，含发货邮费¥0.00</p>
+</div>
+<div class="p-card-padding">
+<span class="font-body-lg text-body-lg text-on-surface block mb-3">补充描述和凭证</span>
+<textarea class="w-full bg-surface rounded-lg p-3 font-body-md text-body-md text-on-surface border-0 focus:ring-1 focus:ring-primary placeholder-on-surface-variant resize-none" placeholder="请详细描述问题，以便我们更快为您处理..." rows="3"></textarea>
+<div class="mt-4 flex flex-wrap gap-2">
+<button class="w-20 h-20 border border-dashed border-outline-variant rounded-lg flex flex-col items-center justify-center text-on-surface-variant hover:bg-surface-container-low transition-colors">
+<span class="material-symbols-outlined text-[24px]">add_a_photo</span>
+<span class="font-label-sm text-label-sm mt-1">上传凭证</span>
+</button>
+<!-- Example of uploaded image slot -->
+<div class="w-20 h-20 rounded-lg relative group overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="A macro shot of a damaged strawberry showing a small bruised area. The lighting is bright and clear to highlight the defect against a neutral white background, simulating a customer's proof photo for a refund request in a grocery app." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDELAiBh2kL9HuRiKWbtXy8vLggUp8J_kHqRFashgj_VfK1oTP6skuLLJvYI774ycucJIhixxRZlU1AJs5Yc1hhpykACla4nGrV5YVWsnj4ZVO5_NQmMnE6ECcFaBTfZCP7fGpPSTfTUPxhpj1Js5i5L6fc5dfMZuBlQPfFR9B_a9VyhblFdt9lmB0KAPVzaPM9BT6mVZZixsZI6oq6YhExRMUyls19829Z_giv75CTuZ8q1QmlwKndcg">
+<button class="absolute top-1 right-1 w-5 h-5 bg-[rgba(0,0,0,0.5)] rounded-full flex items-center justify-center text-white">
+<span class="material-symbols-outlined text-[14px]">close</span>
+</button>
+</div>
+<div class="w-20 h-20 rounded-lg relative group overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="A photo of a slightly crushed cardboard delivery box sitting on a clean wooden table. The focus is on the dented corner of the box. Bright, natural lighting, shot from a slightly elevated angle, typical of a quick snapshot taken by a user to show packaging damage." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAwofSQ4to-3c4E3ZLO63QGHWICCDScaeY54Jd5Od_5OIg2MEIcJvUSb_YV_1q32NG12cd4eKmkdNOY2-VvAzxZSXnw00d7oEv3p8uPGg4ONV0PbyLevx1t31zAEhReq5DAtZfikFvyrmnReACIr0IgsgSTBWp2zpfaPhYYRapceZyoIinxhl8Td6VIuX_MkValLOLdza6pioQsPfwUZ29Xtv0bVsCB7V-A3cX4hEwik1NBnNBXDQcZxQ">
+<button class="absolute top-1 right-1 w-5 h-5 bg-[rgba(0,0,0,0.5)] rounded-full flex items-center justify-center text-white">
+<span class="material-symbols-outlined text-[14px]">close</span>
+</button>
+</div>
+</div>
+<p class="font-label-sm text-label-sm text-on-surface-variant mt-2">最多上传3张，支持JPG/PNG格式</p>
+</div>
+</section>
+</main>
+<!-- Bottom Action Bar -->
+<div class="fixed bottom-0 w-full z-50 bg-surface-container-lowest border-t border-surface-container-highest p-card-padding pb-safe shadow-[0_-4px_12px_rgba(0,0,0,0.04)]">
+<button class="w-full h-12 bg-primary text-on-primary font-headline-md text-headline-md rounded-full flex items-center justify-center hover:opacity-90 transition-opacity">
+            提交申请
+        </button>
+</div>
+</body></html>

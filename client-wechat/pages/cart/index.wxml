@@ -1,0 +1,57 @@
+<view class="cart-page">
+  <skeleton wx:if="{{loading}}" type="list" has-tabbar="{{true}}" />
+  <view class="page-header">
+    <text class="page-title">禹邻优鲜</text>
+    <text class="clear" bindtap="handleClearSelected">清空</text>
+  </view>
+
+  <view class="cart-list">
+    <view wx:for="{{items}}" wx:key="id" class="cart-item card">
+      <view class="cart-main">
+        <view class="check {{item.selected ? 'checked' : ''}}" data-id="{{item.id}}" bindtap="handleToggle">
+          <image wx:if="{{item.selected}}" class="check-icon" src="/assets/icons/check-white.svg" mode="aspectFit" />
+        </view>
+        <image class="item-image" src="{{item.image}}" mode="aspectFill" />
+        <view class="item-info">
+          <text class="item-name">{{item.name}}</text>
+          <text class="item-subtitle">{{item.subtitle}}</text>
+          <view class="item-bottom">
+            <text class="item-price">￥{{item.amountText}}</text>
+            <view class="cart-stepper-shell">
+              <quantity-stepper
+                data-id="{{item.id}}"
+                value="{{item.quantity}}"
+                min="{{item.minPurchaseQty}}"
+                max="{{item.stockQty}}"
+                step="{{item.stepQty}}"
+                unit="{{item.saleUnit}}"
+                bind:change="handleQuantityChange"
+              />
+            </view>
+          </view>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <view class="checkout-bar">
+    <view class="checkout-meta">
+      <view class="select-group">
+        <view class="check checked">
+          <image class="check-icon" src="/assets/icons/check-white.svg" mode="aspectFit" />
+        </view>
+        <text class="select-all">全选</text>
+      </view>
+      <view class="total">
+        <text class="total-label">合计：</text>
+        <text class="total-price">￥{{totalText}}</text>
+      </view>
+    </view>
+    <button class="primary-button checkout-button" bindtap="handleCheckout">
+      <text>去结算</text>
+      <image class="checkout-arrow" src="/assets/icons/chevron-right-white.svg" mode="aspectFit" />
+    </button>
+  </view>
+
+  <app-tabbar active="cart" cart-count="{{items.length}}" />
+</view>

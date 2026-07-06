@@ -1,0 +1,37 @@
+{
+  "pages": [
+    "pages/home/index",
+    "pages/category/index",
+    "pages/search/index",
+    "pages/search-result/index",
+    "pages/login/index",
+    "pages/profile-setup/index",
+    "pages/product-detail/index",
+    "pages/cart/index",
+    "pages/checkout/index",
+    "pages/orders/index",
+    "pages/order-detail/index",
+    "pages/refund-apply/index",
+    "pages/profile/index",
+    "pages/settings/index",
+    "pages/address/index"
+  ],
+  "window": {
+    "navigationStyle": "custom",
+    "backgroundColor": "#F8F9FB",
+    "backgroundTextStyle": "dark"
+  },
+  "permission": {
+    "scope.userLocation": {
+      "desc": "用于在地图上选择收货位置，方便门店准确配送"
+    }
+  },
+  "requiredPrivateInfos": [
+    "chooseLocation"
+  ],
+  "usingComponents": {
+    "skeleton": "/components/skeleton/index"
+  },
+  "style": "v2",
+  "sitemapLocation": "sitemap.json"
+}

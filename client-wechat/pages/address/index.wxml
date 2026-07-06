@@ -1,0 +1,64 @@
+<view class="address-page">
+  <skeleton wx:if="{{loading}}" type="list" />
+  <view class="address-header">
+    <navigator class="back" open-type="navigateBack">
+      <image class="back-icon" src="/assets/icons/back-green.svg" mode="aspectFit" />
+    </navigator>
+    <text class="title">收货地址</text>
+    <view class="placeholder"></view>
+  </view>
+
+  <view wx:if="{{!addresses.length}}" class="empty-address card">
+    <view class="empty-icon">
+      <image class="empty-icon-image" src="/assets/icons/location-green.svg" mode="aspectFit" />
+    </view>
+    <text class="empty-title">还没有收货地址</text>
+    <text class="empty-desc">添加常用地址后，下单时会自动带出配送信息，商家可以更快安排配送。</text>
+    <button class="primary-button empty-add" bindtap="handleAdd">去新增地址</button>
+  </view>
+
+  <view wx:else class="address-list">
+    <view wx:for="{{addresses}}" wx:key="id" class="address-card card">
+      <view class="address-main">
+        <text class="receiver">{{item.name}} {{item.phone}}</text>
+        <text wx:if="{{item.locationName}}" class="location-name">{{item.locationName}}</text>
+        <text class="detail">{{item.detail}}</text>
+      </view>
+      <view class="address-actions">
+        <text class="default {{item.isDefault ? 'active' : ''}}" data-id="{{item.id}}" bindtap="handleSetDefault">{{item.isDefault ? '默认地址' : '设为默认'}}</text>
+        <view class="ops">
+          <text data-id="{{item.id}}" bindtap="handleEdit">编辑</text>
+          <text data-id="{{item.id}}" bindtap="handleDelete">删除</text>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <button wx:if="{{addresses.length}}" class="primary-button add-address" bindtap="handleAdd">新增收货地址</button>
+
+  <view wx:if="{{formVisible}}" class="form-mask">
+    <view class="form-panel">
+      <view class="form-title">{{form.id ? '编辑地址' : '新增地址'}}</view>
+      <view class="form-fields">
+        <input class="form-input" placeholder-class="form-placeholder" placeholder="收货人" value="{{form.name}}" data-field="name" bindinput="handleInput" />
+        <input class="form-input" placeholder-class="form-placeholder" placeholder="手机号" value="{{form.phone}}" data-field="phone" bindinput="handleInput" />
+        <view class="location-picker" bindtap="handleChooseLocation">
+          <view class="location-copy">
+            <text class="location-label">{{form.locationName || '在地图上选择收货位置'}}</text>
+            <text class="location-tip">{{form.latitude !== null && form.latitude !== undefined ? '已记录定位，方便门店配送' : '必选，选择小区/楼栋/写字楼位置'}}</text>
+          </view>
+          <image class="location-arrow" src="/assets/icons/chevron-right-gray.svg" mode="aspectFit" />
+        </view>
+        <textarea class="form-textarea" placeholder-class="form-placeholder" placeholder="详细地址" value="{{form.detail}}" data-field="detail" bindinput="handleInput" />
+      </view>
+      <label class="default-row">
+        <checkbox checked="{{form.isDefault}}" bindchange="handleDefaultChange" />
+        <text>设为默认地址</text>
+      </label>
+      <view class="form-actions">
+        <button class="ghost-button" bindtap="handleCloseForm">取消</button>
+        <button class="primary-button save-button" bindtap="handleSubmitForm">保存</button>
+      </view>
+    </view>
+  </view>
+</view>

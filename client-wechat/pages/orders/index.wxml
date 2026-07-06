@@ -1,0 +1,80 @@
+<view class="orders-page">
+  <skeleton wx:if="{{loading}}" type="list" has-tabbar="{{true}}" />
+  <view class="page-header">
+    <text class="page-title">我的订单</text>
+  </view>
+
+  <view class="tabs-wrap">
+    <view class="status-tabs">
+      <view
+        wx:for="{{tabs}}"
+        wx:key="*this"
+        class="status-tab {{activeStatus === item ? 'active' : ''}}"
+        data-status="{{item}}"
+        bindtap="handleTab"
+      >
+        {{item}}
+      </view>
+    </view>
+  </view>
+
+  <view wx:if="{{!orders.length}}" class="empty-orders">
+    <view class="empty-paper">
+      <view class="paper-head">
+        <text class="paper-dot"></text>
+        <text>{{needsLogin ? '订单同步' : '订单记录'}}</text>
+      </view>
+      <view class="paper-line strong"></view>
+      <view class="paper-line"></view>
+      <view class="paper-line short"></view>
+      <view class="paper-footer">
+        <text>配送</text>
+        <text>支付</text>
+        <text>售后</text>
+      </view>
+    </view>
+    <text class="empty-title">{{emptyTitle}}</text>
+    <text class="empty-desc">{{emptyDesc}}</text>
+    <button wx:if="{{needsLogin}}" class="primary-button empty-action" bindtap="goLogin">去登录</button>
+    <button wx:else class="primary-button empty-action" bindtap="goHome">去逛逛</button>
+  </view>
+
+  <view wx:else class="order-list">
+    <view wx:for="{{orders}}" wx:key="id" class="order-card card" data-id="{{item.id}}" bindtap="goDetail">
+      <view class="order-head">
+        <text>订单号：{{item.orderNo}}</text>
+        <text class="order-status">{{item.status}}</text>
+      </view>
+      <view class="order-body">
+        <view class="thumbs">
+          <image wx:for="{{item.images}}" wx:key="*this" class="thumb" src="{{item}}" mode="aspectFill" />
+        </view>
+        <view class="order-info">
+          <text>{{item.summary}}</text>
+          <text>预约配送：{{item.deliverySlot}}</text>
+          <text class="order-total">合计：¥{{item.totalText}}</text>
+        </view>
+      </view>
+      <view wx:if="{{item.primaryActionText || item.secondaryActionText}}" class="order-actions">
+        <button
+          wx:if="{{item.secondaryActionText}}"
+          class="ghost-button small order-action-button secondary"
+          data-id="{{item.id}}"
+          catchtap="handleSecondaryAction"
+        >
+          {{item.secondaryActionText}}
+        </button>
+        <button
+          wx:if="{{item.primaryActionText}}"
+          class="primary-button small order-action-button primary"
+          data-id="{{item.id}}"
+          catchtap="handleOrderAction"
+        >
+          {{item.primaryActionText}}
+        </button>
+      </view>
+    </view>
+  </view>
+
+  <app-tabbar active="orders" cart-count="{{cartCount}}" />
+</view>

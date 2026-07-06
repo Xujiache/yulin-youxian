@@ -1,0 +1,262 @@
+<!DOCTYPE html><html lang="zh-CN"><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>订单列表 - 鲜达生鲜</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;700&amp;family=Plus+Jakarta+Sans:wght@600;700&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "surface-container-highest": "#e1e2e4",
+                        "surface-dim": "#d9dadc",
+                        "on-background": "#191c1e",
+                        "on-secondary-fixed": "#121f08",
+                        "on-primary-fixed": "#00210c",
+                        "surface-container-high": "#e7e8ea",
+                        "primary-container": "#27ae60",
+                        "surface": "#f8f9fb",
+                        "outline": "#6d7a6e",
+                        "on-tertiary": "#ffffff",
+                        "inverse-on-surface": "#f0f1f3",
+                        "on-error-container": "#93000a",
+                        "error-container": "#ffdad6",
+                        "surface-variant": "#e1e2e4",
+                        "on-tertiary-container": "#2c3329",
+                        "tertiary": "#596055",
+                        "on-tertiary-fixed-variant": "#42493e",
+                        "secondary-fixed": "#d7e8c3",
+                        "secondary-fixed-dim": "#bbcca9",
+                        "on-tertiary-fixed": "#171d14",
+                        "primary-fixed-dim": "#61de8a",
+                        "outline-variant": "#bccabc",
+                        "on-secondary": "#ffffff",
+                        "surface-container": "#edeef0",
+                        "tertiary-fixed": "#dee5d6",
+                        "on-primary-container": "#00391a",
+                        "inverse-primary": "#61de8a",
+                        "on-primary": "#ffffff",
+                        "surface-bright": "#f8f9fb",
+                        "on-secondary-container": "#5a694c",
+                        "background": "#f8f9fb",
+                        "primary": "#006d37",
+                        "on-primary-fixed-variant": "#005228",
+                        "on-error": "#ffffff",
+                        "primary-fixed": "#7efba4",
+                        "surface-container-lowest": "#ffffff",
+                        "tertiary-container": "#949b8e",
+                        "on-surface": "#191c1e",
+                        "on-secondary-fixed-variant": "#3d4b30",
+                        "error": "#ba1a1a",
+                        "inverse-surface": "#2e3132",
+                        "secondary-container": "#d7e8c3",
+                        "on-surface-variant": "#3d4a3f",
+                        "secondary": "#546346",
+                        "surface-container-low": "#f2f4f6",
+                        "tertiary-fixed-dim": "#c2c9bb",
+                        "surface-tint": "#006d37"
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    spacing: {
+                        "card-padding": "12px",
+                        "touch-target-min": "44px",
+                        "gutter-md": "8px",
+                        "section-gap": "20px",
+                        "container-margin": "12px"
+                    },
+                    fontFamily: {
+                        "body-md": ["Be Vietnam Pro"],
+                        "headline-lg-mobile": ["Plus Jakarta Sans"],
+                        "body-lg": ["Be Vietnam Pro"],
+                        "display-price": ["Plus Jakarta Sans"],
+                        "label-sm": ["Be Vietnam Pro"],
+                        "headline-lg": ["Plus Jakarta Sans"],
+                        "headline-md": ["Plus Jakarta Sans"]
+                    },
+                    fontSize: {
+                        "body-md": ["14px", { "lineHeight": "22px", "fontWeight": "400" }],
+                        "headline-lg-mobile": ["18px", { "lineHeight": "24px", "fontWeight": "600" }],
+                        "body-lg": ["16px", { "lineHeight": "24px", "fontWeight": "400" }],
+                        "display-price": ["24px", { "lineHeight": "32px", "fontWeight": "700" }],
+                        "label-sm": ["12px", { "lineHeight": "16px", "fontWeight": "500" }],
+                        "headline-lg": ["20px", { "lineHeight": "28px", "fontWeight": "600" }],
+                        "headline-md": ["18px", { "lineHeight": "26px", "fontWeight": "600" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        .hide-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .hide-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+        .pb-safe {
+            padding-bottom: env(safe-area-inset-bottom);
+        }
+        .shadow-soft {
+            box-shadow: 0px 4px 12px rgba(0,0,0,0.04);
+        }
+    </style>
+</head>
+<body class="bg-surface text-on-surface font-body-md antialiased min-h-screen">
+<!-- TopAppBar -->
+<header class="bg-surface dark:bg-surface-dim flex items-center justify-between px-card-padding w-full h-14 z-50 sticky top-0">
+<div class="flex items-center gap-2 hover:opacity-80 scale-95 active:transition-transform">
+<span class="material-symbols-outlined text-primary dark:text-primary-fixed-dim" style="font-variation-settings: 'FILL' 1;">storefront</span>
+<h1 class="font-headline-lg-mobile text-headline-lg-mobile font-bold text-primary dark:text-primary-fixed-dim">鲜达生鲜</h1>
+</div>
+<div class="flex items-center gap-4 text-on-surface-variant hover:opacity-80 scale-95 active:transition-transform">
+<span class="material-symbols-outlined">search</span>
+</div>
+</header>
+<!-- Scrollable Top Tabs -->
+<nav class="sticky top-14 z-40 bg-surface/90 backdrop-blur-md px-container-margin overflow-x-auto whitespace-nowrap hide-scrollbar border-b border-surface-container-high">
+<ul class="flex space-x-6 py-3">
+<li class="font-body-md text-body-md text-primary font-bold border-b-2 border-primary pb-1 px-1">全部</li>
+<li class="font-body-md text-body-md text-on-surface-variant pb-1 px-1">待支付</li>
+<li class="font-body-md text-body-md text-on-surface-variant pb-1 px-1">待接单</li>
+<li class="font-body-md text-body-md text-on-surface-variant pb-1 px-1">备货中</li>
+<li class="font-body-md text-body-md text-on-surface-variant pb-1 px-1">配送中</li>
+<li class="font-body-md text-body-md text-on-surface-variant pb-1 px-1">已完成</li>
+<li class="font-body-md text-body-md text-on-surface-variant pb-1 px-1">售后</li>
+</ul>
+</nav>
+<!-- Main Content Canvas -->
+<main class="px-container-margin py-section-gap pb-32 flex flex-col gap-4">
+<!-- Order Card 1: 待支付 (Pending Payment) -->
+<article class="bg-surface-container-lowest rounded-xl shadow-soft p-4 border border-[#F0F0F0]">
+<!-- Header -->
+<div class="flex justify-between items-center border-b border-surface-container-high pb-3 mb-3">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[18px] text-on-surface-variant">receipt</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">订单号: 20231024001A</span>
+</div>
+<span class="font-label-sm text-label-sm text-error font-bold">待支付</span>
+</div>
+<!-- Body: Thumbnails -->
+<div class="flex gap-2 overflow-x-auto hide-scrollbar mb-4">
+<img class="w-16 h-16 rounded-lg object-cover bg-surface-container-low shrink-0 border border-outline-variant/30" data-alt="A bright, high-quality macro shot of fresh organic green vegetables, including crisp lettuce and spinach, set against a pristine white background. The studio lighting is soft and natural, emphasizing the vibrant green colors and dewy texture, perfectly suited for a premium modern light-mode e-commerce UI." src="https://lh3.googleusercontent.com/aida-public/AB6AXuA_qZADfkHpswyjlNv8AcOcygCSWZGPs9h7Cx3vLfot_8PHpotcqraMm3OHSK5ERZW_lLSvvTltnFNMut5ddmR4s5bip8PXPFE2bKUQ96fM4PxdcPKzD75ZnpmSda6D9nBPVw85fOevfTHjFQ2kkGyDDgcH0taAMYQm9Ly2X1HCyDqc60nrVElzq3xKx_9-bXc8DBJZj94YkbByrzajdNKPWM-RhafZaroPknPIuMgxrvKDnRkDr1r1Zw">
+<img class="w-16 h-16 rounded-lg object-cover bg-surface-container-low shrink-0 border border-outline-variant/30" data-alt="A top-down view of premium fresh organic tomatoes with water droplets, placed on a clean minimalist light grey surface. The lighting is bright and airy, minimizing shadows to maintain a clean, fresh, light-mode aesthetic for a modern grocery application. Highly appetizing." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCqYtowwpUbs-8tqtwwPnx-ClJrBZQPwQuHONyuvW3P67UrqXbR0VSLxP6r6mvolilzn8-QWeqSvU2QdaKBNL4Dy28d5MjgdukeGPC38PPvigbzSfUrJv6aLAlh7Xk-dtV1hQP018wwDigAhfIrP1vNaeqeTuci2dGs5cpRjmnmjRzYTRjViveeaos_ud55BDzGaN6oG0pnqA2D9gfrINJQyh070iq5aKKwuY7gBtHQ4bFRteAQ1yWTgg">
+<img class="w-16 h-16 rounded-lg object-cover bg-surface-container-low shrink-0 border border-outline-variant/30" data-alt="Close-up shot of perfectly ripe yellow bananas and fresh lemons in a bright, modern studio setting. The white background highlights the vivid yellow hues. The lighting creates a soft, inviting atmosphere typical of high-end organic market photography." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAbHRvIZvT5RVaS9uU4d94WMeHgWpeDZuitr5imz33R9aSGfKclSOlwIo_FWxXJDa2hWD_QgoqaPlqyzg2ApgURQ6ytx8k7eDz8cDeq7Kds6Tvovlr7L88BQkSeeJl27HuY40Zqkvk-G0kx3thLCG9_05fF1rt3RLbWO_VATqqdobUf5tl8zgMPDYln3punRcz-F09JUgKjgAWQdCRf-a7H7_-ivfESIYvW8ItDyX3xVww6Ay5icNYQew">
+</div>
+<!-- Body: Details -->
+<div class="flex justify-between items-end mb-4">
+<div class="flex flex-col">
+<span class="text-on-surface-variant font-label-sm text-label-sm">共 3 件商品</span>
+<span class="text-on-surface font-label-sm text-label-sm mt-1">预计送达: <span class="font-bold text-primary">尽快 (30分钟内)</span></span>
+</div>
+<div class="flex items-baseline gap-1">
+<span class="font-label-sm text-label-sm text-on-surface">合计</span>
+<span class="font-display-price text-display-price text-on-surface font-bold">¥ 86.50</span>
+</div>
+</div>
+<!-- Footer: Actions -->
+<div class="flex justify-end gap-3 pt-3 border-t border-surface-container-high/50">
+<button class="px-5 py-2 rounded-full border border-outline-variant text-on-surface-variant font-body-md text-body-md hover:bg-surface-container-low transition-colors">取消订单</button>
+<button class="px-5 py-2 rounded-full bg-primary text-on-primary font-body-md text-body-md font-bold hover:bg-primary/90 transition-colors shadow-sm">去支付</button>
+</div>
+</article>
+<!-- Order Card 2: 配送中 (Delivering) -->
+<article class="bg-surface-container-lowest rounded-xl shadow-soft p-4 border border-[#F0F0F0]">
+<!-- Header -->
+<div class="flex justify-between items-center border-b border-surface-container-high pb-3 mb-3">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[18px] text-on-surface-variant">receipt</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">订单号: 20231024002B</span>
+</div>
+<span class="font-label-sm text-label-sm text-primary font-bold">配送中</span>
+</div>
+<!-- Body: Thumbnails -->
+<div class="flex gap-2 overflow-x-auto hide-scrollbar mb-4">
+<img class="w-16 h-16 rounded-lg object-cover bg-surface-container-low shrink-0 border border-outline-variant/30" data-alt="A pristine shot of fresh cut premium salmon fillet lying on ice, adorned with a slice of lemon and parsley. The shot is captured from a top-down perspective in a highly lit environment, projecting a clean, sterile, yet appetizing look essential for a modern fresh food delivery app." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDpNcC5TbwuujcIJvNkzSvPvvunFBYCxcBXB3gMvkx_mvHxIovg1vIsqYI-aA1n5guEeoxh-Y0D8nbxrHIgLCeOtK__2Wzv5_Wuw-qGN5quNYD3hYxwQxfe8KZJCsCEIbq_GGr81OhABl_4-Paov5qATupHBBu8DGp-3nvW9Uv78BIX5QurftVT1RNnpmLroRk-BMt6SsBTpNi9vWSkUYLDaCnUmtRG5Po8qb3PAfdXdfrSr66QCJUaaw">
+<img class="w-16 h-16 rounded-lg object-cover bg-surface-container-low shrink-0 border border-outline-variant/30" data-alt="Vibrant, fresh organic blueberries in a small eco-friendly clear container, set against a bright, pure white backdrop. The soft, diffuse studio light enhances the natural blue hues and fresh bloom on the berries, perfectly aligned with a health-conscious urban aesthetic." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDJeKJPa4wQqoxX_gO38AIbpCrF_x72esUhnpFvz7Azj_hkqhBGpympFCa-4oOVEKlgCcyz_Jb4S3vQTUGEvrhVSQOgmzuZzohbVzcBUzAF9cUmXf7slEoT1eX6jRrkIoWcrRI1NBfkNQFCarzm_e7_bSbcgAmOaYGf_VEabWvMUM5IYQIOpoKOQZu4mLEGCNvlhm4VAKzulm_VPjWqkw9Eur3HxIavS79c6OwbnwTjepTTB6sevOG2Cw">
+</div>
+<!-- Body: Details -->
+<div class="flex justify-between items-end mb-4">
+<div class="flex flex-col">
+<span class="text-on-surface-variant font-label-sm text-label-sm">共 2 件商品</span>
+<span class="text-on-surface font-label-sm text-label-sm mt-1">骑手已接单，正在火速赶往</span>
+</div>
+<div class="flex items-baseline gap-1">
+<span class="font-label-sm text-label-sm text-on-surface">合计</span>
+<span class="font-display-price text-display-price text-on-surface font-bold">¥ 128.00</span>
+</div>
+</div>
+<!-- Footer: Actions -->
+<div class="flex justify-end gap-3 pt-3 border-t border-surface-container-high/50">
+<button class="px-5 py-2 rounded-full border border-primary text-primary font-body-md text-body-md hover:bg-primary/5 transition-colors">查看详情</button>
+</div>
+</article>
+<!-- Order Card 3: 已完成 (Completed) -->
+<article class="bg-surface-container-lowest rounded-xl shadow-soft p-4 border border-[#F0F0F0]">
+<!-- Header -->
+<div class="flex justify-between items-center border-b border-surface-container-high pb-3 mb-3">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[18px] text-on-surface-variant">receipt</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">订单号: 20231023009C</span>
+</div>
+<span class="font-label-sm text-label-sm text-on-surface-variant font-bold">已完成</span>
+</div>
+<!-- Body: Thumbnails -->
+<div class="flex gap-2 overflow-x-auto hide-scrollbar mb-4">
+<img class="w-16 h-16 rounded-lg object-cover bg-surface-container-low shrink-0 border border-outline-variant/30" data-alt="A clean, minimalist composition of fresh dairy products including a glass bottle of organic milk and farm-fresh eggs on a light beige surface. The natural, soft lighting creates a warm yet bright atmosphere, emphasizing freshness, transparency, and high quality." src="https://lh3.googleusercontent.com/aida-public/AB6AXuARDJ8Y3lxWQ90PzeNkKpy2UFLjRdiyuxiqmdsBDPJWXQRP86N9OVe5hSqEco0jFHDVyf8Ra_szW4oUph29DklzeKEsA0op6mJ9MuwhoJxgauCYiwQAWWDGurzl_f5XIuYT1h6Vs-Tis8ZGsIUssrVH1SsvCsSpKkcWWx2x1NCcpe9FQHF58bFX_KIxi1SohH63F-X6mLpzZ5bO3Ym_jU0dR2QYPScthPo01qOxqla2w21PMsFBkghhrQ">
+<img class="w-16 h-16 rounded-lg object-cover bg-surface-container-low shrink-0 border border-outline-variant/30" data-alt="A beautifully arranged selection of fresh bakery items, including a crisp baguette and croissants, placed on a light wooden board against a white wall. The morning light casts soft shadows, conveying a sense of premium daily grocery shopping." src="https://lh3.googleusercontent.com/aida-public/AB6AXuC0QfZ-TKa0eKQEMheWlZugq0PCLv10FqBCs6m-zLi0IIFvl-MvAdWsdSKv5X5khm8FVjBUDxalrQdjZwDIoOBABLPDL0FKQR7P53FVkosDSqibbAqAySuYnyjkfPzbIJWpm1-5yGDFYPOPg1D2FtFKsmPqcDsz6xfU1ZYkRfZ6hk9cvNt7DfOvc_1Irelztwo9Hki9Ow9VX_B9BM5jcdt-KqX58ljvj8qn6S_W7B1xDcngpKk0hVW-Sw">
+<img class="w-16 h-16 rounded-lg object-cover bg-surface-container-low shrink-0 border border-outline-variant/30" data-alt="Fresh organic avocados, cut in half to reveal the vibrant green interior, next to a whole avocado. Shot with high-key lighting to match a bright, clean, modern app UI focused on fresh produce delivery." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAF86Ca3RrvEI0GM0wHYhfUbg33u9ED68kBRj4xCWR-GFMgeRXMiYnc4BoWKwlPwA3uXKIlrrg14vhD4q3fB-H5hPwU_ryJOL49NXlspil5PsiWJKltC7BnWFtPWcTDGpXRqK_il_7tzWZGypsCkYMOwadc6UGGj7JPLJqX8SQ7Xd1ZzZnEK6Mfa8GgluYe67Uu-7oRUB8We2QJ93al6b7U38vGZUQYmubFPCczgc40hoWKCEnc1hMB4g">
+</div>
+<!-- Body: Details -->
+<div class="flex justify-between items-end mb-4">
+<div class="flex flex-col">
+<span class="text-on-surface-variant font-label-sm text-label-sm">共 3 件商品</span>
+<span class="text-on-surface-variant font-label-sm text-label-sm mt-1">昨天 18:30 送达</span>
+</div>
+<div class="flex items-baseline gap-1">
+<span class="font-label-sm text-label-sm text-on-surface">合计</span>
+<span class="font-display-price text-display-price text-on-surface font-bold">¥ 54.20</span>
+</div>
+</div>
+<!-- Footer: Actions -->
+<div class="flex justify-end gap-3 pt-3 border-t border-surface-container-high/50">
+<button class="px-5 py-2 rounded-full border border-outline-variant text-on-surface-variant font-body-md text-body-md hover:bg-surface-container-low transition-colors">申请退款</button>
+<button class="px-5 py-2 rounded-full border border-primary text-primary font-body-md text-body-md hover:bg-primary/5 transition-colors">查看详情</button>
+</div>
+</article>
+</main>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-4 left-4 right-4 z-50 flex justify-around items-center bg-surface/90 dark:bg-surface-dim/90 backdrop-blur-md py-2 px-2 rounded-full border border-outline-variant/30 dark:border-outline/30 shadow-soft">
+<div class="flex flex-col items-center justify-center text-on-surface-variant dark:text-on-tertiary-fixed-variant opacity-90 transition-all duration-200 ease-in-out cursor-pointer hover:bg-surface-container-low rounded-lg p-1 min-w-[60px]">
+<span class="material-symbols-outlined mb-1">home</span>
+<span class="font-label-sm text-label-sm">首页</span>
+</div>
+<div class="flex flex-col items-center justify-center text-on-surface-variant dark:text-on-tertiary-fixed-variant opacity-90 transition-all duration-200 ease-in-out cursor-pointer hover:bg-surface-container-low rounded-lg p-1 min-w-[60px]">
+<span class="material-symbols-outlined mb-1">category</span>
+<span class="font-label-sm text-label-sm">分类</span>
+</div>
+<div class="flex flex-col items-center justify-center text-on-surface-variant dark:text-on-tertiary-fixed-variant opacity-90 transition-all duration-200 ease-in-out cursor-pointer hover:bg-surface-container-low rounded-lg p-1 min-w-[60px]">
+<span class="material-symbols-outlined mb-1">shopping_cart</span>
+<span class="font-label-sm text-label-sm">购物车</span>
+</div>
+<div class="flex flex-col items-center justify-center text-primary dark:text-primary-fixed-dim font-bold opacity-90 transition-all duration-200 ease-in-out cursor-pointer rounded-lg p-1 min-w-[60px]">
+<span class="material-symbols-outlined mb-1" style="font-variation-settings: 'FILL' 1;">receipt_long</span>
+<span class="font-label-sm text-label-sm">订单</span>
+</div>
+<div class="flex flex-col items-center justify-center text-on-surface-variant dark:text-on-tertiary-fixed-variant opacity-90 transition-all duration-200 ease-in-out cursor-pointer hover:bg-surface-container-low rounded-lg p-1 min-w-[60px]">
+<span class="material-symbols-outlined mb-1">person</span>
+<span class="font-label-sm text-label-sm">我的</span>
+</div>
+</nav>
+
+
+</body></html>

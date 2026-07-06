@@ -1,0 +1,222 @@
+<!DOCTYPE html><html lang="zh-CN"><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>鲜达生鲜 - 加入购物车</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;700&amp;family=Plus+Jakarta+Sans:wght@600;700&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "surface-container-highest": "#e1e2e4",
+                      "surface-dim": "#d9dadc",
+                      "on-background": "#191c1e",
+                      "on-secondary-fixed": "#121f08",
+                      "on-primary-fixed": "#00210c",
+                      "surface-container-high": "#e7e8ea",
+                      "primary-container": "#27ae60",
+                      "surface": "#f8f9fb",
+                      "outline": "#6d7a6e",
+                      "on-tertiary": "#ffffff",
+                      "inverse-on-surface": "#f0f1f3",
+                      "on-error-container": "#93000a",
+                      "error-container": "#ffdad6",
+                      "surface-variant": "#e1e2e4",
+                      "on-tertiary-container": "#2c3329",
+                      "tertiary": "#596055",
+                      "on-tertiary-fixed-variant": "#42493e",
+                      "secondary-fixed": "#d7e8c3",
+                      "secondary-fixed-dim": "#bbcca9",
+                      "on-tertiary-fixed": "#171d14",
+                      "primary-fixed-dim": "#61de8a",
+                      "outline-variant": "#bccabc",
+                      "on-secondary": "#ffffff",
+                      "surface-container": "#edeef0",
+                      "tertiary-fixed": "#dee5d6",
+                      "on-primary-container": "#00391a",
+                      "inverse-primary": "#61de8a",
+                      "on-primary": "#ffffff",
+                      "surface-bright": "#f8f9fb",
+                      "on-secondary-container": "#5a694c",
+                      "background": "#f8f9fb",
+                      "primary": "#006d37",
+                      "on-primary-fixed-variant": "#005228",
+                      "on-error": "#ffffff",
+                      "primary-fixed": "#7efba4",
+                      "surface-container-lowest": "#ffffff",
+                      "tertiary-container": "#949b8e",
+                      "on-surface": "#191c1e",
+                      "on-secondary-fixed-variant": "#3d4b30",
+                      "error": "#ba1a1a",
+                      "inverse-surface": "#2e3132",
+                      "secondary-container": "#d7e8c3",
+                      "on-surface-variant": "#3d4a3f",
+                      "secondary": "#546346",
+                      "surface-container-low": "#f2f4f6",
+                      "tertiary-fixed-dim": "#c2c9bb",
+                      "surface-tint": "#006d37"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.25rem",
+                      "lg": "0.5rem",
+                      "xl": "0.75rem",
+                      "full": "9999px"
+              },
+              "spacing": {
+                      "card-padding": "12px",
+                      "touch-target-min": "44px",
+                      "gutter-md": "8px",
+                      "section-gap": "20px",
+                      "container-margin": "12px"
+              },
+              "fontFamily": {
+                      "body-md": [
+                              "Be Vietnam Pro"
+                      ],
+                      "headline-lg-mobile": [
+                              "Plus Jakarta Sans"
+                      ],
+                      "body-lg": [
+                              "Be Vietnam Pro"
+                      ],
+                      "display-price": [
+                              "Plus Jakarta Sans"
+                      ],
+                      "label-sm": [
+                              "Be Vietnam Pro"
+                      ],
+                      "headline-lg": [
+                              "Plus Jakarta Sans"
+                      ],
+                      "headline-md": [
+                              "Plus Jakarta Sans"
+                      ]
+              },
+              "fontSize": {
+                      "body-md": [
+                              "14px",
+                              {
+                                      "lineHeight": "22px",
+                                      "fontWeight": "400"
+                              }
+                      ],
+                      "headline-lg-mobile": [
+                              "18px",
+                              {
+                                      "lineHeight": "24px",
+                                      "fontWeight": "600"
+                              }
+                      ],
+                      "body-lg": [
+                              "16px",
+                              {
+                                      "lineHeight": "24px",
+                                      "fontWeight": "400"
+                              }
+                      ],
+                      "display-price": [
+                              "24px",
+                              {
+                                      "lineHeight": "32px",
+                                      "fontWeight": "700"
+                              }
+                      ],
+                      "label-sm": [
+                              "12px",
+                              {
+                                      "lineHeight": "16px",
+                                      "fontWeight": "500"
+                              }
+                      ],
+                      "headline-lg": [
+                              "20px",
+                              {
+                                      "lineHeight": "28px",
+                                      "fontWeight": "600"
+                              }
+                      ],
+                      "headline-md": [
+                              "18px",
+                              {
+                                      "lineHeight": "26px",
+                                      "fontWeight": "600"
+                              }
+                      ]
+              }
+      },
+          },
+        }
+      </script>
+</head>
+<body class="bg-background text-on-surface font-body-md h-screen w-screen overflow-hidden flex flex-col relative">
+<!-- Mock Background Content (to show overlay effect) -->
+<div class="flex-1 overflow-y-auto p-container-margin opacity-50 blur-sm pointer-events-none">
+<div class="h-64 bg-surface-container rounded-lg mb-section-gap"></div>
+<div class="h-96 bg-surface-container rounded-lg mb-section-gap"></div>
+</div>
+<!-- Overlay / Bottom Sheet Backdrop -->
+<div class="absolute inset-0 bg-on-background/40 z-40" id="backdrop"></div>
+<!-- Bottom Sheet -->
+<div class="absolute bottom-0 w-full bg-surface rounded-t-xl shadow-lg z-50 flex flex-col transform transition-transform duration-300 translate-y-0" id="bottom-sheet">
+<!-- Handle for dragging (visual only) -->
+<div class="w-full flex justify-center pt-3 pb-1">
+<div class="w-12 h-1.5 bg-surface-variant rounded-full"></div>
+</div>
+<div class="px-container-margin pb-container-margin flex flex-col gap-section-gap">
+<!-- Header: Product Info & Close -->
+<div class="flex items-start gap-gutter-md relative pt-2">
+<!-- Thumbnail -->
+<div class="w-24 h-24 rounded-lg overflow-hidden shrink-0 bg-surface-container border border-outline-variant/30 relative shadow-[0_4px_12px_rgba(0,0,0,0.04)]">
+<img class="w-full h-full object-cover" data-alt="A high-quality, perfectly lit studio photograph of fresh, vibrant organic strawberries in a minimalist white bowl. The lighting is soft and airy, emphasizing the bright red color and juicy texture of the fruit against a crisp white background. The aesthetic is clean, modern, and appetizing, fitting a premium fresh grocery application." src="https://lh3.googleusercontent.com/aida-public/AB6AXuA3zhlAUSlW26jiMTbaHR3k9brDgoW8IAsrOgzPI7t4JsG_j0KPi4RRHjQ-PWjBOyvATD1VWi-fxouVUnGzwNpXAaihUsKQlBnZhUbQ1k-ud-DHHNX488JrLBK87jwDsSN-4MuhP7BcBrU4HXzhGfK-Qk5EitLm0-QNzlvFMrjNGGcqSCn2x_8MtTNJ2pMk2kUuI7lu827KoTUxQBkQXeK8ElA6ExG45XyT0_1o1mGaQtROqfYuC_Cf_Q">
+</div>
+<!-- Details -->
+<div class="flex-1 flex flex-col justify-between h-24">
+<div>
+<h2 class="font-headline-md text-headline-md text-on-surface line-clamp-1">有机奶油草莓 现摘直发</h2>
+<span class="inline-block mt-1 px-2 py-0.5 bg-secondary-fixed/50 text-on-secondary-container font-label-sm text-label-sm rounded">新鲜特供</span>
+</div>
+<div class="flex items-baseline gap-1">
+<span class="font-display-price text-display-price text-primary">¥39.8</span>
+<span class="font-body-md text-body-md text-on-surface-variant">/ 斤</span>
+</div>
+</div>
+<!-- Close Button -->
+<button aria-label="关闭" class="absolute -top-2 -right-2 p-2 text-on-surface-variant hover:text-on-surface transition-colors">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 0;">close</span>
+</button>
+</div>
+<!-- Divider -->
+<div class="h-px bg-outline-variant/30 w-full"></div>
+<!-- Quantity Selection -->
+<div class="flex items-center justify-between py-2">
+<div class="flex flex-col">
+<span class="font-body-lg text-body-lg font-medium text-on-surface">购买数量</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant mt-0.5">当前选择 1.5斤</span>
+</div>
+<!-- Stepper -->
+<div class="flex items-center gap-3">
+<button class="w-8 h-8 rounded-full border border-outline-variant flex items-center justify-center text-on-surface-variant hover:bg-surface-container active:scale-95 transition-all">
+<span class="material-symbols-outlined text-[20px]">remove</span>
+</button>
+<span class="font-headline-lg-mobile text-headline-lg-mobile text-on-surface min-w-[24px] text-center">1.5</span>
+<button class="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-on-primary hover:bg-primary/90 shadow-[0_4px_12px_rgba(0,109,55,0.2)] active:scale-95 transition-all">
+<span class="material-symbols-outlined text-[20px]">add</span>
+</button>
+</div>
+</div>
+<!-- Subtotal (Optional visual reinforcement) -->
+<div class="flex justify-between items-center bg-surface-container-lowest p-3 rounded-lg border border-outline-variant/20 mb-2">
+<span class="font-body-md text-body-md text-on-surface-variant">小计</span>
+<span class="font-headline-md text-headline-md text-primary">¥59.70</span>
+</div>
+<!-- Action Button -->
+<button class="w-full h-[48px] bg-primary text-on-primary rounded-full font-headline-lg-mobile text-headline-lg-mobile shadow-[0_8px_20px_rgba(0,109,55,0.15)] hover:bg-primary/95 active:scale-[0.98] transition-all flex items-center justify-center gap-2 mb-safe">
+                加入购物车
+            </button>
+</div>
+</div>
+</body></html>

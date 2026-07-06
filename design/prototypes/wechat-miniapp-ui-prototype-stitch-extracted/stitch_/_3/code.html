@@ -1,0 +1,199 @@
+<!DOCTYPE html><html lang="zh-CN"><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>鲜达生鲜 - 商品详情</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;700&amp;family=Plus+Jakarta+Sans:wght@600;700&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "surface-container-highest": "#e1e2e4",
+                        "surface-dim": "#d9dadc",
+                        "on-background": "#191c1e",
+                        "on-secondary-fixed": "#121f08",
+                        "on-primary-fixed": "#00210c",
+                        "surface-container-high": "#e7e8ea",
+                        "primary-container": "#27ae60",
+                        "surface": "#f8f9fb",
+                        "outline": "#6d7a6e",
+                        "on-tertiary": "#ffffff",
+                        "inverse-on-surface": "#f0f1f3",
+                        "on-error-container": "#93000a",
+                        "error-container": "#ffdad6",
+                        "surface-variant": "#e1e2e4",
+                        "on-tertiary-container": "#2c3329",
+                        "tertiary": "#596055",
+                        "on-tertiary-fixed-variant": "#42493e",
+                        "secondary-fixed": "#d7e8c3",
+                        "secondary-fixed-dim": "#bbcca9",
+                        "on-tertiary-fixed": "#171d14",
+                        "primary-fixed-dim": "#61de8a",
+                        "outline-variant": "#bccabc",
+                        "on-secondary": "#ffffff",
+                        "surface-container": "#edeef0",
+                        "tertiary-fixed": "#dee5d6",
+                        "on-primary-container": "#00391a",
+                        "inverse-primary": "#61de8a",
+                        "on-primary": "#ffffff",
+                        "surface-bright": "#f8f9fb",
+                        "on-secondary-container": "#5a694c",
+                        "background": "#f8f9fb",
+                        "primary": "#006d37",
+                        "on-primary-fixed-variant": "#005228",
+                        "on-error": "#ffffff",
+                        "primary-fixed": "#7efba4",
+                        "surface-container-lowest": "#ffffff",
+                        "tertiary-container": "#949b8e",
+                        "on-surface": "#191c1e",
+                        "on-secondary-fixed-variant": "#3d4b30",
+                        "error": "#ba1a1a",
+                        "inverse-surface": "#2e3132",
+                        "secondary-container": "#d7e8c3",
+                        "on-surface-variant": "#3d4a3f",
+                        "secondary": "#546346",
+                        "surface-container-low": "#f2f4f6",
+                        "tertiary-fixed-dim": "#c2c9bb",
+                        "surface-tint": "#006d37"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "card-padding": "12px",
+                        "touch-target-min": "44px",
+                        "gutter-md": "8px",
+                        "section-gap": "20px",
+                        "container-margin": "12px"
+                    },
+                    "fontFamily": {
+                        "body-md": ["Be Vietnam Pro"],
+                        "headline-lg-mobile": ["Plus Jakarta Sans"],
+                        "body-lg": ["Be Vietnam Pro"],
+                        "display-price": ["Plus Jakarta Sans"],
+                        "label-sm": ["Be Vietnam Pro"],
+                        "headline-lg": ["Plus Jakarta Sans"],
+                        "headline-md": ["Plus Jakarta Sans"]
+                    },
+                    "fontSize": {
+                        "body-md": ["14px", { "lineHeight": "22px", "fontWeight": "400" }],
+                        "headline-lg-mobile": ["18px", { "lineHeight": "24px", "fontWeight": "600" }],
+                        "body-lg": ["16px", { "lineHeight": "24px", "fontWeight": "400" }],
+                        "display-price": ["24px", { "lineHeight": "32px", "fontWeight": "700" }],
+                        "label-sm": ["12px", { "lineHeight": "16px", "fontWeight": "500" }],
+                        "headline-lg": ["20px", { "lineHeight": "28px", "fontWeight": "600" }],
+                        "headline-md": ["18px", { "lineHeight": "26px", "fontWeight": "600" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        body {
+            background-color: #f8f9fb;
+            /* Matches background token */
+        }
+        .safe-pb {
+            padding-bottom: env(safe-area-inset-bottom, 20px);
+        }
+    </style>
+</head>
+<body class="bg-background text-on-surface font-body-md antialiased md:hidden flex flex-col min-h-screen">
+<!-- TopAppBar -->
+<header class="flex items-center justify-between px-card-padding w-full h-14 z-50 bg-surface dark:bg-surface-dim docked full-width top-0 sticky">
+<div class="flex items-center gap-2 text-primary dark:text-primary-fixed-dim hover:opacity-80 scale-95 active:transition-transform cursor-pointer" onclick="history.back()">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 0;">arrow_back</span>
+</div>
+<h1 class="font-headline-lg-mobile text-headline-lg-mobile font-bold text-primary dark:text-primary-fixed-dim truncate">
+            鲜达生鲜
+        </h1>
+<div class="flex items-center gap-4 text-on-surface-variant hover:opacity-80 scale-95 active:transition-transform cursor-pointer">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 0;">share</span>
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 0;">more_horiz</span>
+</div>
+</header>
+<!-- Main Content Canvas -->
+<main class="flex-grow flex flex-col pb-32">
+<!-- Hero Product Image (Bento-ish presentation) -->
+<div class="w-full bg-surface-container-lowest shadow-sm pb-4">
+<div class="w-full aspect-square bg-surface-container-low overflow-hidden">
+<img alt="有机番茄" class="w-full h-full object-cover" data-alt="A highly detailed, professional food photography shot of vibrant, ripe organic tomatoes, still on the vine, glistening with tiny water droplets. The lighting is bright and natural, simulating a high-end organic market. The overall scene conveys freshness, health, and premium quality, set against a clean, minimalist light-mode background with soft shadows." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCebzmlwoZa2mHv2IPAYd6KhZB62M6jar1bEP89mw6AnJ32AIfhDBbZsngvtubk45Gg1_2hxx_ACy-Cbn_9I7LnsGHMaok0-XZhn9mFJkQ9SuF0A9ztYGe8VkMjBCINjzrWBm7bX9hcEe2htN8VoANxsc2aD2ADJnKONUSyJ9aPpeFiYeWCB7fy3H6_rayNyKW40U67_s7rPQJfwnWEPAziLyIREYqi1zFnt44IoVRLnGwFVMDJjkaefg">
+</div>
+<div class="px-container-margin pt-4">
+<div class="flex justify-between items-start gap-4">
+<div>
+<h2 class="font-headline-md text-headline-md text-on-surface font-bold mb-1">精选有机番茄 (自然熟)</h2>
+<p class="font-body-md text-body-md text-on-surface-variant mb-2">新鲜采摘，皮薄多汁，酸甜可口</p>
+<div class="flex gap-2 mb-3">
+<span class="bg-secondary-fixed text-on-secondary-fixed font-label-sm text-label-sm px-2 py-0.5 rounded">有机认证</span>
+<span class="bg-secondary-fixed text-on-secondary-fixed font-label-sm text-label-sm px-2 py-0.5 rounded">新鲜保障</span>
+</div>
+</div>
+</div>
+<div class="flex items-baseline gap-1 mt-2">
+<span class="text-primary font-display-price text-display-price">￥3.99</span>
+<span class="text-on-surface-variant font-body-md text-body-md">/斤</span>
+</div>
+<div class="text-on-surface-variant font-label-sm text-label-sm mt-1">
+                    库存充足 (约200斤)
+                </div>
+</div>
+</div>
+<!-- Quantity Selector Section -->
+<div class="mt-section-gap px-container-margin bg-surface-container-lowest py-4 shadow-sm">
+<div class="flex justify-between items-center">
+<div>
+<div class="font-body-md text-body-md text-on-surface font-medium">购买数量</div>
+<div class="font-label-sm text-label-sm text-on-surface-variant">0.5斤起购，每次增加0.5斤</div>
+</div>
+<!-- Stepper -->
+<div class="flex items-center border border-outline-variant rounded-lg h-9">
+<button class="w-9 h-full flex items-center justify-center text-on-surface-variant active:bg-surface-container-highest rounded-l-lg transition-colors">
+<span class="material-symbols-outlined text-[20px]">remove</span>
+</button>
+<div class="w-12 h-full flex items-center justify-center font-body-md text-body-md text-on-surface border-x border-outline-variant bg-surface-bright">
+                        1.0
+                    </div>
+<button class="w-9 h-full flex items-center justify-center text-primary active:bg-surface-container-highest rounded-r-lg transition-colors">
+<span class="material-symbols-outlined text-[20px]">add</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Product Details / Description -->
+<div class="mt-section-gap px-container-margin bg-surface-container-lowest py-4 shadow-sm mb-4">
+<h3 class="font-headline-md text-headline-md text-on-surface font-bold mb-3 border-b border-surface-container-high pb-2">商品详情</h3>
+<div class="font-body-md text-body-md text-on-surface-variant space-y-2">
+<p>产地：山东寿光</p>
+<p>储藏方式：冷藏或阴凉通风处</p>
+<p>温馨提示：生鲜产品受季节、气候等因素影响，外观及口感可能略有差异，请以实物为准。</p>
+</div>
+</div>
+</main>
+<!-- Bottom Action Bar (Floating, Level 2 Depth) -->
+<div class="fixed bottom-0 w-full z-50 bg-surface-container-lowest shadow-[0px_-4px_12px_rgba(0,0,0,0.04)] py-3 px-container-margin safe-pb flex gap-3 items-center">
+<!-- Optional cart icon badge area if needed, skipping for cleaner look per prompt -->
+<div class="flex flex-col items-center justify-center text-on-surface-variant w-12 hover:opacity-80 active:scale-95 transition-transform">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 0;">support_agent</span>
+<span class="font-label-sm text-label-sm mt-0.5 text-[10px]">客服</span>
+</div>
+<div class="flex flex-col items-center justify-center text-on-surface-variant w-12 hover:opacity-80 active:scale-95 transition-transform mr-2 relative">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 0;">shopping_cart</span>
+<span class="font-label-sm text-label-sm mt-0.5 text-[10px]">购物车</span>
+<span class="absolute top-0 right-1 w-2 h-2 bg-error rounded-full"></span>
+</div>
+<button class="flex-1 h-touch-target-min border border-primary text-primary font-body-lg text-body-lg font-medium rounded-full active:bg-primary-container/10 transition-colors">
+            加入购物车
+        </button>
+<button class="flex-1 h-touch-target-min bg-primary text-on-primary font-body-lg text-body-lg font-medium rounded-full shadow-[0px_4px_12px_rgba(0,109,55,0.2)] active:opacity-90 transition-opacity">
+            立即购买
+        </button>
+</div>
+</body></html>

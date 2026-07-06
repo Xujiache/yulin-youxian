@@ -1,0 +1,165 @@
+<view class="skeleton-layer {{hasTabbar ? 'has-tabbar' : ''}}">
+  <view class="skeleton-header">
+    <view class="sk-line title"></view>
+    <view class="sk-pill mini"></view>
+  </view>
+
+  <block wx:if="{{type === 'home'}}">
+    <view class="sk-search"></view>
+    <view class="sk-hero"></view>
+    <view class="sk-category-row">
+      <view wx:for="{{five}}" wx:key="*this" class="sk-category">
+        <view class="sk-circle"></view>
+        <view class="sk-line tiny"></view>
+      </view>
+    </view>
+    <view class="sk-section-head">
+      <view class="sk-line medium"></view>
+      <view class="sk-line small"></view>
+    </view>
+    <view class="sk-grid">
+      <view wx:for="{{four}}" wx:key="*this" class="sk-card">
+        <view class="sk-image"></view>
+        <view class="sk-line medium"></view>
+        <view class="sk-line small"></view>
+      </view>
+    </view>
+  </block>
+
+  <block wx:elif="{{type === 'category'}}">
+    <view class="sk-search"></view>
+    <view class="sk-category-layout">
+      <view class="sk-sidebar">
+        <view wx:for="{{six}}" wx:key="*this" class="sk-tab"></view>
+      </view>
+      <view class="sk-product-area">
+        <view class="sk-section-head">
+          <view class="sk-line medium"></view>
+          <view class="sk-line small"></view>
+        </view>
+        <view class="sk-grid">
+          <view wx:for="{{four}}" wx:key="*this" class="sk-card">
+            <view class="sk-image"></view>
+            <view class="sk-line medium"></view>
+            <view class="sk-line small"></view>
+          </view>
+        </view>
+      </view>
+    </view>
+  </block>
+
+  <block wx:elif="{{type === 'detail'}}">
+    <view class="sk-detail-hero"></view>
+    <view class="sk-panel">
+      <view class="sk-line large"></view>
+      <view class="sk-line medium"></view>
+      <view class="sk-line price"></view>
+    </view>
+    <view class="sk-panel">
+      <view class="sk-line medium"></view>
+      <view class="sk-stepper"></view>
+    </view>
+    <view class="sk-panel">
+      <view class="sk-line medium"></view>
+      <view class="sk-line full"></view>
+      <view class="sk-line full"></view>
+    </view>
+  </block>
+
+  <block wx:elif="{{type === 'profile'}}">
+    <view class="sk-profile-hero">
+      <view class="sk-avatar"></view>
+      <view class="sk-profile-lines">
+        <view class="sk-line large"></view>
+        <view class="sk-line medium"></view>
+      </view>
+    </view>
+    <view class="sk-panel">
+      <view class="sk-section-head">
+        <view class="sk-line medium"></view>
+        <view class="sk-line small"></view>
+      </view>
+      <view class="sk-category-row">
+        <view wx:for="{{four}}" wx:key="*this" class="sk-category">
+          <view class="sk-circle"></view>
+          <view class="sk-line tiny"></view>
+        </view>
+      </view>
+    </view>
+    <view class="sk-panel">
+      <view wx:for="{{four}}" wx:key="*this" class="sk-row">
+        <view class="sk-circle small-circle"></view>
+        <view class="sk-line medium"></view>
+      </view>
+    </view>
+  </block>
+
+  <block wx:elif="{{type === 'form'}}">
+    <view class="sk-hero compact"></view>
+    <view class="sk-panel">
+      <view class="sk-avatar center"></view>
+      <view class="sk-input"></view>
+      <view class="sk-input"></view>
+      <view class="sk-button"></view>
+    </view>
+  </block>
+
+  <block wx:elif="{{type === 'search'}}">
+    <view class="sk-search"></view>
+    <view class="sk-panel">
+      <view class="sk-section-head">
+        <view class="sk-line medium"></view>
+        <view class="sk-line small"></view>
+      </view>
+      <view class="sk-chip-row">
+        <view wx:for="{{four}}" wx:key="*this" class="sk-chip"></view>
+      </view>
+    </view>
+    <view class="sk-panel">
+      <view class="sk-section-head">
+        <view class="sk-line medium"></view>
+        <view class="sk-line small"></view>
+      </view>
+      <view class="sk-rank-grid">
+        <view wx:for="{{six}}" wx:key="*this" class="sk-rank"></view>
+      </view>
+    </view>
+  </block>
+
+  <block wx:elif="{{type === 'grid'}}">
+    <view class="sk-search"></view>
+    <view class="sk-section-head">
+      <view class="sk-line medium"></view>
+      <view class="sk-line small"></view>
+    </view>
+    <view class="sk-grid">
+      <view wx:for="{{four}}" wx:key="*this" class="sk-card">
+        <view class="sk-image"></view>
+        <view class="sk-line medium"></view>
+        <view class="sk-line small"></view>
+        <view class="sk-line price"></view>
+      </view>
+    </view>
+  </block>
+
+  <block wx:else>
+    <view class="sk-search list-search"></view>
+    <view wx:for="{{four}}" wx:key="*this" class="sk-panel list-panel">
+      <view class="sk-row">
+        <view class="sk-image thumb"></view>
+        <view class="sk-list-lines">
+          <view class="sk-line large"></view>
+          <view class="sk-line medium"></view>
+          <view class="sk-line price"></view>
+        </view>
+      </view>
+    </view>
+  </block>
+
+  <view wx:if="{{hasTabbar}}" class="sk-tabbar">
+    <view wx:for="{{five}}" wx:key="*this" class="sk-tabbar-item">
+      <view class="sk-circle tabbar-dot"></view>
+      <view class="sk-line tiny"></view>
+    </view>
+  </view>
+</view>

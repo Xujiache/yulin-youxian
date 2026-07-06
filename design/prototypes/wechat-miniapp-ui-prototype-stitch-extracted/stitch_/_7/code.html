@@ -1,0 +1,248 @@
+<!DOCTYPE html><html lang="zh-CN"><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>确认订单 - 鲜达生鲜</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;700&amp;family=Plus+Jakarta+Sans:wght@600;700&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<style>
+        .material-symbols-outlined {
+            font-family: 'Material Symbols Outlined';
+            font-weight: normal;
+            font-style: normal;
+            font-size: 24px;
+            line-height: 1;
+            letter-spacing: normal;
+            text-transform: none;
+            display: inline-block;
+            white-space: nowrap;
+            word-wrap: normal;
+            direction: ltr;
+            font-feature-settings: 'liga';
+            -webkit-font-smoothing: antialiased;
+        }
+        /* Custom soft shadows defined in Design System */
+        .shadow-level-1 {
+            box-shadow: 0px 4px 12px rgba(0, 0, 0, 0.04);
+        }
+        .shadow-level-2 {
+            box-shadow: 0px -8px 20px rgba(0, 0, 0, 0.08);
+        }
+        /* Safe area padding for bottom bar */
+        @supports (padding-bottom: env(safe-area-inset-bottom)) {
+            .pb-safe {
+                padding-bottom: env(safe-area-inset-bottom);
+            }
+        }
+    </style>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "surface-container-highest": "#e1e2e4",
+                    "surface-dim": "#d9dadc",
+                    "on-background": "#191c1e",
+                    "on-secondary-fixed": "#121f08",
+                    "on-primary-fixed": "#00210c",
+                    "surface-container-high": "#e7e8ea",
+                    "primary-container": "#27ae60",
+                    "surface": "#f8f9fb",
+                    "outline": "#6d7a6e",
+                    "on-tertiary": "#ffffff",
+                    "inverse-on-surface": "#f0f1f3",
+                    "on-error-container": "#93000a",
+                    "error-container": "#ffdad6",
+                    "surface-variant": "#e1e2e4",
+                    "on-tertiary-container": "#2c3329",
+                    "tertiary": "#596055",
+                    "on-tertiary-fixed-variant": "#42493e",
+                    "secondary-fixed": "#d7e8c3",
+                    "secondary-fixed-dim": "#bbcca9",
+                    "on-tertiary-fixed": "#171d14",
+                    "primary-fixed-dim": "#61de8a",
+                    "outline-variant": "#bccabc",
+                    "on-secondary": "#ffffff",
+                    "surface-container": "#edeef0",
+                    "tertiary-fixed": "#dee5d6",
+                    "on-primary-container": "#00391a",
+                    "inverse-primary": "#61de8a",
+                    "on-primary": "#ffffff",
+                    "surface-bright": "#f8f9fb",
+                    "on-secondary-container": "#5a694c",
+                    "background": "#f8f9fb",
+                    "primary": "#006d37",
+                    "on-primary-fixed-variant": "#005228",
+                    "on-error": "#ffffff",
+                    "primary-fixed": "#7efba4",
+                    "surface-container-lowest": "#ffffff",
+                    "tertiary-container": "#949b8e",
+                    "on-surface": "#191c1e",
+                    "on-secondary-fixed-variant": "#3d4b30",
+                    "error": "#ba1a1a",
+                    "inverse-surface": "#2e3132",
+                    "secondary-container": "#d7e8c3",
+                    "on-surface-variant": "#3d4a3f",
+                    "secondary": "#546346",
+                    "surface-container-low": "#f2f4f6",
+                    "tertiary-fixed-dim": "#c2c9bb",
+                    "surface-tint": "#006d37"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "card-padding": "12px",
+                    "touch-target-min": "44px",
+                    "gutter-md": "8px",
+                    "section-gap": "20px",
+                    "container-margin": "12px"
+            },
+            "fontFamily": {
+                    "body-md": ["Be Vietnam Pro", "sans-serif"],
+                    "headline-lg-mobile": ["Plus Jakarta Sans", "sans-serif"],
+                    "body-lg": ["Be Vietnam Pro", "sans-serif"],
+                    "display-price": ["Plus Jakarta Sans", "sans-serif"],
+                    "label-sm": ["Be Vietnam Pro", "sans-serif"],
+                    "headline-lg": ["Plus Jakarta Sans", "sans-serif"],
+                    "headline-md": ["Plus Jakarta Sans", "sans-serif"]
+            },
+            "fontSize": {
+                    "body-md": ["14px", {"lineHeight": "22px", "fontWeight": "400"}],
+                    "headline-lg-mobile": ["18px", {"lineHeight": "24px", "fontWeight": "600"}],
+                    "body-lg": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                    "display-price": ["24px", {"lineHeight": "32px", "fontWeight": "700"}],
+                    "label-sm": ["12px", {"lineHeight": "16px", "fontWeight": "500"}],
+                    "headline-lg": ["20px", {"lineHeight": "28px", "fontWeight": "600"}],
+                    "headline-md": ["18px", {"lineHeight": "26px", "fontWeight": "600"}]
+            }
+          }
+        }
+      }
+    </script>
+</head>
+<body class="bg-surface text-on-surface font-body-md antialiased min-h-screen pb-28">
+<!-- Transactional Header -->
+<header class="sticky top-0 z-40 bg-surface w-full h-14 flex items-center justify-between px-container-margin">
+<button aria-label="返回" class="w-touch-target-min h-touch-target-min flex items-center justify-center -ml-2 text-on-surface active:scale-95 transition-transform">
+<span class="material-symbols-outlined" data-icon="arrow_back" style="font-variation-settings: 'wght' 400;">arrow_back</span>
+</button>
+<h1 class="font-headline-lg-mobile text-headline-lg-mobile text-on-surface absolute left-1/2 -translate-x-1/2">确认订单</h1>
+<div class="w-touch-target-min h-touch-target-min"></div>
+</header>
+<!-- Main Content Canvas -->
+<main class="px-container-margin flex flex-col gap-4 mt-2">
+<!-- Address Section -->
+<section class="bg-surface-container-lowest rounded-xl p-card-padding shadow-level-1 flex items-center justify-between active:scale-[0.98] transition-transform cursor-pointer">
+<div class="flex items-center gap-3 flex-1">
+<div class="w-10 h-10 rounded-full bg-primary-container/20 flex items-center justify-center text-primary shrink-0">
+<span class="material-symbols-outlined" data-icon="location_on" data-weight="fill" style="font-variation-settings: 'FILL' 1, 'wght' 400;">location_on</span>
+</div>
+<div class="flex flex-col gap-1 overflow-hidden">
+<div class="flex items-center gap-2">
+<span class="font-headline-md text-headline-md text-on-surface truncate">上海市静安区延平路 123 弄</span>
+</div>
+<div class="flex items-center gap-3 font-body-md text-body-md text-on-surface-variant">
+<span>李女士</span>
+<span>138****5678</span>
+</div>
+</div>
+</div>
+<span class="material-symbols-outlined text-outline-variant shrink-0" data-icon="chevron_right">chevron_right</span>
+</section>
+<!-- Delivery Time -->
+<section class="bg-surface-container-lowest rounded-xl p-card-padding shadow-level-1 flex items-center justify-between active:scale-[0.98] transition-transform cursor-pointer">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary" data-icon="schedule" style="font-variation-settings: 'wght' 400;">schedule</span>
+<span class="font-headline-md text-headline-md text-on-surface">预约配送时间</span>
+</div>
+<div class="flex items-center gap-1">
+<span class="font-body-md text-body-md text-primary">尽快送达 (约 15:30)</span>
+<span class="material-symbols-outlined text-outline-variant" data-icon="chevron_right">chevron_right</span>
+</div>
+</section>
+<!-- Order Items Summary -->
+<section class="bg-surface-container-lowest rounded-xl p-card-padding shadow-level-1 flex flex-col gap-4">
+<div class="flex items-center gap-2 border-b border-surface-container-low pb-3">
+<span class="material-symbols-outlined text-on-surface-variant" data-icon="storefront" style="font-variation-settings: 'wght' 400;">storefront</span>
+<span class="font-body-lg text-body-lg text-on-surface font-semibold">鲜达生鲜 (静安店)</span>
+</div>
+<div class="flex flex-col gap-4">
+<!-- Item 1 -->
+<div class="flex gap-3 items-start">
+<img class="w-16 h-16 rounded-lg object-cover bg-surface-container-low border border-surface-container shrink-0" data-alt="A stunning close-up of vibrant, freshly harvested organic tomatoes on the vine, resting on a clean white surface. The scene is illuminated by soft, natural studio lighting that highlights the glistening water droplets on the red skin, conveying absolute freshness and premium quality. The bright, airy light-mode aesthetic emphasizes a clean, healthy lifestyle. The background is a crisp, minimalist pure white with very soft, diffused shadows, perfectly aligning with a high-end organic market visual identity." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCFvdqkmV4h_tKMqKzpAZwUXTXLu73wTvujUNB0_fp0eg9Yvk6vjUD4u4U1-pQlx_0GTyPBqkVm3_CDJiXZVQ4k0rM8Alf5PXN0HRICsueFWdxkT4wNDsZX-gQzKlm92ju5AiwzQ61qGQcvvksbwaDE2IvG9PzIuqKIEklT3-CMthM_4fEhfe_D3JRd0vJKp3lJCvz8eH5_lZjfH2_abedJ8yEcPzpfxnMH2R7Sdzph2PmKce2s2PTAbQ">
+<div class="flex flex-col flex-1 gap-1">
+<div class="flex justify-between items-start gap-2">
+<span class="font-body-md text-body-md text-on-surface line-clamp-2">本地有机普罗旺斯西红柿 新鲜采摘</span>
+<span class="font-body-md text-body-md text-on-surface font-semibold">¥12.8</span>
+</div>
+<div class="flex justify-between items-center">
+<span class="font-label-sm text-label-sm text-outline bg-secondary-fixed/30 px-2 py-0.5 rounded">约500g</span>
+<span class="font-body-md text-body-md text-on-surface-variant">x1</span>
+</div>
+</div>
+</div>
+<!-- Item 2 -->
+<div class="flex gap-3 items-start">
+<img class="w-16 h-16 rounded-lg object-cover bg-surface-container-low border border-surface-container shrink-0" data-alt="A mouth-watering macro shot of a premium cut of fresh salmon fillet, showing rich orange flesh and distinct white fat marbling. The salmon is placed on a pristine white marble board with a sprig of fresh green dill nearby. High-key, bright lighting creates a clean, modern aesthetic typical of a luxury grocery delivery app. The composition uses generous whitespace and minimal distractions, focusing entirely on the vibrant colors and tactile texture of the high-quality seafood in a bright, light-mode setting." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAH7UDF866tj7NEx2r_Pc7A2ZtzW50lRbxz8BOvvEGUGfKpcyfsnkp_lftehSC2v-fAsM_XZL4IdStWUoFlyJrlohSNV6835_odIF51rijSx9pgfrt8lPpbqCFaWg9_NXk5NXeTMgBIropyfqLHwEmAlkXwMSJL1kRQ7hEfgBCxLrCYIkwxyi4-XfBCwAHpa4adjAmq8KBQ-7Q9OXVgrZSTYsjeylqS0nz7KmOzH_I_KT0lJPsUyfwJiA">
+<div class="flex flex-col flex-1 gap-1">
+<div class="flex justify-between items-start gap-2">
+<span class="font-body-md text-body-md text-on-surface line-clamp-2">挪威进口 新鲜三文鱼刺身中段</span>
+<span class="font-body-md text-body-md text-on-surface font-semibold">¥59.9</span>
+</div>
+<div class="flex justify-between items-center">
+<span class="font-label-sm text-label-sm text-outline bg-secondary-fixed/30 px-2 py-0.5 rounded">约200g</span>
+<span class="font-body-md text-body-md text-on-surface-variant">x1</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Fees List -->
+<div class="flex flex-col gap-2 mt-2 pt-4 border-t border-surface-container-low">
+<div class="flex justify-between items-center">
+<span class="font-body-md text-body-md text-on-surface-variant">商品总价</span>
+<span class="font-body-md text-body-md text-on-surface">¥72.7</span>
+</div>
+<div class="flex justify-between items-center">
+<span class="font-body-md text-body-md text-on-surface-variant">配送费</span>
+<span class="font-body-md text-body-md text-on-surface">¥5.0</span>
+</div>
+<div class="flex justify-between items-center">
+<span class="font-body-md text-body-md text-on-surface-variant">包装费</span>
+<span class="font-body-md text-body-md text-on-surface">¥1.0</span>
+</div>
+</div>
+<div class="flex justify-end items-center mt-2 pt-4 border-t border-surface-container-low gap-2">
+<span class="font-body-md text-body-md text-on-surface-variant">共 2 件，小计</span>
+<span class="font-headline-lg-mobile text-headline-lg-mobile text-primary">¥78.7</span>
+</div>
+</section>
+<!-- Note Section -->
+<section class="bg-surface-container-lowest rounded-xl p-card-padding shadow-level-1 flex flex-col gap-2">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-outline" data-icon="edit_note" style="font-variation-settings: 'wght' 400;">edit_note</span>
+<span class="font-headline-md text-headline-md text-on-surface">给商家留言</span>
+</div>
+<textarea class="w-full bg-surface border border-outline-variant rounded-lg p-3 font-body-md text-body-md text-on-surface placeholder:text-outline-variant focus:ring-1 focus:ring-primary focus:border-primary transition-all resize-none outline-none" placeholder="口味、偏好等要求，建议与商家协商一致" rows="2"></textarea>
+</section>
+<!-- Bottom spacing buffer -->
+<div class="h-4"></div>
+</main>
+<!-- Bottom Action Bar (Level 2 Elevation) -->
+<div class="fixed bottom-0 left-0 w-full bg-surface-container-lowest shadow-level-2 z-50">
+<div class="flex justify-between items-center px-container-margin py-3 pb-safe">
+<div class="flex items-baseline gap-1">
+<span class="font-body-md text-body-md text-on-surface">合计:</span>
+<span class="font-display-price text-display-price text-primary">¥78.7</span>
+</div>
+<button class="bg-primary hover:bg-primary/90 text-on-primary font-headline-md text-headline-md rounded-full px-8 py-3 flex items-center justify-center gap-2 shadow-sm transition-colors active:scale-95 duration-200">
+<span>微信支付</span>
+</button>
+</div>
+</div>
+</body></html>

@@ -1,0 +1,260 @@
+<!DOCTYPE html><html lang="zh-CN"><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" name="viewport">
+<title>鲜达生鲜 - 分类</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<style>
+        @import url('https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap');
+        
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        
+        /* Hide scrollbar for cleaner UI */
+        ::-webkit-scrollbar {
+            width: 0px;
+            background: transparent;
+        }
+    </style>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "surface-container-highest": "#e1e2e4",
+                        "surface-dim": "#d9dadc",
+                        "on-background": "#191c1e",
+                        "on-secondary-fixed": "#121f08",
+                        "on-primary-fixed": "#00210c",
+                        "surface-container-high": "#e7e8ea",
+                        "primary-container": "#27ae60",
+                        "surface": "#f8f9fb",
+                        "outline": "#6d7a6e",
+                        "on-tertiary": "#ffffff",
+                        "inverse-on-surface": "#f0f1f3",
+                        "on-error-container": "#93000a",
+                        "error-container": "#ffdad6",
+                        "surface-variant": "#e1e2e4",
+                        "on-tertiary-container": "#2c3329",
+                        "tertiary": "#596055",
+                        "on-tertiary-fixed-variant": "#42493e",
+                        "secondary-fixed": "#d7e8c3",
+                        "secondary-fixed-dim": "#bbcca9",
+                        "on-tertiary-fixed": "#171d14",
+                        "primary-fixed-dim": "#61de8a",
+                        "outline-variant": "#bccabc",
+                        "on-secondary": "#ffffff",
+                        "surface-container": "#edeef0",
+                        "tertiary-fixed": "#dee5d6",
+                        "on-primary-container": "#00391a",
+                        "inverse-primary": "#61de8a",
+                        "on-primary": "#ffffff",
+                        "surface-bright": "#f8f9fb",
+                        "on-secondary-container": "#5a694c",
+                        "background": "#f8f9fb",
+                        "primary": "#006d37",
+                        "on-primary-fixed-variant": "#005228",
+                        "on-error": "#ffffff",
+                        "primary-fixed": "#7efba4",
+                        "surface-container-lowest": "#ffffff",
+                        "tertiary-container": "#949b8e",
+                        "on-surface": "#191c1e",
+                        "on-secondary-fixed-variant": "#3d4b30",
+                        "error": "#ba1a1a",
+                        "inverse-surface": "#2e3132",
+                        "secondary-container": "#d7e8c3",
+                        "on-surface-variant": "#3d4a3f",
+                        "secondary": "#546346",
+                        "surface-container-low": "#f2f4f6",
+                        "tertiary-fixed-dim": "#c2c9bb",
+                        "surface-tint": "#006d37"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "card-padding": "12px",
+                        "touch-target-min": "44px",
+                        "gutter-md": "8px",
+                        "section-gap": "20px",
+                        "container-margin": "12px"
+                    },
+                    "fontFamily": {
+                        "body-md": ["Be Vietnam Pro"],
+                        "headline-lg-mobile": ["Plus Jakarta Sans"],
+                        "body-lg": ["Be Vietnam Pro"],
+                        "display-price": ["Plus Jakarta Sans"],
+                        "label-sm": ["Be Vietnam Pro"],
+                        "headline-lg": ["Plus Jakarta Sans"],
+                        "headline-md": ["Plus Jakarta Sans"]
+                    },
+                    "fontSize": {
+                        "body-md": ["14px", { "lineHeight": "22px", "fontWeight": "400" }],
+                        "headline-lg-mobile": ["18px", { "lineHeight": "24px", "fontWeight": "600" }],
+                        "body-lg": ["16px", { "lineHeight": "24px", "fontWeight": "400" }],
+                        "display-price": ["24px", { "lineHeight": "32px", "fontWeight": "700" }],
+                        "label-sm": ["12px", { "lineHeight": "16px", "fontWeight": "500" }],
+                        "headline-lg": ["20px", { "lineHeight": "28px", "fontWeight": "600" }],
+                        "headline-md": ["18px", { "lineHeight": "26px", "fontWeight": "600" }]
+                    }
+                }
+            }
+        }
+    </script>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;700&amp;family=Plus+Jakarta+Sans:wght@600;700;800&amp;display=swap" data-snapdom="injected-import"></head>
+<body class="bg-surface-container-highest text-on-surface h-screen flex justify-center w-full">
+<!-- Mobile Frame Simulator -->
+<div class="w-full max-w-md h-full bg-background flex flex-col relative overflow-hidden shadow-2xl">
+<!-- TopAppBar (from JSON) -->
+<header class="flex items-center justify-between px-card-padding w-full h-14 z-50 bg-surface dark:bg-surface-dim docked full-width top-0 flat no shadows flex-shrink-0">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary dark:text-primary-fixed-dim">storefront</span>
+<h1 class="font-headline-lg-mobile text-headline-lg-mobile font-bold text-primary dark:text-primary-fixed-dim">鲜达生鲜</h1>
+</div>
+<div class="flex items-center gap-4">
+<span class="material-symbols-outlined text-on-surface-variant hover:opacity-80 scale-95 active:transition-transform cursor-pointer">notifications</span>
+</div>
+</header>
+<!-- Search Bar Section -->
+<div class="px-container-margin pb-3 pt-1 bg-surface z-40 flex-shrink-0">
+<div class="flex items-center w-full h-10 bg-surface-container-lowest rounded-full border border-surface-dim px-3 shadow-sm focus-within:border-primary-fixed-dim transition-colors">
+<span class="material-symbols-outlined text-on-surface-variant mr-2 text-[20px]">search</span>
+<input class="flex-1 bg-transparent border-none focus:ring-0 text-body-md font-body-md text-on-surface placeholder:text-on-surface-variant outline-none" placeholder="搜索新鲜蔬菜、水果、肉类..." type="text">
+</div>
+</div>
+<!-- Main Content: Split Layout -->
+<main class="flex-1 flex overflow-hidden w-full bg-surface-container-lowest">
+<!-- Left Sidebar: Categories -->
+<aside class="w-[84px] bg-surface-container-low flex-shrink-0 overflow-y-auto">
+<ul class="flex flex-col">
+<!-- Active Category -->
+<li class="h-14 flex items-center justify-center bg-surface-container-lowest border-l-4 border-primary text-primary font-headline-lg-mobile text-[14px] font-bold cursor-pointer transition-colors relative">
+                    叶菜类
+                </li>
+<!-- Inactive Categories -->
+<li class="h-14 flex items-center justify-center text-on-surface-variant font-body-md text-body-md cursor-pointer hover:bg-surface-container transition-colors">根茎类</li>
+<li class="h-14 flex items-center justify-center text-on-surface-variant font-body-md text-body-md cursor-pointer hover:bg-surface-container transition-colors">瓜果类</li>
+<li class="h-14 flex items-center justify-center text-on-surface-variant font-body-md text-body-md cursor-pointer hover:bg-surface-container transition-colors">菌菇类</li>
+<li class="h-14 flex items-center justify-center text-on-surface-variant font-body-md text-body-md cursor-pointer hover:bg-surface-container transition-colors">水果类</li>
+<li class="h-14 flex items-center justify-center text-on-surface-variant font-body-md text-body-md cursor-pointer hover:bg-surface-container transition-colors">肉蛋类</li>
+<li class="h-14 flex items-center justify-center text-on-surface-variant font-body-md text-body-md cursor-pointer hover:bg-surface-container transition-colors">水产海鲜</li>
+<li class="h-14 flex items-center justify-center text-on-surface-variant font-body-md text-body-md cursor-pointer hover:bg-surface-container transition-colors">冷藏乳品</li>
+</ul>
+</aside>
+<!-- Right Content: Product Grid -->
+<section class="flex-1 bg-surface-container-lowest p-gutter-md overflow-y-auto pb-24">
+<div class="flex items-center justify-between mb-3 px-1">
+<span class="font-label-sm text-label-sm text-on-surface-variant">共 24 件商品</span>
+<div class="flex items-center gap-1 text-on-surface-variant text-label-sm font-label-sm cursor-pointer">
+                    综合排序 <span class="material-symbols-outlined text-[16px]">expand_more</span>
+</div>
+</div>
+<div class="grid grid-cols-2 gap-gutter-md">
+<!-- Product Card 1 -->
+<div class="bg-surface rounded-lg shadow-[0px_2px_8px_rgba(0,0,0,0.03)] border border-surface-dim overflow-hidden flex flex-col relative pb-1">
+<div class="w-full aspect-square bg-surface-container-low relative">
+<img class="w-full h-full object-cover" data-alt="A macro studio shot of glossy, vibrant red organic tomatoes resting on a clean white surface with subtle soft shadows. The lighting is bright and natural, emphasizing the freshness and dewy water droplets on the skin. Minimalist, high-end grocery photography style." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBhjuQecozx3bLGER5QCzywvClyHG1oxPwl39Cp0_3OIfBFyCtEo7j0DfSkbATur_szPElDBorHAyD0skfEkkzLnwZiKt0s8-oY6B-88pDkd2XWL3Em-bf_Gnw4Na0lspE_qLpXIb3gAzJRe4auav5u7FKFaFg-8QGbdjaQ0AuhWNcQ2rDqFMPTEYUzrZgxPwmshDjaL_xjx9arfIdykTUEun9IZqElQqGsVnTEnXvcU3npTkr1hLG05w">
+<div class="absolute top-0 left-0 bg-secondary-fixed text-on-secondary-fixed font-label-sm text-[10px] px-1.5 py-0.5 rounded-br-md">热销</div>
+</div>
+<div class="p-2 flex flex-col flex-1">
+<h3 class="font-body-md text-[13px] leading-[18px] text-on-surface font-medium line-clamp-2 mb-1">有机水培西红柿 自然熟透沙瓤多汁</h3>
+<p class="font-label-sm text-[11px] text-on-surface-variant mb-2">约500g/份</p>
+<div class="mt-auto flex items-end justify-between">
+<span class="font-display-price text-[16px] text-primary">￥3.99<span class="text-[12px] font-normal text-on-surface-variant ml-0.5">/斤</span></span>
+</div>
+</div>
+<button class="absolute bottom-2 right-2 w-7 h-7 rounded-full bg-primary text-on-primary flex items-center justify-center shadow-md active:scale-90 transition-transform z-10">
+<span class="material-symbols-outlined text-[18px]">add</span>
+</button>
+</div>
+<!-- Product Card 2 -->
+<div class="bg-surface rounded-lg shadow-[0px_2px_8px_rgba(0,0,0,0.03)] border border-surface-dim overflow-hidden flex flex-col relative pb-1">
+<div class="w-full aspect-square bg-surface-container-low relative">
+<img class="w-full h-full object-cover" data-alt="Crisp, bright green local cucumbers arranged diagonally on a pristine white background. A few droplets of condensation highlight the rough texture of the skin. Shot with high-key lighting, producing a fresh, organic, and modern minimalist aesthetic." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAB_BE_g-Hm1aUkWgqLW3jMkdzEPkWIyJlTEyO_dgsYhG3a7vimnRN4sUmNSyoFTwshK4oU2ytSwn2Go0tg7TXuZvBWl5haL3ISPpY0vo2BB_lYjaqVzt9yjB_Ow7e6941L9DD49-FBaCdqB6t4ZUNNoq8jIUCWvkOgCbOgnGMdXKsL0oj-mua2E2pbHjuNV2MY0qHiuH7A0bu73FlNRQX5wJR4DD18mm_gMuTqjWh_VO75Tfz2K25fLg">
+</div>
+<div class="p-2 flex flex-col flex-1">
+<h3 class="font-body-md text-[13px] leading-[18px] text-on-surface font-medium line-clamp-2 mb-1">本地鲜摘黄瓜 清脆爽口</h3>
+<p class="font-label-sm text-[11px] text-on-surface-variant mb-2">约400g/份</p>
+<div class="mt-auto flex items-end justify-between">
+<span class="font-display-price text-[16px] text-primary">￥2.50<span class="text-[12px] font-normal text-on-surface-variant ml-0.5">/斤</span></span>
+</div>
+</div>
+<button class="absolute bottom-2 right-2 w-7 h-7 rounded-full bg-primary text-on-primary flex items-center justify-center shadow-md active:scale-90 transition-transform z-10">
+<span class="material-symbols-outlined text-[18px]">add</span>
+</button>
+</div>
+<!-- Product Card 3 -->
+<div class="bg-surface rounded-lg shadow-[0px_2px_8px_rgba(0,0,0,0.03)] border border-surface-dim overflow-hidden flex flex-col relative pb-1">
+<div class="w-full aspect-square bg-surface-container-low relative">
+<img class="w-full h-full object-cover" data-alt="A lush head of fresh romaine lettuce, its leaves a vibrant chartreuse green, sitting isolated against a stark white backdrop. The soft, diffused lighting creates gentle highlights on the crisp leaf ridges. Premium, clean, farm-to-table visual style." src="https://lh3.googleusercontent.com/aida-public/AB6AXuC8b8rtbDMe1R5mxCXzu-3s81-6jdUUt2aBFcgC2TIg_K1qBbHt77cEXD4qaKbeCc5fd-fysJaWe06YSzXCOk9pqEuLcNxDK-iVIrLTHAy6fSw43SeMcDPYMpEWgwtZur3An9S59eyz5HTAeIKjjYdWlnJEKkwFir4vqyv1ld4QTzMlnu7KlRUmbUK8OpTgn4DvUGnj0gkegnOo7vMx_hBRFPXO-5uGoUPlBEReaX-Zkf-_heANGCps7w">
+<div class="absolute top-0 left-0 bg-tertiary-fixed text-on-tertiary-fixed font-label-sm text-[10px] px-1.5 py-0.5 rounded-br-md">新鲜直达</div>
+</div>
+<div class="p-2 flex flex-col flex-1">
+<h3 class="font-body-md text-[13px] leading-[18px] text-on-surface font-medium line-clamp-2 mb-1">高山脆甜生菜 适合沙拉轻食</h3>
+<p class="font-label-sm text-[11px] text-on-surface-variant mb-2">约250g/份</p>
+<div class="mt-auto flex items-end justify-between">
+<span class="font-display-price text-[16px] text-primary">￥4.80<span class="text-[12px] font-normal text-on-surface-variant ml-0.5">/份</span></span>
+</div>
+</div>
+<button class="absolute bottom-2 right-2 w-7 h-7 rounded-full bg-primary text-on-primary flex items-center justify-center shadow-md active:scale-90 transition-transform z-10">
+<span class="material-symbols-outlined text-[18px]">add</span>
+</button>
+</div>
+<!-- Product Card 4 -->
+<div class="bg-surface rounded-lg shadow-[0px_2px_8px_rgba(0,0,0,0.03)] border border-surface-dim overflow-hidden flex flex-col relative pb-1">
+<div class="w-full aspect-square bg-surface-container-low relative">
+<img class="w-full h-full object-cover" data-alt="A neatly tied bundle of deep green organic spinach roots visible, placed centrally on a seamless light grey-white surface. The lighting is pure and natural, emphasizing the healthy, earthy feel of the fresh produce. Minimalist culinary aesthetic." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCg2BJWXFZqxOGsPKwdRakLFqaaZkQG3-0jsRqZFRNB3eLISmZ5EM-Nm3BdTrGBYswd87wbLBjIX3o53RTCuttuywhDYFfExEo8HMa3tazZidILmGgnMa4DGJ-NxRrWVy95rD5Zli_O28FLg4a8H0h-VY9fe_5jFvTN7Cl7ltrS7XchojOKfvBHBA7rgt8-j3GNhkF3TOVQFyHQsGReybSned4yXKMombSpGjz9YpPIOq08y4HjdgyYCw">
+</div>
+<div class="p-2 flex flex-col flex-1">
+<h3 class="font-body-md text-[13px] leading-[18px] text-on-surface font-medium line-clamp-2 mb-1">精选有机菠菜 营养丰富无农残</h3>
+<p class="font-label-sm text-[11px] text-on-surface-variant mb-2">约300g/份</p>
+<div class="mt-auto flex items-end justify-between">
+<span class="font-display-price text-[16px] text-primary">￥5.50<span class="text-[12px] font-normal text-on-surface-variant ml-0.5">/份</span></span>
+</div>
+</div>
+<button class="absolute bottom-2 right-2 w-7 h-7 rounded-full bg-primary text-on-primary flex items-center justify-center shadow-md active:scale-90 transition-transform z-10">
+<span class="material-symbols-outlined text-[18px]">add</span>
+</button>
+</div>
+</div>
+</section>
+</main>
+<!-- BottomNavBar (from JSON) -->
+<nav class="fixed bottom-2 left-1/2 -translate-x-1/2 w-[92%] max-w-[400px] z-50 flex justify-around items-center bg-surface/90 dark:bg-surface-dim/90 backdrop-blur-md py-2 px-2 shadow-2xl rounded-full border border-outline-variant dark:border-outline">
+<!-- Inactive -->
+<div class="flex flex-col items-center justify-center text-on-surface-variant dark:text-on-tertiary-fixed-variant opacity-90 transition-all duration-200 ease-in-out w-[20%] cursor-pointer">
+<span class="material-symbols-outlined mb-1 text-[24px]">home</span>
+<span class="font-label-sm text-label-sm">首页</span>
+</div>
+<!-- Active -->
+<div class="flex flex-col items-center justify-center text-primary dark:text-primary-fixed-dim font-bold opacity-90 transition-all duration-200 ease-in-out w-[20%] cursor-pointer">
+<span class="material-symbols-outlined mb-1 text-[24px]" style="font-variation-settings: 'FILL' 1;">category</span>
+<span class="font-label-sm text-label-sm">分类</span>
+</div>
+<!-- Inactive -->
+<div class="flex flex-col items-center justify-center text-on-surface-variant dark:text-on-tertiary-fixed-variant opacity-90 transition-all duration-200 ease-in-out w-[20%] cursor-pointer relative">
+<span class="material-symbols-outlined mb-1 text-[24px]">shopping_cart</span>
+<span class="absolute top-[-2px] right-[10px] w-4 h-4 bg-error text-on-error rounded-full flex items-center justify-center text-[10px] font-bold">2</span>
+<span class="font-label-sm text-label-sm">购物车</span>
+</div>
+<!-- Inactive -->
+<div class="flex flex-col items-center justify-center text-on-surface-variant dark:text-on-tertiary-fixed-variant opacity-90 transition-all duration-200 ease-in-out w-[20%] cursor-pointer">
+<span class="material-symbols-outlined mb-1 text-[24px]">receipt_long</span>
+<span class="font-label-sm text-label-sm">订单</span>
+</div>
+<!-- Inactive -->
+<div class="flex flex-col items-center justify-center text-on-surface-variant dark:text-on-tertiary-fixed-variant opacity-90 transition-all duration-200 ease-in-out w-[20%] cursor-pointer">
+<span class="material-symbols-outlined mb-1 text-[24px]">person</span>
+<span class="font-label-sm text-label-sm">我的</span>
+</div>
+</nav>
+</div>
+
+
+</body></html>

@@ -1,0 +1,41 @@
+.stepper {
+  display: flex;
+  align-items: center;
+  min-width: 190rpx;
+  height: 58rpx;
+  overflow: hidden;
+  background: #f7f8f8;
+  border: 1rpx solid #d5ded8;
+  border-radius: 999rpx;
+}
+
+.step-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 58rpx;
+  height: 58rpx;
+  color: #007a3d;
+  font-size: 34rpx;
+  font-weight: 700;
+}
+
+.step-icon {
+  width: 26rpx;
+  height: 26rpx;
+}
+
+.step-value {
+  flex: 1;
+  min-width: 72rpx;
+  color: #101815;
+  font-size: 28rpx;
+  font-weight: 600;
+  line-height: 58rpx;
+  text-align: center;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.plus {
+  color: #007a3d;
+}

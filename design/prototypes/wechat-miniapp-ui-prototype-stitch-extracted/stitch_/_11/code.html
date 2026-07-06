@@ -1,0 +1,273 @@
+<!DOCTYPE html><html lang="zh-CN"><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>鲜达生鲜 - 订单详情</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@100..900&amp;family=Plus+Jakarta+Sans:wght@100..900&amp;display=swap" rel="stylesheet">
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "surface-container-highest": "#e1e2e4",
+                        "surface-dim": "#d9dadc",
+                        "on-background": "#191c1e",
+                        "on-secondary-fixed": "#121f08",
+                        "on-primary-fixed": "#00210c",
+                        "surface-container-high": "#e7e8ea",
+                        "primary-container": "#27ae60",
+                        "surface": "#f8f9fb",
+                        "outline": "#6d7a6e",
+                        "on-tertiary": "#ffffff",
+                        "inverse-on-surface": "#f0f1f3",
+                        "on-error-container": "#93000a",
+                        "error-container": "#ffdad6",
+                        "surface-variant": "#e1e2e4",
+                        "on-tertiary-container": "#2c3329",
+                        "tertiary": "#596055",
+                        "on-tertiary-fixed-variant": "#42493e",
+                        "secondary-fixed": "#d7e8c3",
+                        "secondary-fixed-dim": "#bbcca9",
+                        "on-tertiary-fixed": "#171d14",
+                        "primary-fixed-dim": "#61de8a",
+                        "outline-variant": "#bccabc",
+                        "on-secondary": "#ffffff",
+                        "surface-container": "#edeef0",
+                        "tertiary-fixed": "#dee5d6",
+                        "on-primary-container": "#00391a",
+                        "inverse-primary": "#61de8a",
+                        "on-primary": "#ffffff",
+                        "surface-bright": "#f8f9fb",
+                        "on-secondary-container": "#5a694c",
+                        "background": "#f8f9fb",
+                        "primary": "#006d37",
+                        "on-primary-fixed-variant": "#005228",
+                        "on-error": "#ffffff",
+                        "primary-fixed": "#7efba4",
+                        "surface-container-lowest": "#ffffff",
+                        "tertiary-container": "#949b8e",
+                        "on-surface": "#191c1e",
+                        "on-secondary-fixed-variant": "#3d4b30",
+                        "error": "#ba1a1a",
+                        "inverse-surface": "#2e3132",
+                        "secondary-container": "#d7e8c3",
+                        "on-surface-variant": "#3d4a3f",
+                        "secondary": "#546346",
+                        "surface-container-low": "#f2f4f6",
+                        "tertiary-fixed-dim": "#c2c9bb",
+                        "surface-tint": "#006d37"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "card-padding": "12px",
+                        "touch-target-min": "44px",
+                        "gutter-md": "8px",
+                        "section-gap": "20px",
+                        "container-margin": "12px"
+                    },
+                    "fontFamily": {
+                        "body-md": ["Be Vietnam Pro"],
+                        "headline-lg-mobile": ["Plus Jakarta Sans"],
+                        "body-lg": ["Be Vietnam Pro"],
+                        "display-price": ["Plus Jakarta Sans"],
+                        "label-sm": ["Be Vietnam Pro"],
+                        "headline-lg": ["Plus Jakarta Sans"],
+                        "headline-md": ["Plus Jakarta Sans"]
+                    },
+                    "fontSize": {
+                        "body-md": ["14px", { "lineHeight": "22px", "fontWeight": "400" }],
+                        "headline-lg-mobile": ["18px", { "lineHeight": "24px", "fontWeight": "600" }],
+                        "body-lg": ["16px", { "lineHeight": "24px", "fontWeight": "400" }],
+                        "display-price": ["24px", { "lineHeight": "32px", "fontWeight": "700" }],
+                        "label-sm": ["12px", { "lineHeight": "16px", "fontWeight": "500" }],
+                        "headline-lg": ["20px", { "lineHeight": "28px", "fontWeight": "600" }],
+                        "headline-md": ["18px", { "lineHeight": "26px", "fontWeight": "600" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        body {
+            font-family: 'Be Vietnam Pro', sans-serif;
+            background-color: #F7F8FA; /* Level 0 Background */
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .material-symbols-outlined.fill {
+            font-variation-settings: 'FILL' 1;
+        }
+        .card-shadow {
+            box-shadow: 0px 4px 12px rgba(0,0,0,0.04);
+        }
+        .floating-shadow {
+            box-shadow: 0px -8px 20px rgba(0,0,0,0.08);
+        }
+        /* TopAppBar from JSON */
+        .top-app-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 12px; /* px-card-padding */
+            width: 100%;
+            height: 56px; /* h-14 */
+            z-index: 50;
+            background-color: #f8f9fb; /* bg-surface */
+            position: sticky;
+            top: 0;
+            /* style_separation_logic: bg-surface */
+        }
+    </style>
+</head>
+<body class="bg-background text-on-surface pb-[100px]">
+<!-- TopAppBar -->
+<header class="top-app-bar bg-surface dark:bg-surface-dim">
+<div class="flex items-center hover:opacity-80 scale-95 active:transition-transform">
+<span class="material-symbols-outlined text-on-surface-variant mr-2" data-icon="arrow_back">arrow_back</span>
+</div>
+<div class="font-headline-lg-mobile text-headline-lg-mobile font-bold text-primary dark:text-primary-fixed-dim">订单详情</div>
+<div class="w-6"></div> <!-- Spacer for center alignment -->
+</header>
+<main class="px-container-margin py-4 max-w-lg mx-auto">
+<!-- Status & Progress (Bento Style Card) -->
+<section class="bg-surface-container-lowest rounded-xl card-shadow p-card-padding mb-section-gap">
+<div class="flex justify-between items-center mb-4">
+<div>
+<h2 class="font-headline-md text-headline-md text-primary">已送达</h2>
+<p class="font-body-md text-body-md text-on-surface-variant mt-1">您的订单已于 14:30 签收，感谢您的使用。</p>
+</div>
+<span class="material-symbols-outlined text-4xl text-primary fill" data-icon="check_circle">check_circle</span>
+</div>
+<!-- Progress Tracker -->
+<div class="relative pt-2 pb-4">
+<div class="absolute left-4 top-4 bottom-4 w-0.5 bg-outline-variant"></div>
+<div class="space-y-4">
+<div class="flex items-start relative">
+<div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center z-10 -ml-4 mr-3 ring-4 ring-white">
+<span class="material-symbols-outlined text-on-primary text-sm" data-icon="done">done</span>
+</div>
+<div>
+<p class="font-body-md text-body-md text-on-surface">订单已送达</p>
+<p class="font-label-sm text-label-sm text-on-surface-variant">14:30</p>
+</div>
+</div>
+<div class="flex items-start relative opacity-60">
+<div class="w-8 h-8 rounded-full bg-surface-container-high flex items-center justify-center z-10 -ml-4 mr-3 ring-4 ring-white">
+<span class="material-symbols-outlined text-on-surface-variant text-sm" data-icon="local_shipping">local_shipping</span>
+</div>
+<div>
+<p class="font-body-md text-body-md text-on-surface">骑手已接单</p>
+<p class="font-label-sm text-label-sm text-on-surface-variant">14:15</p>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Delivery & Address Info -->
+<section class="bg-surface-container-lowest rounded-xl card-shadow p-card-padding mb-section-gap flex items-start gap-3">
+<span class="material-symbols-outlined text-primary mt-1" data-icon="location_on">location_on</span>
+<div>
+<div class="flex items-center gap-2 mb-1">
+<span class="font-headline-md text-headline-md text-on-surface">张三</span>
+<span class="font-body-md text-body-md text-on-surface-variant">138****8888</span>
+</div>
+<p class="font-body-md text-body-md text-on-surface-variant">上海市浦东新区世纪大道100号上海环球金融中心 88楼</p>
+<div class="mt-3 flex items-center gap-2 text-primary bg-primary-container/10 px-2 py-1 rounded w-fit">
+<span class="material-symbols-outlined text-sm" data-icon="schedule">schedule</span>
+<span class="font-label-sm text-label-sm">期望送达时间：尽快送出 (约 15:00)</span>
+</div>
+</div>
+</section>
+<!-- Product List -->
+<section class="bg-surface-container-lowest rounded-xl card-shadow p-card-padding mb-section-gap">
+<h3 class="font-headline-md text-headline-md text-on-surface mb-3 border-b border-outline-variant/30 pb-2">商品明细</h3>
+<div class="space-y-4">
+<!-- Item 1 -->
+<div class="flex gap-3">
+<img class="w-16 h-16 rounded-lg object-cover bg-surface-container-low flex-shrink-0" data-alt="High quality close up food photography of fresh organic red strawberries in a minimalist white bowl. Shot with soft natural lighting, bright and vibrant, emphasizing freshness against a clean light background. Modern UI context." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCyq9xQ6oZ4VpnEi8IFUHJ9flnzpNvWPE_WCOCGTej7X4xPjJaMKThfwDQEMvmmX6YIrjj1xUlyV9BBLyPnKYcJaRyRWn3uOnO7fc5dfT0RqY502BbyY6wxpKZ-biTc388wTHlJH9hsOGW8VCTC1X34xotchoRT2tvcydxr_4V0FQo_y3Htb1aOek2H11seQhJ39B4dX5EZeXoEhDbKTdgBQoZ7xPCdY90SUfh_aaPaKbwt508hel-sKQ">
+<div class="flex-1 flex flex-col justify-between">
+<div class="flex justify-between items-start">
+<span class="font-body-md text-body-md text-on-surface">红颜草莓 新鲜采摘</span>
+<span class="font-body-md text-body-md text-on-surface font-semibold">¥39.9</span>
+</div>
+<div class="flex justify-between items-end">
+<span class="font-label-sm text-label-sm text-on-surface-variant">约300g/盒</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">x1</span>
+</div>
+</div>
+</div>
+<!-- Item 2 -->
+<div class="flex gap-3">
+<img class="w-16 h-16 rounded-lg object-cover bg-surface-container-low flex-shrink-0" data-alt="High quality close up food photography of fresh organic green leafy vegetables, specifically baby spinach or bok choy, clean and crisp. Soft natural lighting, bright and vibrant, emphasizing freshness against a clean light background. Modern UI context." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCFj_qs1oNfrbZp46Te1qcI77C0nFMaZ1xkXxUUNJEzDCXPefHzzgBHGs8ChpajssIt6Qz59xcxX7p48UnGE9z7KZD73SOKboSyYMryinSdpcr2CdBqltOmRSXpBt9FDKLMPRF1n7kegQtf8Iis2V8kV7QHVd1qT8LZIotiEzzYrNeAGFzz8ibctyHxCkpCOyIFI4SV-5q-4t-JchVYb4BwX78rchnjXbIGpHLgJsFMH74mAr-mn5hxNA">
+<div class="flex-1 flex flex-col justify-between">
+<div class="flex justify-between items-start">
+<span class="font-body-md text-body-md text-on-surface">高山小菠菜</span>
+<span class="font-body-md text-body-md text-on-surface font-semibold">¥9.9</span>
+</div>
+<div class="flex justify-between items-end">
+<span class="font-label-sm text-label-sm text-on-surface-variant">约250g/份</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">x2</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Price Breakdown -->
+<div class="mt-4 pt-4 border-t border-outline-variant/30 space-y-2">
+<div class="flex justify-between">
+<span class="font-body-md text-body-md text-on-surface-variant">商品总计</span>
+<span class="font-body-md text-body-md text-on-surface">¥59.7</span>
+</div>
+<div class="flex justify-between">
+<span class="font-body-md text-body-md text-on-surface-variant">配送费</span>
+<span class="font-body-md text-body-md text-on-surface">¥5.0</span>
+</div>
+<div class="flex justify-between text-primary">
+<span class="font-body-md text-body-md">店铺优惠</span>
+<span class="font-body-md text-body-md">-¥10.0</span>
+</div>
+<div class="flex justify-between items-end pt-2">
+<span class="font-body-md text-body-md text-on-surface">实付款</span>
+<span class="font-display-price text-display-price text-primary">¥54.7</span>
+</div>
+</div>
+</section>
+<!-- Order Info -->
+<section class="bg-surface-container-lowest rounded-xl card-shadow p-card-padding mb-section-gap">
+<div class="space-y-3">
+<div class="flex justify-between items-center">
+<span class="font-body-md text-body-md text-on-surface-variant">订单编号</span>
+<div class="flex items-center gap-1">
+<span class="font-body-md text-body-md text-on-surface">XD202310248888</span>
+<span class="material-symbols-outlined text-sm text-on-surface-variant cursor-pointer" data-icon="content_copy">content_copy</span>
+</div>
+</div>
+<div class="flex justify-between">
+<span class="font-body-md text-body-md text-on-surface-variant">下单时间</span>
+<span class="font-body-md text-body-md text-on-surface">2023-10-24 13:45:00</span>
+</div>
+<div class="flex justify-between">
+<span class="font-body-md text-body-md text-on-surface-variant">支付方式</span>
+<span class="font-body-md text-body-md text-on-surface">微信支付</span>
+</div>
+</div>
+</section>
+</main>
+<!-- Bottom Action Bar (Floating) -->
+<div class="fixed bottom-0 w-full bg-surface-container-lowest floating-shadow py-3 px-card-padding flex justify-end gap-3 z-40 pb-safe">
+<button class="px-6 py-2 rounded-full border border-primary text-primary font-body-md text-body-md hover:bg-primary/5 transition-colors">
+            联系客服
+        </button>
+<button class="px-6 py-2 rounded-full border border-outline-variant text-on-surface-variant font-body-md text-body-md hover:bg-surface-container-low transition-colors">
+            申请退款
+        </button>
+</div>
+</body></html>

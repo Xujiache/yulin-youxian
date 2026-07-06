@@ -1,0 +1,206 @@
+<!DOCTYPE html><html lang="zh-CN"><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>我的 - 鲜达生鲜</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;700&amp;family=Plus+Jakarta+Sans:wght@600;700&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "surface-container-highest": "#e1e2e4",
+                        "surface-dim": "#d9dadc",
+                        "on-background": "#191c1e",
+                        "on-secondary-fixed": "#121f08",
+                        "on-primary-fixed": "#00210c",
+                        "surface-container-high": "#e7e8ea",
+                        "primary-container": "#27ae60",
+                        "surface": "#f8f9fb",
+                        "outline": "#6d7a6e",
+                        "on-tertiary": "#ffffff",
+                        "inverse-on-surface": "#f0f1f3",
+                        "on-error-container": "#93000a",
+                        "error-container": "#ffdad6",
+                        "surface-variant": "#e1e2e4",
+                        "on-tertiary-container": "#2c3329",
+                        "tertiary": "#596055",
+                        "on-tertiary-fixed-variant": "#42493e",
+                        "secondary-fixed": "#d7e8c3",
+                        "secondary-fixed-dim": "#bbcca9",
+                        "on-tertiary-fixed": "#171d14",
+                        "primary-fixed-dim": "#61de8a",
+                        "outline-variant": "#bccabc",
+                        "on-secondary": "#ffffff",
+                        "surface-container": "#edeef0",
+                        "tertiary-fixed": "#dee5d6",
+                        "on-primary-container": "#00391a",
+                        "inverse-primary": "#61de8a",
+                        "on-primary": "#ffffff",
+                        "surface-bright": "#f8f9fb",
+                        "on-secondary-container": "#5a694c",
+                        "background": "#f8f9fb",
+                        "primary": "#006d37",
+                        "on-primary-fixed-variant": "#005228",
+                        "on-error": "#ffffff",
+                        "primary-fixed": "#7efba4",
+                        "surface-container-lowest": "#ffffff",
+                        "tertiary-container": "#949b8e",
+                        "on-surface": "#191c1e",
+                        "on-secondary-fixed-variant": "#3d4b30",
+                        "error": "#ba1a1a",
+                        "inverse-surface": "#2e3132",
+                        "secondary-container": "#d7e8c3",
+                        "on-surface-variant": "#3d4a3f",
+                        "secondary": "#546346",
+                        "surface-container-low": "#f2f4f6",
+                        "tertiary-fixed-dim": "#c2c9bb",
+                        "surface-tint": "#006d37"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "card-padding": "12px",
+                        "touch-target-min": "44px",
+                        "gutter-md": "8px",
+                        "section-gap": "20px",
+                        "container-margin": "12px"
+                    },
+                    "fontFamily": {
+                        "body-md": ["Be Vietnam Pro"],
+                        "headline-lg-mobile": ["Plus Jakarta Sans"],
+                        "body-lg": ["Be Vietnam Pro"],
+                        "display-price": ["Plus Jakarta Sans"],
+                        "label-sm": ["Be Vietnam Pro"],
+                        "headline-lg": ["Plus Jakarta Sans"],
+                        "headline-md": ["Plus Jakarta Sans"]
+                    },
+                    "fontSize": {
+                        "body-md": ["14px", { "lineHeight": "22px", "fontWeight": "400" }],
+                        "headline-lg-mobile": ["18px", { "lineHeight": "24px", "fontWeight": "600" }],
+                        "body-lg": ["16px", { "lineHeight": "24px", "fontWeight": "400" }],
+                        "display-price": ["24px", { "lineHeight": "32px", "fontWeight": "700" }],
+                        "label-sm": ["12px", { "lineHeight": "16px", "fontWeight": "500" }],
+                        "headline-lg": ["20px", { "lineHeight": "28px", "fontWeight": "600" }],
+                        "headline-md": ["18px", { "lineHeight": "26px", "fontWeight": "600" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
+    </style>
+</head>
+<body class="bg-background text-on-background font-body-md antialiased min-h-screen pb-[80px]">
+<!-- Header Section -->
+<header class="bg-surface-container-lowest pt-14 pb-8 px-container-margin rounded-b-xl shadow-[0_4px_12px_rgba(0,0,0,0.04)] mb-section-gap relative overflow-hidden">
+<!-- Subtle background decoration -->
+<div class="absolute top-0 right-0 w-32 h-32 bg-secondary-fixed rounded-bl-full opacity-20 transform translate-x-8 -translate-y-8 pointer-events-none"></div>
+<div class="flex items-center gap-4 relative z-10">
+<div class="w-16 h-16 rounded-full overflow-hidden border-2 border-surface shadow-sm shrink-0">
+<img alt="用户头像" class="w-full h-full object-cover" data-alt="A high-quality, professional headshot of a friendly young urban professional in a well-lit, modern minimalist indoor setting. The lighting is soft and natural, emphasizing approachability and cleanliness, suitable for a premium grocery delivery app profile picture. The color palette is neutral with a subtle hint of fresh green." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAzROH45-7UjXSE47yHsw2mKoScw63uHNtGu9Kh4hWGdUaf4nBb9Dt1ccdoTCpeUF3JVARq40OyOQSI8ig5YCkimMRz1OQFkXEAxlLOGwLhcUQ3_GXEPnVkW8ALCyT0MGpnQjtVz96FUSwHqStuJ61TfU3-sn3JcqUyxHOrIL4Yg42P81IyXx0ss81PAFXZxnT6cI5CRrT1loW75VhQ3Evwrs6CTCMj8dclNzFrzf1obM5HnYO2j_sXyg">
+</div>
+<div class="flex flex-col justify-center">
+<h1 class="font-headline-md text-headline-md text-on-surface mb-1">鲜达会员_8921</h1>
+<div class="flex items-center gap-1">
+<span class="inline-flex items-center justify-center px-2 py-0.5 rounded-full bg-secondary-fixed text-on-secondary-fixed-variant font-label-sm text-label-sm">
+<span class="material-symbols-outlined text-[14px] mr-0.5" style="font-variation-settings: 'FILL' 1;">eco</span>
+                        绿卡会员
+                    </span>
+</div>
+</div>
+</div>
+</header>
+<!-- Main Content Area -->
+<main class="px-container-margin space-y-section-gap">
+<!-- 我的订单 (My Orders) -->
+<section class="bg-surface-container-lowest rounded-xl p-card-padding shadow-[0_4px_12px_rgba(0,0,0,0.04)]">
+<div class="flex items-center justify-between border-b border-surface-container-highest pb-3 mb-4">
+<h2 class="font-headline-lg-mobile text-headline-lg-mobile text-on-surface">我的订单</h2>
+<button class="flex items-center text-on-surface-variant font-label-sm text-label-sm hover:opacity-80 transition-opacity">
+                    全部订单 <span class="material-symbols-outlined text-[16px] ml-0.5">chevron_right</span>
+</button>
+</div>
+<div class="flex justify-between items-center px-2">
+<button class="flex flex-col items-center gap-1.5 group relative">
+<div class="relative">
+<span class="material-symbols-outlined text-[28px] text-on-surface-variant group-active:scale-95 transition-transform">payments</span>
+<span class="absolute -top-1 -right-1 bg-error text-on-error font-label-sm text-[10px] leading-none px-1 py-0.5 rounded-full min-w-[16px] text-center border-2 border-surface-container-lowest">1</span>
+</div>
+<span class="font-label-sm text-label-sm text-on-surface-variant">待付款</span>
+</button>
+<button class="flex flex-col items-center gap-1.5 group">
+<span class="material-symbols-outlined text-[28px] text-on-surface-variant group-active:scale-95 transition-transform">inventory_2</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">待发货</span>
+</button>
+<button class="flex flex-col items-center gap-1.5 group">
+<span class="material-symbols-outlined text-[28px] text-on-surface-variant group-active:scale-95 transition-transform">local_shipping</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">待收货</span>
+</button>
+<button class="flex flex-col items-center gap-1.5 group">
+<span class="material-symbols-outlined text-[28px] text-on-surface-variant group-active:scale-95 transition-transform">rate_review</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">待评价</span>
+</button>
+</div>
+</section>
+<!-- 常用功能 (Common Functions List) -->
+<section class="bg-surface-container-lowest rounded-xl shadow-[0_4px_12px_rgba(0,0,0,0.04)] overflow-hidden">
+<nav class="flex flex-col">
+<button class="flex items-center p-card-padding border-b border-surface-container-highest last:border-b-0 active:bg-surface-container-low transition-colors group">
+<span class="material-symbols-outlined text-primary mr-3" style="font-variation-settings: 'FILL' 1;">location_on</span>
+<span class="font-body-md text-body-md text-on-surface flex-1 text-left">地址管理</span>
+<span class="material-symbols-outlined text-on-surface-variant text-[20px] group-hover:translate-x-1 transition-transform">chevron_right</span>
+</button>
+<button class="flex items-center p-card-padding border-b border-surface-container-highest last:border-b-0 active:bg-surface-container-low transition-colors group">
+<span class="material-symbols-outlined text-primary mr-3" style="font-variation-settings: 'FILL' 1;">currency_exchange</span>
+<span class="font-body-md text-body-md text-on-surface flex-1 text-left">售后退款</span>
+<span class="material-symbols-outlined text-on-surface-variant text-[20px] group-hover:translate-x-1 transition-transform">chevron_right</span>
+</button>
+<button class="flex items-center p-card-padding border-b border-surface-container-highest last:border-b-0 active:bg-surface-container-low transition-colors group">
+<span class="material-symbols-outlined text-primary mr-3" style="font-variation-settings: 'FILL' 1;">support_agent</span>
+<span class="font-body-md text-body-md text-on-surface flex-1 text-left">联系客服</span>
+<span class="material-symbols-outlined text-on-surface-variant text-[20px] group-hover:translate-x-1 transition-transform">chevron_right</span>
+</button>
+<button class="flex items-center p-card-padding border-b border-surface-container-highest last:border-b-0 active:bg-surface-container-low transition-colors group">
+<span class="material-symbols-outlined text-primary mr-3" style="font-variation-settings: 'FILL' 1;">storefront</span>
+<span class="font-body-md text-body-md text-on-surface flex-1 text-left">关于门店</span>
+<span class="material-symbols-outlined text-on-surface-variant text-[20px] group-hover:translate-x-1 transition-transform">chevron_right</span>
+</button>
+</nav>
+</section>
+</main>
+<!-- Bottom Navigation Bar (Generated from JSON) -->
+<nav class="fixed bottom-4 left-4 right-4 z-50 flex justify-around items-center bg-surface/90 dark:bg-surface-dim/90 backdrop-blur-md py-2 px-2 rounded-full shadow-lg border border-outline-variant transition-all duration-200 ease-in-out md:hidden">
+<button class="flex flex-col items-center justify-center text-on-surface-variant dark:text-on-tertiary-fixed-variant opacity-90 w-16 group">
+<span class="material-symbols-outlined mb-1 group-active:scale-95 transition-transform">home</span>
+<span class="font-label-sm text-label-sm">首页</span>
+</button>
+<button class="flex flex-col items-center justify-center text-on-surface-variant dark:text-on-tertiary-fixed-variant opacity-90 w-16 group">
+<span class="material-symbols-outlined mb-1 group-active:scale-95 transition-transform">category</span>
+<span class="font-label-sm text-label-sm">分类</span>
+</button>
+<button class="flex flex-col items-center justify-center text-on-surface-variant dark:text-on-tertiary-fixed-variant opacity-90 w-16 group relative">
+<span class="material-symbols-outlined mb-1 group-active:scale-95 transition-transform">shopping_cart</span>
+<span class="font-label-sm text-label-sm">购物车</span>
+</button>
+<button class="flex flex-col items-center justify-center text-on-surface-variant dark:text-on-tertiary-fixed-variant opacity-90 w-16 group">
+<span class="material-symbols-outlined mb-1 group-active:scale-95 transition-transform">receipt_long</span>
+<span class="font-label-sm text-label-sm">订单</span>
+</button>
+<!-- Active Tab: 我的 -->
+<button class="flex flex-col items-center justify-center text-primary dark:text-primary-fixed-dim font-bold opacity-90 w-16 group">
+<span class="material-symbols-outlined mb-1 group-active:scale-95 transition-transform" style="font-variation-settings: 'FILL' 1;">person</span>
+<span class="font-label-sm text-label-sm">我的</span>
+</button>
+</nav>
+
+
+</body></html>
