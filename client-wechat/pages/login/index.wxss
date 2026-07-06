@@ -141,11 +141,31 @@
   border-radius: var(--radius-pill);
 }
 
-.agreement-text {
+.agree-circle.checked {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #008a45;
+  border-color: #008a45;
+}
+
+.agree-check {
+  color: #ffffff;
+  font-size: 20rpx;
+  font-weight: 900;
+  line-height: 24rpx;
+}
+
+.agreement-copy {
   flex: 1;
   min-width: 0;
   color: #929b97;
   font-size: 21rpx;
   font-weight: 500;
   line-height: 30rpx;
+}
+
+.agreement-link {
+  color: #008a45;
+  font-weight: 700;
 }

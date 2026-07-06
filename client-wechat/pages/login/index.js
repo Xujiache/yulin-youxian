@@ -5,6 +5,7 @@ Page({
     loading: true,
     redirect: "",
     submitting: false,
+    agreed: false,
     brandImage: assetUrl("/assets/products/login-hero-illustration.jpg")
   },
 
@@ -24,7 +25,28 @@ Page({
     });
   },
 
+  toggleAgreement() {
+    this.setData({ agreed: !this.data.agreed });
+  },
+
+  showAgreement(event) {
+    const type = event.currentTarget.dataset.type;
+    const isPrivacy = type === "privacy";
+    wx.showModal({
+      title: isPrivacy ? "隐私政策" : "用户协议",
+      content: isPrivacy
+        ? "我们仅在账号识别、下单配送、支付退款、售后联系所需范围内使用必要信息，包括头像昵称、收货地址、联系方式、订单记录和支付状态。信息仅用于禹邻优鲜门店履约服务，不会用于无关用途。"
+        : "用户使用禹邻优鲜下单后，由门店按预约配送时间自行配送。称重商品以页面选择重量下单，实际履约、退款、售后和支付结果以订单状态及微信支付记录为准。",
+      showCancel: false,
+      confirmText: "知道了"
+    });
+  },
+
   async handleLogin() {
+    if (!this.data.agreed) {
+      wx.showToast({ title: "请先阅读并同意协议", icon: "none" });
+      return;
+    }
     if (this.data.submitting) {
       return;
     }
