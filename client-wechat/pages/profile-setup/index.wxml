@@ -11,19 +11,30 @@
 
   <view class="setup-card">
     <button class="avatar-button" open-type="chooseAvatar" bindchooseavatar="handleChooseAvatar">
-      <image class="avatar-preview" src="{{avatarUrl}}" mode="aspectFill" />
-      <text>选择头像</text>
+      <view class="avatar-shell">
+        <image class="avatar-preview" src="{{avatarUrl}}" mode="aspectFill" />
+        <view class="avatar-badge">换</view>
+      </view>
+      <view class="avatar-copy">
+        <text class="avatar-title">选择头像</text>
+        <text class="avatar-desc">资料会同步到云端，换设备登录也保持一致</text>
+      </view>
     </button>
 
     <view class="field">
-      <text class="field-label">昵称</text>
-      <input
-        class="field-input"
-        type="nickname"
-        value="{{nickName}}"
-        placeholder="请输入昵称"
-        bindinput="handleNameInput"
-      />
+      <view class="field-head">
+        <text class="field-label">昵称</text>
+        <text class="field-tip">{{fieldTip}}</text>
+      </view>
+      <view class="field-control">
+        <input
+          class="field-input"
+          type="nickname"
+          value="{{nickName}}"
+          placeholder="请输入昵称"
+          bindinput="handleNameInput"
+        />
+      </view>
     </view>
 
     <button class="submit-button" loading="{{submitting}}" bindtap="handleSubmit">

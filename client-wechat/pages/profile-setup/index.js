@@ -2,7 +2,7 @@ const { getProfile, updateProfile, uploadAvatar } = require("../../api/auth");
 const { assetUrl } = require("../../utils/config");
 
 const DEFAULT_AVATAR = assetUrl("/assets/products/avatar.png");
-const SETUP_BG = assetUrl("/assets/products/hero.png");
+const SETUP_BG = assetUrl("/assets/products/setup-hero-bg.jpg");
 
 Page({
   data: {
@@ -15,6 +15,7 @@ Page({
     mode: "setup",
     pageTitle: "设置个人信息",
     pageSubtitle: "首次登录需要设置头像和昵称，后续会同步到云端。",
+    fieldTip: "首次设置必填",
     submitText: "完成设置",
     submitting: false
   },
@@ -28,6 +29,7 @@ Page({
       pageSubtitle: isEdit
         ? "头像和昵称会保存到后端，换设备登录也会同步。"
         : "首次登录需要设置头像和昵称，后续会同步到云端。",
+      fieldTip: isEdit ? "可随时修改" : "首次设置必填",
       submitText: isEdit ? "保存资料" : "完成设置",
       loading: isEdit
     });

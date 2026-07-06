@@ -1,12 +1,13 @@
 .setup-page {
   min-height: 100vh;
-  padding: 0 22rpx 52rpx;
-  background: #f5f6f7;
+  padding: 0 22rpx 64rpx;
+  box-sizing: border-box;
+  background: #f3f6f4;
 }
 
 .setup-hero {
   position: relative;
-  height: 330rpx;
+  height: 360rpx;
   margin: 0 -22rpx;
   overflow: hidden;
 }
@@ -23,7 +24,9 @@
 }
 
 .setup-mask {
-  background: linear-gradient(90deg, rgba(8, 33, 20, 0.68), rgba(6, 80, 38, 0.12));
+  background:
+    linear-gradient(180deg, rgba(0, 0, 0, 0.08), rgba(0, 0, 0, 0.18)),
+    linear-gradient(90deg, rgba(4, 43, 24, 0.76), rgba(4, 88, 42, 0.2));
 }
 
 .setup-copy {
@@ -33,78 +36,176 @@
   flex-direction: column;
   justify-content: flex-end;
   height: 100%;
-  gap: 12rpx;
-  padding: 120rpx 34rpx 42rpx;
+  gap: 14rpx;
+  padding: 128rpx 34rpx 48rpx;
   color: #ffffff;
 }
 
 .setup-title {
-  font-size: 42rpx;
+  font-size: 44rpx;
   font-weight: 900;
+  line-height: 56rpx;
 }
 
 .setup-subtitle {
-  max-width: 560rpx;
+  max-width: 530rpx;
   font-size: 25rpx;
-  line-height: 36rpx;
+  font-weight: 600;
+  line-height: 38rpx;
+  opacity: 0.94;
 }
 
 .setup-card {
-  margin-top: 24rpx;
-  padding: 34rpx 28rpx;
+  position: relative;
+  z-index: 3;
+  margin-top: -28rpx;
+  padding: 28rpx;
+  box-sizing: border-box;
   background: #ffffff;
+  border: 2rpx solid rgba(255, 255, 255, 0.78);
   border-radius: var(--radius-panel);
-  box-shadow: 0 10rpx 28rpx rgba(8, 34, 20, 0.06);
+  box-shadow: 0 18rpx 44rpx rgba(8, 34, 20, 0.08);
 }
 
 .avatar-button {
   display: flex;
   align-items: center;
-  gap: 22rpx;
+  width: 100%;
+  min-height: 184rpx;
+  gap: 24rpx;
+  padding: 26rpx;
+  box-sizing: border-box;
   color: #007a3d;
-  font-size: 26rpx;
-  font-weight: 800;
+  line-height: normal;
+  text-align: left;
+  background: linear-gradient(135deg, #f1fbf5, #ffffff 72%);
+  border: 2rpx solid #dff2e8;
+  border-radius: var(--radius-panel);
+}
+
+.avatar-button::after {
+  border: 0;
+}
+
+.avatar-shell {
+  position: relative;
+  flex: 0 0 auto;
+  width: 132rpx;
+  height: 132rpx;
 }
 
 .avatar-preview {
-  width: 112rpx;
-  height: 112rpx;
-  border: 6rpx solid #e8f6ed;
+  width: 132rpx;
+  height: 132rpx;
+  background: #eef8f2;
+  border: 8rpx solid #ffffff;
+  border-radius: var(--radius-pill);
+  box-shadow: 0 10rpx 24rpx rgba(0, 122, 61, 0.12);
+}
+
+.avatar-badge {
+  position: absolute;
+  right: 0;
+  bottom: 2rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 42rpx;
+  height: 42rpx;
+  color: #ffffff;
+  font-size: 20rpx;
+  font-weight: 800;
+  background: #008a45;
+  border: 4rpx solid #ffffff;
   border-radius: var(--radius-pill);
 }
 
+.avatar-copy {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: 8rpx;
+}
+
+.avatar-title {
+  color: #007a3d;
+  font-size: 30rpx;
+  font-weight: 900;
+  line-height: 40rpx;
+}
+
+.avatar-desc {
+  color: #6a7d72;
+  font-size: 23rpx;
+  font-weight: 600;
+  line-height: 34rpx;
+}
+
 .field {
-  margin-top: 34rpx;
+  margin-top: 30rpx;
+}
+
+.field-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
 }
 
 .field-label {
-  display: block;
   color: #1b2520;
   font-size: 26rpx;
   font-weight: 800;
+  line-height: 34rpx;
+}
+
+.field-tip {
+  color: #008a45;
+  font-size: 22rpx;
+  font-weight: 700;
+  line-height: 32rpx;
+}
+
+.field-control {
+  display: flex;
+  align-items: center;
+  height: 92rpx;
+  margin-top: 16rpx;
+  padding: 0 24rpx;
+  box-sizing: border-box;
+  background: #f7faf8;
+  border: 2rpx solid #dfe9e3;
+  border-radius: var(--radius-card);
 }
 
 .field-input {
-  height: 82rpx;
-  margin-top: 14rpx;
-  padding: 0 22rpx;
+  flex: 1;
+  height: 88rpx;
+  min-width: 0;
+  padding: 0;
   color: #101815;
   font-size: 28rpx;
-  background: #f7faf8;
-  border: 2rpx solid #edf1ee;
-  border-radius: var(--radius-card);
+  background: transparent;
 }
 
 .submit-button {
   display: flex;
   align-items: center;
   justify-content: center;
+  width: 360rpx;
   height: 88rpx;
-  margin-top: 34rpx;
+  margin: 36rpx auto 0;
+  box-sizing: border-box;
   color: #ffffff;
+  line-height: normal;
   font-size: 28rpx;
   font-weight: 900;
   background: #008a45;
   border-radius: var(--radius-pill);
   box-shadow: 0 12rpx 26rpx rgba(0, 122, 61, 0.2);
+}
+
+.submit-button::after {
+  border: 0;
 }
