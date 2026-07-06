@@ -11,16 +11,31 @@
       <view class="brand-mask"></view>
       <view class="brand-copy">
         <text class="brand-title">禹邻优鲜</text>
-        <text class="brand-subtitle">登录后同步订单、地址、购物车和售后进度</text>
+        <text class="brand-subtitle">社区鲜食到家，订单与配送信息实时同步</text>
       </view>
     </view>
 
     <view class="form-card">
-      <text class="login-title">微信快捷登录</text>
-      <text class="login-desc">我们仅用于识别你的订单和配送信息。首次登录后，需要设置头像和昵称。</text>
+      <view class="card-head">
+        <text class="login-title">微信快捷登录</text>
+        <text class="login-desc">授权后可同步订单、地址、购物车和售后进度</text>
+      </view>
+
+      <view class="auth-list">
+        <view class="auth-item">
+          <view class="auth-dot"></view>
+          <text>仅用于识别账号和保存配送信息</text>
+        </view>
+        <view class="auth-item">
+          <view class="auth-dot"></view>
+          <text>首次登录后会引导设置头像和昵称</text>
+        </view>
+      </view>
+
       <button class="login-button" loading="{{submitting}}" bindtap="handleLogin">
-        {{submitting ? '登录中' : '微信登录'}}
+        {{submitting ? '登录中' : '微信一键登录'}}
       </button>
+      <text class="login-policy">登录即表示你同意使用微信身份完成账号识别</text>
     </view>
   </view>
 </view>
