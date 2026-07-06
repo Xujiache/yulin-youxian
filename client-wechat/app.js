@@ -1,4 +1,5 @@
 const { API_BASE_URL } = require("./utils/config");
+const { preloadStaticImages } = require("./utils/image-cache");
 
 function createClientId() {
   if (wx.getRandomValues) {
@@ -40,6 +41,7 @@ App({
   },
 
   onLaunch() {
+    preloadStaticImages();
     const cachedToken = wx.getStorageSync("authToken");
     const cachedUser = wx.getStorageSync("userProfile");
     const loginConfirmed = wx.getStorageSync("loginConfirmed");

@@ -1,5 +1,6 @@
 const request = require("../utils/request");
 const { API_BASE_URL } = require("../utils/config");
+const { cacheImage, getCachedImageUrl } = require("../utils/image-cache");
 
 function getBaseUrl() {
   const app = getApp();
@@ -8,9 +9,12 @@ function getBaseUrl() {
 
 function normalizeAvatarUrl(avatarUrl) {
   if (!avatarUrl || avatarUrl.startsWith("http")) {
-    return avatarUrl;
+    cacheImage(avatarUrl);
+    return getCachedImageUrl(avatarUrl);
   }
-  return `${getBaseUrl()}${avatarUrl}`;
+  const normalized = `${getBaseUrl()}${avatarUrl}`;
+  cacheImage(normalized);
+  return getCachedImageUrl(normalized);
 }
 
 function normalizeProfile(profile) {

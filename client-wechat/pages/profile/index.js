@@ -1,10 +1,12 @@
 const { getProfile, updateProfile, uploadAvatar } = require("../../api/auth");
 const { getCart } = require("../../api/cart");
 const { requireCompleteProfile, requireLogin } = require("../../utils/auth-guard");
-const { assetUrl } = require("../../utils/config");
+const { cachedAssetUrl, cacheImage } = require("../../utils/image-cache");
 
-const DEFAULT_AVATAR = assetUrl("/assets/products/avatar.png");
-const PROFILE_HERO_BG = assetUrl("/assets/products/profile-hero-bg.jpg");
+const DEFAULT_AVATAR_PATH = "/assets/products/avatar.png";
+const PROFILE_HERO_BG_PATH = "/assets/products/profile-hero-bg.jpg";
+const DEFAULT_AVATAR = cachedAssetUrl(DEFAULT_AVATAR_PATH);
+const PROFILE_HERO_BG = cachedAssetUrl(PROFILE_HERO_BG_PATH);
 
 const DEFAULT_ORDER_ACTIONS = [
   { label: "待付款", count: 0, url: "/pages/orders/index?status=待支付", icon: "/assets/icons/order-veg.svg" },
@@ -46,8 +48,19 @@ Page({
   },
 
   onShow() {
+    this.refreshStaticAssets();
     this.loadProfile();
     this.loadCartCount();
+  },
+
+  refreshStaticAssets() {
+    Promise.all([cacheImage(DEFAULT_AVATAR_PATH), cacheImage(PROFILE_HERO_BG_PATH)]).then(([avatarUrl, heroBg]) => {
+      const shouldUseDefaultAvatar = !this.data.isLoggedIn && (!this.data.avatarUrl || this.data.avatarUrl === DEFAULT_AVATAR);
+      this.setData({
+        heroBg,
+        avatarUrl: shouldUseDefaultAvatar ? avatarUrl : this.data.avatarUrl
+      });
+    });
   },
 
   async loadProfile() {

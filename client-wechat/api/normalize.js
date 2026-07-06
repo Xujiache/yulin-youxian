@@ -1,4 +1,5 @@
 const { API_BASE_URL } = require("../utils/config");
+const { cacheImage, getCachedImageUrl } = require("../utils/image-cache");
 
 function normalizeAssetUrl(url) {
   if (!url) {
@@ -10,9 +11,12 @@ function normalizeAssetUrl(url) {
   if (url.startsWith("/assets/") || url.startsWith("/uploads/")) {
     const app = getApp();
     const baseUrl = (app.globalData && app.globalData.apiBaseUrl) || API_BASE_URL;
-    return baseUrl ? `${baseUrl}${url}` : url;
+    const normalized = baseUrl ? `${baseUrl}${url}` : url;
+    cacheImage(normalized);
+    return getCachedImageUrl(normalized);
   }
-  return url;
+  cacheImage(url);
+  return getCachedImageUrl(url);
 }
 
 function normalizeProduct(product) {
@@ -59,7 +63,7 @@ function normalizeOrder(order) {
   }
   return {
     ...order,
-    images: order.images || []
+    images: (order.images || []).map(normalizeAssetUrl)
   };
 }
 

@@ -1,4 +1,6 @@
-const { assetUrl } = require("../../utils/config");
+const { cachedAssetUrl, cacheImage } = require("../../utils/image-cache");
+
+const LOGIN_HERO = "/assets/products/login-hero-illustration.jpg";
 
 Page({
   data: {
@@ -6,13 +8,18 @@ Page({
     redirect: "",
     submitting: false,
     agreed: false,
-    brandImage: assetUrl("/assets/products/login-hero-illustration.jpg")
+    brandImage: cachedAssetUrl(LOGIN_HERO)
   },
 
   onLoad(options) {
     this.setData({
-      redirect: decodeURIComponent(options.redirect || ""),
-      loading: false
+      redirect: decodeURIComponent(options.redirect || "")
+    });
+    cacheImage(LOGIN_HERO).then((brandImage) => {
+      this.setData({
+        brandImage,
+        loading: false
+      });
     });
   },
 

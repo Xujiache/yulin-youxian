@@ -1,8 +1,10 @@
 const { getProfile, updateProfile, uploadAvatar } = require("../../api/auth");
-const { assetUrl } = require("../../utils/config");
+const { cachedAssetUrl, cacheImage } = require("../../utils/image-cache");
 
-const DEFAULT_AVATAR = assetUrl("/assets/products/avatar.png");
-const SETUP_BG = assetUrl("/assets/products/setup-hero-bg.jpg");
+const DEFAULT_AVATAR_PATH = "/assets/products/avatar.png";
+const SETUP_BG_PATH = "/assets/products/setup-hero-bg.jpg";
+const DEFAULT_AVATAR = cachedAssetUrl(DEFAULT_AVATAR_PATH);
+const SETUP_BG = cachedAssetUrl(SETUP_BG_PATH);
 
 Page({
   data: {
@@ -36,6 +38,17 @@ Page({
     if (isEdit) {
       this.loadProfile();
     }
+    this.refreshStaticAssets();
+  },
+
+  refreshStaticAssets() {
+    Promise.all([cacheImage(DEFAULT_AVATAR_PATH), cacheImage(SETUP_BG_PATH)]).then(([avatarUrl, setupBg]) => {
+      const shouldUseDefaultAvatar = !this.data.avatarTempPath && (!this.data.avatarUrl || this.data.avatarUrl === DEFAULT_AVATAR);
+      this.setData({
+        setupBg,
+        avatarUrl: shouldUseDefaultAvatar ? avatarUrl : this.data.avatarUrl
+      });
+    });
   },
 
   async loadProfile() {
