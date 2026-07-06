@@ -10,15 +10,17 @@
   </view>
 
   <view class="setup-card">
+    <view class="card-head">
+      <text class="card-title">完善资料</text>
+      <text class="card-subtitle">用于配送通知、订单沟通和售后服务</text>
+    </view>
+
     <button class="avatar-button" open-type="chooseAvatar" bindchooseavatar="handleChooseAvatar">
       <view class="avatar-shell">
         <image class="avatar-preview" src="{{avatarUrl}}" mode="aspectFill" />
         <view class="avatar-badge">换</view>
       </view>
-      <view class="avatar-copy">
-        <text class="avatar-title">选择头像</text>
-        <text class="avatar-desc">资料会同步到云端，换设备登录也保持一致</text>
-      </view>
+      <text class="avatar-action">点击设置头像</text>
     </button>
 
     <view class="field">
