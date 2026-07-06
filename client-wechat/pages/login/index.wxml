@@ -1,41 +1,29 @@
 <view class="login-page">
   <skeleton wx:if="{{loading}}" type="form" />
-  <view class="page-header login-header">
-    <image class="back-icon" src="/assets/icons/back-green.svg" mode="aspectFit" bindtap="goBack" />
-    <text class="page-title centered-title">登录</text>
+  <view class="login-hero">
+    <image class="hero-image" src="{{brandImage}}" mode="aspectFill" />
+    <view class="login-nav">
+      <image class="back-icon" src="/assets/icons/back-green.svg" mode="aspectFit" bindtap="goBack" />
+      <text class="skip-text" bindtap="goBack">暂时跳过</text>
+    </view>
   </view>
 
-  <view class="login-panel">
-    <view class="brand-area">
-      <image class="brand-image" src="{{brandImage}}" mode="aspectFill" />
-      <view class="brand-mask"></view>
-      <view class="brand-copy">
-        <text class="brand-title">禹邻优鲜</text>
-        <text class="brand-subtitle">社区鲜食到家，订单与配送信息实时同步</text>
-      </view>
+  <view class="login-sheet">
+    <view class="login-copy">
+      <text class="login-title">微信快捷登录</text>
+      <text class="login-desc">登录后可同步订单、地址、购物车和售后进度</text>
     </view>
 
-    <view class="form-card">
-      <view class="card-head">
-        <text class="login-title">微信快捷登录</text>
-        <text class="login-desc">授权后可同步订单、地址、购物车和售后进度</text>
-      </view>
-
-      <view class="auth-list">
-        <view class="auth-item">
-          <view class="auth-dot"></view>
-          <text>仅用于识别账号和保存配送信息</text>
-        </view>
-        <view class="auth-item">
-          <view class="auth-dot"></view>
-          <text>首次登录后会引导设置头像和昵称</text>
-        </view>
-      </view>
-
+    <view class="login-button-wrap">
       <button class="login-button" loading="{{submitting}}" bindtap="handleLogin">
         {{submitting ? '登录中' : '微信一键登录'}}
       </button>
-      <text class="login-policy">登录即表示你同意使用微信身份完成账号识别</text>
+      <text class="recommend-badge">推荐使用</text>
+    </view>
+
+    <view class="agreement-row">
+      <view class="agree-circle"></view>
+      <text class="agreement-text">登录即表示同意微信授权并使用禹邻优鲜服务</text>
     </view>
   </view>
 </view>

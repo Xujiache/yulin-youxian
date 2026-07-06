@@ -5,7 +5,7 @@ Page({
     loading: true,
     redirect: "",
     submitting: false,
-    brandImage: assetUrl("/assets/products/setup-hero-bg.jpg")
+    brandImage: assetUrl("/assets/products/login-hero-illustration.jpg")
   },
 
   onLoad(options) {
