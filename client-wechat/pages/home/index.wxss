@@ -22,11 +22,6 @@
   border-radius: 14rpx;
 }
 
-.header-action {
-  color: #007a3d;
-  font-size: 26rpx;
-}
-
 .search-card {
   display: flex;
   align-items: center;

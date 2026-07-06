@@ -201,8 +201,20 @@
   z-index: 80;
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 20rpx;
-  padding: 20rpx 24rpx 34rpx;
+  align-items: center;
+  gap: 18rpx;
+  padding: 18rpx 24rpx calc(18rpx + env(safe-area-inset-bottom));
   background: #ffffff;
   box-shadow: 0 -10rpx 32rpx rgba(10, 34, 22, 0.1);
+}
+
+.detail-footer .primary-button,
+.detail-footer .ghost-button {
+  width: 100%;
+  min-width: 0;
+  height: 88rpx;
+  min-height: 88rpx;
+  padding: 0;
+  margin: 0;
+  line-height: 88rpx;
 }

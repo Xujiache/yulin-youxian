@@ -15,11 +15,17 @@ Page({
   data: {
     loading: true,
     addresses: [],
+    selectMode: false,
+    selectedId: 0,
     formVisible: false,
     form: EMPTY_FORM
   },
 
-  onLoad() {
+  onLoad(options = {}) {
+    this.setData({
+      selectMode: options.select === "1",
+      selectedId: Number(options.selectedId || 0)
+    });
     this.loadAddresses();
   },
 
@@ -55,8 +61,26 @@ Page({
     });
   },
 
+  handleAddressCardTap(event) {
+    const id = Number(event.currentTarget.dataset.id);
+    if (this.data.selectMode) {
+      const address = this.data.addresses.find((item) => item.id === id);
+      if (!address) {
+        return;
+      }
+      wx.setStorageSync("checkoutSelectedAddress", address);
+      wx.navigateBack();
+      return;
+    }
+    this.openEditById(id);
+  },
+
   handleEdit(event) {
     const id = Number(event.currentTarget.dataset.id);
+    this.openEditById(id);
+  },
+
+  openEditById(id) {
     const address = this.data.addresses.find((item) => item.id === id);
     if (!address) {
       return;

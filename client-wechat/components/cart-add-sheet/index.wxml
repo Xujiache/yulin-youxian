@@ -18,14 +18,16 @@
         <text class="field-title">购买数量</text>
         <text class="field-tip">最低 {{product.minPurchaseQty}}{{product.saleUnit}} 起购，每次增加 {{product.stepQty}}{{product.saleUnit}}</text>
       </view>
-      <quantity-stepper
-        value="{{quantity}}"
-        min="{{product.minPurchaseQty}}"
-        max="{{product.stockQty}}"
-        step="{{product.stepQty}}"
-        unit="{{product.saleUnit}}"
-        bind:change="handleQuantityChange"
-      />
+      <view class="sheet-stepper-row">
+        <quantity-stepper
+          value="{{quantity}}"
+          min="{{product.minPurchaseQty}}"
+          max="{{product.stockQty}}"
+          step="{{product.stepQty}}"
+          unit="{{product.saleUnit}}"
+          bind:change="handleQuantityChange"
+        />
+      </view>
     </view>
 
     <view class="summary">

@@ -18,17 +18,23 @@
   </view>
 
   <view wx:else class="address-list">
-    <view wx:for="{{addresses}}" wx:key="id" class="address-card card">
+    <view
+      wx:for="{{addresses}}"
+      wx:key="id"
+      class="address-card card {{selectMode && selectedId === item.id ? 'selected' : ''}}"
+      data-id="{{item.id}}"
+      bindtap="handleAddressCardTap"
+    >
       <view class="address-main">
         <text class="receiver">{{item.name}} {{item.phone}}</text>
         <text wx:if="{{item.locationName}}" class="location-name">{{item.locationName}}</text>
         <text class="detail">{{item.detail}}</text>
       </view>
       <view class="address-actions">
-        <text class="default {{item.isDefault ? 'active' : ''}}" data-id="{{item.id}}" bindtap="handleSetDefault">{{item.isDefault ? '默认地址' : '设为默认'}}</text>
+        <text class="default {{item.isDefault ? 'active' : ''}}" data-id="{{item.id}}" catchtap="handleSetDefault">{{item.isDefault ? '默认地址' : '设为默认'}}</text>
         <view class="ops">
-          <text data-id="{{item.id}}" bindtap="handleEdit">编辑</text>
-          <text data-id="{{item.id}}" bindtap="handleDelete">删除</text>
+          <text data-id="{{item.id}}" catchtap="handleEdit">编辑</text>
+          <text data-id="{{item.id}}" catchtap="handleDelete">删除</text>
         </view>
       </view>
     </view>

@@ -21,7 +21,7 @@
   left: 0;
   right: 0;
   bottom: 0;
-  padding: 32rpx 28rpx 50rpx;
+  padding: 32rpx 28rpx calc(34rpx + env(safe-area-inset-bottom));
   background: #ffffff;
   border-radius: 42rpx 42rpx 0 0;
   box-shadow: 0 -18rpx 48rpx rgba(11, 30, 20, 0.16);
@@ -84,11 +84,8 @@
 }
 
 .field-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 20rpx;
-  margin-top: 40rpx;
+  display: block;
+  margin-top: 38rpx;
 }
 
 .field-title {
@@ -100,11 +97,16 @@
 
 .field-tip {
   display: block;
-  max-width: 360rpx;
   margin-top: 8rpx;
   color: #626d66;
   font-size: 22rpx;
   line-height: 30rpx;
+}
+
+.sheet-stepper-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 24rpx;
 }
 
 .summary {

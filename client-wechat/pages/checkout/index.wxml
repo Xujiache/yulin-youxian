@@ -8,7 +8,7 @@
     <view class="placeholder"></view>
   </view>
 
-  <view class="address card">
+  <view class="address card" bindtap="handleChooseAddress">
     <view class="address-icon">
       <image class="location-icon" src="/assets/icons/location-green.svg" mode="aspectFit" />
     </view>

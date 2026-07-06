@@ -5,7 +5,6 @@
       <view class="brand-mark">禹</view>
       <text class="page-title">禹邻优鲜</text>
     </view>
-    <text class="header-action">消息</text>
   </view>
 
   <view class="search-card" bindtap="goSearch">

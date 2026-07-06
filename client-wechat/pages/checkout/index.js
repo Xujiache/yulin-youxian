@@ -44,6 +44,19 @@ Page({
     this.loadCheckout();
   },
 
+  onShow() {
+    const selectedAddress = wx.getStorageSync("checkoutSelectedAddress");
+    if (!selectedAddress || !selectedAddress.id) {
+      return;
+    }
+    wx.removeStorageSync("checkoutSelectedAddress");
+    if (!this.data.cartItemIds.length || !this.data.activeSlotId) {
+      this.setData({ address: selectedAddress });
+      return;
+    }
+    this.refreshPreview(selectedAddress, this.data.activeSlotId);
+  },
+
   async loadCheckout() {
     try {
       const [remoteAddresses, remoteSlots, cart] = await Promise.all([
@@ -52,7 +65,13 @@ Page({
         getCart()
       ]);
       const selectedItems = (cart.items || []).filter((item) => item.selected);
-      const address = remoteAddresses.find((item) => item.isDefault) || remoteAddresses[0];
+      const storedAddress = wx.getStorageSync("checkoutSelectedAddress");
+      if (storedAddress && storedAddress.id) {
+        wx.removeStorageSync("checkoutSelectedAddress");
+      }
+      const address = (storedAddress && storedAddress.id)
+        ? storedAddress
+        : remoteAddresses.find((item) => item.isDefault) || remoteAddresses[0];
       const slot = remoteSlots[0];
       const cartItemIds = selectedItems.map((item) => item.id);
       if (!cartItemIds.length) {
@@ -105,19 +124,23 @@ Page({
     }
   },
 
-  async chooseSlot(event) {
-    const activeSlotId = Number(event.currentTarget.dataset.id);
-    this.setData({ activeSlotId });
-    if (!this.data.address || !this.data.cartItemIds.length) {
+  handleChooseAddress() {
+    const selectedId = this.data.address ? this.data.address.id : 0;
+    wx.navigateTo({ url: `/pages/address/index?select=1&selectedId=${selectedId}` });
+  },
+
+  async refreshPreview(address, activeSlotId) {
+    if (!address || !address.id || !activeSlotId || !this.data.cartItemIds.length) {
       return;
     }
     try {
       const preview = await previewOrder({
-        addressId: this.data.address.id,
+        addressId: address.id,
         deliverySlotId: activeSlotId,
         cartItemIds: this.data.cartItemIds
       });
       this.setData({
+        address: preview.address,
         items: preview.items.map((item) => ({
           ...item,
           amountText: yuan(item.amount)
@@ -127,7 +150,18 @@ Page({
         packageFeeText: yuan(preview.packageFee),
         totalText: yuan(preview.payableAmount)
       });
-    } catch {}
+    } catch {
+      wx.showToast({ title: "地址选择失败", icon: "none" });
+    }
+  },
+
+  async chooseSlot(event) {
+    const activeSlotId = Number(event.currentTarget.dataset.id);
+    this.setData({ activeSlotId });
+    if (!this.data.address || !this.data.cartItemIds.length) {
+      return;
+    }
+    await this.refreshPreview(this.data.address, activeSlotId);
   },
 
   async handlePay() {
