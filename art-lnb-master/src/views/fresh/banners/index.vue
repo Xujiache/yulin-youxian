@@ -24,7 +24,7 @@
           <ElTableColumn label="图片" width="220">
             <template #default="{ row }">
               <div class="banner-image-cell">
-                <ElImage class="banner-thumb" :src="row.imageUrl" fit="cover">
+                <ElImage class="banner-thumb" :src="assetUrl(row.imageUrl)" fit="cover">
                   <template #error>
                     <div class="banner-thumb__fallback">预览</div>
                   </template>
@@ -103,7 +103,7 @@
   const emptyBanner = (): Banner => ({
     title: '今日新鲜到店',
     subtitle: '下单后由门店自配送',
-    imageUrl: '/assets/products/hero.png',
+    imageUrl: '/assets/products/home-banner-1.jpg',
     linkType: 'none',
     linkTarget: '',
     sortOrder: (banners.value.length + 1) * 10,
@@ -126,6 +126,14 @@
     const invalidBanner = banners.value.find((item) => !item.title || !item.imageUrl)
     if (invalidBanner) return '请完善轮播图标题和图片'
     return ''
+  }
+
+  const assetUrl = (url: string) => {
+    if (!url || /^https?:\/\//.test(url)) return url
+    if (url.startsWith('/assets/') || url.startsWith('/uploads/')) {
+      return `${import.meta.env.VITE_API_URL}${url}`
+    }
+    return url
   }
 
   const saveBanners = async () => {

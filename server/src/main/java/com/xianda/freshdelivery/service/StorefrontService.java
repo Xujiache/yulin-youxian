@@ -72,7 +72,7 @@ public class StorefrontService {
     private final Map<Long, OrderState> orders = new LinkedHashMap<>();
     private final Map<Long, RefundState> refunds = new LinkedHashMap<>();
 
-    private SettingsDto settings = new SettingsDto("禹邻优鲜", 0, DEFAULT_DELIVERY_FEE, DEFAULT_PACKAGE_FEE, "08:00-20:00", "400-800-1234");
+    private SettingsDto settings = new SettingsDto("禹邻优鲜", "/assets/products/store-logo.png", 0, DEFAULT_DELIVERY_FEE, DEFAULT_PACKAGE_FEE, "08:00-20:00", "400-800-1234");
 
     @Autowired
     public StorefrontService(
@@ -88,6 +88,8 @@ public class StorefrontService {
                 seedBanners();
             }
             persist();
+        } else if (ensureBrandingDefaults()) {
+            persist();
         }
     }
 
@@ -98,6 +100,7 @@ public class StorefrontService {
     public synchronized HomeDto home() {
         return new HomeDto(
                 settings.storeName(),
+                logoUrlOrDefault(settings.logoUrl()),
                 "今日新鲜到店",
                 "蔬菜水果 · 门店自配送",
                 banners.stream()
@@ -420,7 +423,15 @@ public class StorefrontService {
     }
 
     public synchronized SettingsDto updateSettings(SettingsDto request) {
-        settings = request;
+        settings = new SettingsDto(
+                request.storeName(),
+                logoUrlOrDefault(request.logoUrl()),
+                request.minOrderAmount(),
+                request.deliveryFee(),
+                request.packageFee(),
+                request.businessHours(),
+                request.contactPhone()
+        );
         persist();
         return settings;
     }
@@ -765,7 +776,7 @@ public class StorefrontService {
             for (RefundState refund : snapshot.refunds() == null ? List.<RefundState>of() : snapshot.refunds()) {
                 refunds.put(refund.refund().id(), refund);
             }
-            settings = snapshot.settings() == null ? settings : snapshot.settings();
+            settings = settingsOrDefault(snapshot.settings());
             resetSequences();
             return true;
         } catch (IOException exception) {
@@ -1144,10 +1155,58 @@ public class StorefrontService {
             return;
         }
         banners.addAll(List.of(
-                new BannerDto(1L, "今日新鲜到店", "下单后由门店自配送", "/assets/products/hero.png", "category", "1", 10, true),
-                new BannerDto(2L, "水培番茄限时鲜到", "沙瓤多汁，适合凉拌和炒蛋", "/assets/products/tomato.png", "product", "101", 20, true),
-                new BannerDto(3L, "轻食蔬菜组合", "生菜、菠菜、黄瓜今日可选", "/assets/products/lettuce.png", "category", "1", 30, true)
+                new BannerDto(1L, "今日新鲜到店", "下单后由门店自配送", "/assets/products/home-banner-1.jpg", "category", "1", 10, true),
+                new BannerDto(2L, "当日鲜选送到家", "蔬菜水果 · 微信支付更省心", "/assets/products/home-banner-2.jpg", "category", "3", 20, true),
+                new BannerDto(3L, "轻食蔬果组合", "黄瓜、番茄、草莓今日可选", "/assets/products/home-banner-3.jpg", "category", "1", 30, true)
         ));
+    }
+
+    private String logoUrlOrDefault(String logoUrl) {
+        return logoUrl == null || logoUrl.isBlank() ? "/assets/products/store-logo.png" : logoUrl.trim();
+    }
+
+    private boolean ensureBrandingDefaults() {
+        boolean changed = false;
+        if (settings.logoUrl() == null || settings.logoUrl().isBlank()) {
+            settings = settingsOrDefault(settings);
+            changed = true;
+        }
+        if (isLegacyDefaultBanners()) {
+            banners.clear();
+            seedBanners();
+            changed = true;
+        }
+        return changed;
+    }
+
+    private boolean isLegacyDefaultBanners() {
+        if (banners.size() != 3) {
+            return false;
+        }
+        List<String> imageUrls = banners.stream()
+                .sorted(Comparator.comparing(BannerDto::sortOrder))
+                .map(BannerDto::imageUrl)
+                .toList();
+        return imageUrls.equals(List.of(
+                "/assets/products/hero.png",
+                "/assets/products/tomato.png",
+                "/assets/products/lettuce.png"
+        ));
+    }
+
+    private SettingsDto settingsOrDefault(SettingsDto source) {
+        if (source == null) {
+            return settings;
+        }
+        return new SettingsDto(
+                source.storeName(),
+                logoUrlOrDefault(source.logoUrl()),
+                source.minOrderAmount(),
+                source.deliveryFee(),
+                source.packageFee(),
+                source.businessHours(),
+                source.contactPhone()
+        );
     }
 
     private void seedCategories() {

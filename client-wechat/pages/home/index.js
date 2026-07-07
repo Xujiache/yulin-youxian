@@ -6,6 +6,7 @@ const { cachedAssetUrl } = require("../../utils/image-cache");
 Page({
   data: {
     loading: true,
+    storeLogoUrl: "",
     banners: [],
     categories: [],
     products: [],
@@ -29,12 +30,27 @@ Page({
         {
           title: home.bannerTitle || "今日新鲜到店",
           subtitle: home.bannerSubtitle || "下单后由门店自行配送",
-          imageUrl: cachedAssetUrl("/assets/products/hero.png"),
+          imageUrl: cachedAssetUrl("/assets/products/home-banner-1.jpg"),
+          linkType: "category",
+          linkTarget: "1"
+        },
+        {
+          title: "当日鲜选送到家",
+          subtitle: "蔬菜水果 · 微信支付更省心",
+          imageUrl: cachedAssetUrl("/assets/products/home-banner-2.jpg"),
+          linkType: "category",
+          linkTarget: "3"
+        },
+        {
+          title: "轻食蔬果组合",
+          subtitle: "黄瓜、番茄、草莓今日可选",
+          imageUrl: cachedAssetUrl("/assets/products/home-banner-3.jpg"),
           linkType: "none",
           linkTarget: ""
         }
       ]).filter((item) => item && item.imageUrl);
       this.setData({
+        storeLogoUrl: home.logoUrl || cachedAssetUrl("/assets/products/store-logo.png"),
         banners,
         categories: (home.categories || []).slice(0, 5).map((item) => ({
           ...item,

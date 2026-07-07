@@ -9,15 +9,12 @@
   gap: 14rpx;
 }
 
-.brand-mark {
+.brand-logo {
   display: flex;
   align-items: center;
   justify-content: center;
   width: 54rpx;
   height: 54rpx;
-  color: #ffffff;
-  font-size: 24rpx;
-  font-weight: 700;
   background: #007a3d;
   border-radius: 14rpx;
 }

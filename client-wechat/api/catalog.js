@@ -8,6 +8,7 @@ async function getHome() {
   });
   return {
     ...home,
+    logoUrl: normalizeAssetUrl(home.logoUrl),
     banners: (home.banners || []).map((banner) => ({
       ...banner,
       imageUrl: normalizeAssetUrl(banner.imageUrl)

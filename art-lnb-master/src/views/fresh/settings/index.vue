@@ -23,6 +23,25 @@
         <ElFormItem label="门店名称" required>
           <ElInput v-model.trim="form.storeName" maxlength="30" show-word-limit />
         </ElFormItem>
+        <ElFormItem label="首页Logo">
+          <div class="logo-upload-row">
+            <ElImage class="logo-preview" :src="assetUrl(form.logoUrl)" fit="cover">
+              <template #error>
+                <div class="logo-preview__fallback">Logo</div>
+              </template>
+            </ElImage>
+            <div class="logo-upload-main">
+              <ElUpload
+                :show-file-list="false"
+                accept=".jpg,.jpeg,.png,.webp"
+                :http-request="uploadLogo"
+              >
+                <ElButton :loading="uploadingLogo">上传Logo</ElButton>
+              </ElUpload>
+              <p>建议使用 1:1 图片，小程序首页左上角展示。</p>
+            </div>
+          </div>
+        </ElFormItem>
         <ElFormItem label="起送价（分）" required>
           <ElInputNumber v-model="form.minOrderAmount" :min="0" class="form-full" />
         </ElFormItem>
@@ -49,6 +68,7 @@
     getSettings,
     seedDemoData,
     updateSettings,
+    uploadLogoImage,
     type StoreSettings
   } from '@/api/admin'
 
@@ -57,8 +77,10 @@
   const loading = ref(false)
   const saving = ref(false)
   const seeding = ref(false)
+  const uploadingLogo = ref(false)
   const form = reactive<StoreSettings>({
     storeName: '',
+    logoUrl: '/assets/products/store-logo.png',
     minOrderAmount: 0,
     deliveryFee: 0,
     packageFee: 0,
@@ -75,6 +97,29 @@
       ElMessage.error(error instanceof Error ? error.message : '门店设置加载失败')
     } finally {
       loading.value = false
+    }
+  }
+
+  const assetUrl = (url: string) => {
+    if (!url || /^https?:\/\//.test(url)) return url
+    if (url.startsWith('/assets/') || url.startsWith('/uploads/')) {
+      return `${import.meta.env.VITE_API_URL}${url}`
+    }
+    return url
+  }
+
+  const uploadLogo = async (options: any) => {
+    uploadingLogo.value = true
+    try {
+      const result = await uploadLogoImage(options.file)
+      form.logoUrl = result.url
+      options.onSuccess?.(result)
+      ElMessage.success('Logo已上传')
+    } catch (error) {
+      options.onError?.(error)
+      ElMessage.error(error instanceof Error ? error.message : 'Logo上传失败')
+    } finally {
+      uploadingLogo.value = false
     }
   }
 
@@ -129,6 +174,46 @@
 
   .settings-form {
     max-width: 620px;
+  }
+
+  .logo-upload-row {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .logo-preview {
+    width: 64px;
+    height: 64px;
+    flex-shrink: 0;
+    overflow: hidden;
+    border: 1px solid var(--art-border-color);
+    border-radius: 16px;
+    background: #f4f8f5;
+  }
+
+  .logo-preview__fallback {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    color: var(--art-text-gray-600);
+    font-size: 12px;
+    background: var(--art-bg-color);
+  }
+
+  .logo-upload-main {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+
+    p {
+      margin: 0;
+      color: var(--art-text-gray-600);
+      font-size: 12px;
+      line-height: 18px;
+    }
   }
 
   .card-header {

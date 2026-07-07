@@ -2,7 +2,7 @@
   <skeleton wx:if="{{loading}}" type="home" has-tabbar="{{true}}" />
   <view class="page-header">
     <view class="brand">
-      <view class="brand-mark">禹</view>
+      <image class="brand-logo" src="{{storeLogoUrl}}" mode="aspectFill" />
       <view class="brand-copy">
         <text class="page-title">禹邻优鲜</text>
         <text class="brand-subtitle">鲜达生鲜 · 门店配送</text>

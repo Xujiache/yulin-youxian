@@ -6,6 +6,7 @@ import jakarta.validation.constraints.NotNull;
 
 public record SettingsDto(
         @NotBlank String storeName,
+        String logoUrl,
         @NotNull @Min(0) Integer minOrderAmount,
         @NotNull @Min(0) Integer deliveryFee,
         @NotNull @Min(0) Integer packageFee,

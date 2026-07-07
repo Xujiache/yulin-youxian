@@ -28,6 +28,7 @@ import org.springframework.web.multipart.MultipartFile;
 @RequestMapping("/api/admin/settings")
 public class AdminSettingsController {
     private static final Path BANNER_IMAGE_DIR = Path.of("data", "uploads", "banners");
+    private static final Path SETTINGS_IMAGE_DIR = Path.of("data", "uploads", "settings");
     private static final List<String> ALLOWED_IMAGE_EXTENSIONS = List.of(".jpg", ".jpeg", ".png", ".webp");
 
     private final StorefrontService storefrontService;
@@ -58,28 +59,37 @@ public class AdminSettingsController {
 
     @PostMapping("/banners/images")
     public ApiResponse<Map<String, String>> uploadBannerImage(@RequestParam("file") MultipartFile file) throws IOException {
-        if (file == null || file.isEmpty()) {
-            throw new BusinessException(400, "Banner image cannot be empty");
-        }
-        if (file.getSize() > 5 * 1024 * 1024) {
-            throw new BusinessException(400, "Banner image cannot exceed 5MB");
-        }
-        String extension = extension(file.getOriginalFilename());
-        if (!ALLOWED_IMAGE_EXTENSIONS.contains(extension)) {
-            throw new BusinessException(400, "Only jpg, png and webp images are supported");
-        }
-        Files.createDirectories(BANNER_IMAGE_DIR);
-        String filename = "banner_" + System.currentTimeMillis() + "_" + UUID.randomUUID().toString().replace("-", "") + extension;
-        Path target = BANNER_IMAGE_DIR.resolve(filename).normalize();
-        try (InputStream inputStream = file.getInputStream()) {
-            Files.copy(inputStream, target, StandardCopyOption.REPLACE_EXISTING);
-        }
-        return ApiResponse.ok(Map.of("url", "/uploads/banners/" + filename));
+        return uploadImage(file, BANNER_IMAGE_DIR, "banner", "/uploads/banners/");
+    }
+
+    @PostMapping("/logo-image")
+    public ApiResponse<Map<String, String>> uploadLogoImage(@RequestParam("file") MultipartFile file) throws IOException {
+        return uploadImage(file, SETTINGS_IMAGE_DIR, "logo", "/uploads/settings/");
     }
 
     @PostMapping("/demo-data/seed")
     public ApiResponse<Map<String, Object>> seedDemoData() {
         return ApiResponse.ok(storefrontService.seedDemoData());
+    }
+
+    private ApiResponse<Map<String, String>> uploadImage(MultipartFile file, Path directory, String prefix, String urlPrefix) throws IOException {
+        if (file == null || file.isEmpty()) {
+            throw new BusinessException(400, "Image cannot be empty");
+        }
+        if (file.getSize() > 5 * 1024 * 1024) {
+            throw new BusinessException(400, "Image cannot exceed 5MB");
+        }
+        String extension = extension(file.getOriginalFilename());
+        if (!ALLOWED_IMAGE_EXTENSIONS.contains(extension)) {
+            throw new BusinessException(400, "Only jpg, png and webp images are supported");
+        }
+        Files.createDirectories(directory);
+        String filename = prefix + "_" + System.currentTimeMillis() + "_" + UUID.randomUUID().toString().replace("-", "") + extension;
+        Path target = directory.resolve(filename).normalize();
+        try (InputStream inputStream = file.getInputStream()) {
+            Files.copy(inputStream, target, StandardCopyOption.REPLACE_EXISTING);
+        }
+        return ApiResponse.ok(Map.of("url", urlPrefix + filename));
     }
 
     private String extension(String filename) {

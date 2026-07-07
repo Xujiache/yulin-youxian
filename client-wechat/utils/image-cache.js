@@ -6,11 +6,15 @@ const STATIC_ASSET_PATHS = [
   "/assets/products/carrot.png",
   "/assets/products/cucumber.png",
   "/assets/products/hero.png",
+  "/assets/products/home-banner-1.jpg",
+  "/assets/products/home-banner-2.jpg",
+  "/assets/products/home-banner-3.jpg",
   "/assets/products/lettuce.png",
   "/assets/products/login-hero-illustration.jpg",
   "/assets/products/profile-hero-bg.jpg",
   "/assets/products/setup-hero-bg.jpg",
   "/assets/products/spinach.png",
+  "/assets/products/store-logo.png",
   "/assets/products/strawberry.png",
   "/assets/products/tomato.png"
 ];

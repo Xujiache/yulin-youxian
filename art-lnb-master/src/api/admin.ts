@@ -102,6 +102,7 @@ export interface DeliverySlot {
 
 export interface StoreSettings {
   storeName: string
+  logoUrl: string
   minOrderAmount: number
   deliveryFee: number
   packageFee: number
@@ -344,6 +345,15 @@ export function uploadBannerImage(file: File) {
   data.append('file', file)
   return request.post<{ url: string }>({
     url: '/api/admin/settings/banners/images',
+    data
+  })
+}
+
+export function uploadLogoImage(file: File) {
+  const data = new FormData()
+  data.append('file', file)
+  return request.post<{ url: string }>({
+    url: '/api/admin/settings/logo-image',
     data
   })
 }
