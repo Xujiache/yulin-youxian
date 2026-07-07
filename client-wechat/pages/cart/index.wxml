@@ -5,18 +5,30 @@
     <text class="clear {{items.length ? '' : 'disabled'}}" bindtap="handleClearSelected">清空</text>
   </view>
 
-  <view wx:if="{{!items.length && !loading}}" class="empty-cart card">
-    <view class="empty-icon">
-      <image class="empty-icon-image" src="/assets/icons/tab-cart-active.svg" mode="aspectFit" />
+  <view wx:if="{{!items.length && !loading}}" class="cart-empty">
+    <view class="empty-line">
+      <image class="empty-line-icon" src="/assets/icons/tab-cart-active.svg" mode="aspectFit" />
+      <view class="empty-copy">
+        <text class="empty-title">购物车是空的</text>
+        <text class="empty-desc">先看看今天到店的新鲜好物</text>
+      </view>
+      <button class="empty-link" bindtap="goHome">去逛逛</button>
     </view>
-    <text class="empty-title">购物车还是空的</text>
-    <text class="empty-desc">去挑一些今天到店的新鲜蔬果，加入购物车后可以一起结算。</text>
-    <view class="empty-tags">
-      <text>叶菜类</text>
-      <text>瓜果类</text>
-      <text>水果类</text>
+
+    <view wx:if="{{recommendedProducts.length}}" class="recommend-section">
+      <view class="recommend-head">
+        <text class="recommend-title">为你推荐</text>
+        <text class="recommend-subtitle">门店精选</text>
+      </view>
+      <view class="recommend-grid">
+        <product-card
+          wx:for="{{recommendedProducts}}"
+          wx:key="id"
+          product="{{item}}"
+          bind:add="handleAddRecommended"
+        />
+      </view>
     </view>
-    <button class="primary-button empty-action" bindtap="goHome">去首页选购</button>
   </view>
 
   <view wx:else class="cart-list">
@@ -48,7 +60,7 @@
     </view>
   </view>
 
-  <view class="checkout-bar">
+  <view wx:if="{{items.length}}" class="checkout-bar">
     <view class="checkout-meta">
       <view class="select-group {{items.length ? '' : 'muted'}}">
         <view class="check {{items.length ? 'checked' : ''}}">

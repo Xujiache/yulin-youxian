@@ -1,5 +1,6 @@
 const { yuan, lineAmount } = require("../../utils/format");
-const { clearSelectedCartItems, getCart, setCartItemSelected, updateCartItem } = require("../../api/cart");
+const { getHome } = require("../../api/catalog");
+const { addCartItem, clearSelectedCartItems, getCart, setCartItemSelected, updateCartItem } = require("../../api/cart");
 const { requireCompleteProfile } = require("../../utils/auth-guard");
 
 function decorateItems(items) {
@@ -13,6 +14,7 @@ Page({
   data: {
     loading: true,
     items: [],
+    recommendedProducts: [],
     selectedCount: 0,
     totalText: "0.00"
   },
@@ -41,6 +43,9 @@ Page({
         selectedCount: cart.selectedCount || 0,
         totalText: yuan(cart.totalAmount || 0)
       });
+      if (!(cart.items || []).length) {
+        this.loadRecommendations();
+      }
     } catch {
       this.setData({ items: [], selectedCount: 0, totalText: "0.00" });
       wx.showToast({ title: "购物车加载失败", icon: "none" });
@@ -57,6 +62,28 @@ Page({
       selectedCount: selectedItems.length,
       totalText: yuan(total)
     });
+  },
+
+  async loadRecommendations() {
+    try {
+      const home = await getHome();
+      this.setData({
+        recommendedProducts: (home.recommendedProducts || []).slice(0, 4)
+      });
+    } catch {
+      this.setData({ recommendedProducts: [] });
+    }
+  },
+
+  async handleAddRecommended(event) {
+    const product = event.detail.product;
+    try {
+      await addCartItem(product.id, product.minPurchaseQty || 1);
+      await this.loadCart();
+      wx.showToast({ title: "已加入购物车", icon: "success" });
+    } catch {
+      wx.showToast({ title: "加入失败，请重试", icon: "none" });
+    }
   },
 
   async handleToggle(event) {
