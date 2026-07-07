@@ -96,12 +96,13 @@
               <ElInput v-model.trim="newCampaign.reason" placeholder="活动原因，例如：开业福利" />
               <ElDatePicker
                 v-model="newCampaign.range"
+                class="campaign-range"
                 type="daterange"
                 value-format="YYYY-MM-DD"
                 start-placeholder="开始日期"
                 end-placeholder="结束日期"
               />
-              <ElButton type="primary" plain @click="addCampaign">新增活动</ElButton>
+              <ElButton class="campaign-add" type="primary" plain @click="addCampaign">新增活动</ElButton>
             </div>
             <ElTable
               :data="form.freeDeliveryCampaigns"
@@ -372,14 +373,29 @@
 
   .campaign-create {
     display: grid;
-    grid-template-columns: minmax(180px, 1fr) 280px auto;
+    grid-template-columns: minmax(180px, 1fr) 360px 104px;
     gap: 10px;
     align-items: center;
+    width: 100%;
+    max-width: 710px;
+  }
+
+  .campaign-range {
+    width: 100%;
+  }
+
+  .campaign-add {
+    width: 104px;
   }
 
   @media (max-width: 960px) {
     .campaign-create {
       grid-template-columns: 1fr;
+      max-width: none;
+    }
+
+    .campaign-add {
+      width: 100%;
     }
   }
 </style>
