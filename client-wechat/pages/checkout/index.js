@@ -5,6 +5,13 @@ const { getDeliverySlots } = require("../../api/delivery");
 const { confirmDevelopmentPayment, createOrder, payOrder, previewOrder } = require("../../api/orders");
 const { requireCompleteProfile } = require("../../utils/auth-guard");
 
+const EMPTY_AMOUNT = {
+  productAmountText: "0.00",
+  deliveryFeeText: "0.00",
+  packageFeeText: "0.00",
+  totalText: "0.00"
+};
+
 function requestWechatPayment(payment) {
   if (!payment || payment.developmentMode) {
     return Promise.resolve({ developmentMode: true });
@@ -33,7 +40,9 @@ Page({
     deliveryFeeText: "5.00",
     packageFeeText: "1.00",
     totalText: "0.00",
-    cartItemIds: []
+    cartItemIds: [],
+    loadError: "",
+    payDisabled: true
   },
 
   onLoad() {
@@ -58,6 +67,17 @@ Page({
   },
 
   async loadCheckout() {
+    this.setData({
+      loading: true,
+      loadError: "",
+      payDisabled: true,
+      address: null,
+      items: [],
+      slots: [],
+      activeSlotId: 0,
+      cartItemIds: [],
+      ...EMPTY_AMOUNT
+    });
     try {
       const [remoteAddresses, remoteSlots, cart] = await Promise.all([
         getAddresses(),
@@ -80,10 +100,9 @@ Page({
           slots: remoteSlots,
           items: [],
           cartItemIds: [],
-          productAmountText: "0.00",
-          deliveryFeeText: "0.00",
-          packageFeeText: "0.00",
-          totalText: "0.00"
+          payDisabled: true,
+          loadError: "购物车还没有选中的商品，请先选择后再结算。",
+          ...EMPTY_AMOUNT
         });
         wx.showToast({ title: "请先选择商品", icon: "none" });
         return;
@@ -114,11 +133,24 @@ Page({
         productAmountText: yuan(preview.productAmount),
         deliveryFeeText: yuan(preview.deliveryFee),
         packageFeeText: yuan(preview.packageFee),
-        totalText: yuan(preview.payableAmount)
+        totalText: yuan(preview.payableAmount),
+        payDisabled: false,
+        loadError: ""
       });
       return;
-    } catch {
-      wx.showToast({ title: "订单信息加载失败", icon: "none" });
+    } catch (error) {
+      const message = error && error.message ? error.message : "订单信息加载失败，请稍后重试。";
+      this.setData({
+        address: null,
+        items: [],
+        slots: [],
+        activeSlotId: 0,
+        cartItemIds: [],
+        payDisabled: true,
+        loadError: message,
+        ...EMPTY_AMOUNT
+      });
+      wx.showToast({ title: message, icon: "none" });
     } finally {
       this.setData({ loading: false });
     }
@@ -148,11 +180,22 @@ Page({
         productAmountText: yuan(preview.productAmount),
         deliveryFeeText: yuan(preview.deliveryFee),
         packageFeeText: yuan(preview.packageFee),
-        totalText: yuan(preview.payableAmount)
+        totalText: yuan(preview.payableAmount),
+        payDisabled: false,
+        loadError: ""
       });
-    } catch {
-      wx.showToast({ title: "地址选择失败", icon: "none" });
+    } catch (error) {
+      this.setData({ payDisabled: true });
+      wx.showToast({ title: error.message || "地址选择失败", icon: "none" });
     }
+  },
+
+  handleRetry() {
+    this.loadCheckout();
+  },
+
+  goCart() {
+    wx.redirectTo({ url: "/pages/cart/index" });
   },
 
   async chooseSlot(event) {
@@ -168,7 +211,7 @@ Page({
     if (!requireCompleteProfile("/pages/checkout/index")) {
       return;
     }
-    if (!this.data.address || !this.data.activeSlotId || !this.data.cartItemIds.length) {
+    if (this.data.payDisabled || !this.data.address || !this.data.activeSlotId || !this.data.cartItemIds.length) {
       wx.showToast({ title: "订单信息不完整", icon: "none" });
       return;
     }

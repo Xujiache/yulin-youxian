@@ -8,79 +8,93 @@
     <view class="placeholder"></view>
   </view>
 
-  <view class="address card" bindtap="handleChooseAddress">
-    <view class="address-icon">
-      <image class="location-icon" src="/assets/icons/location-green.svg" mode="aspectFit" />
+  <view wx:if="{{loadError}}" class="checkout-error card">
+    <view class="error-icon">
+      <image class="location-icon" src="/assets/icons/clock-green.svg" mode="aspectFit" />
     </view>
-    <view class="address-info">
-      <text class="receiver">{{address.detail}}</text>
-      <text class="address-text">{{address.name}} {{address.phone}}</text>
+    <text class="error-title">订单信息没有加载完整</text>
+    <text class="error-desc">{{loadError}}</text>
+    <view class="error-actions">
+      <button class="ghost-button error-button" bindtap="goCart">返回购物车</button>
+      <button class="primary-button error-button" bindtap="handleRetry">重新加载</button>
     </view>
-    <image class="chevron" src="/assets/icons/chevron-right-gray.svg" mode="aspectFit" />
   </view>
 
-  <view class="slots card">
-    <view class="slot-title-row">
-      <view class="slot-title-left">
-        <image class="slot-icon" src="/assets/icons/clock-green.svg" mode="aspectFit" />
-        <view>
-          <text class="module-title">预约配送时间</text>
-          <text class="slot-subtitle">选择一个方便收货的时间段</text>
+  <block wx:else>
+    <view class="address card" bindtap="handleChooseAddress">
+      <view class="address-icon">
+        <image class="location-icon" src="/assets/icons/location-green.svg" mode="aspectFit" />
+      </view>
+      <view class="address-info">
+        <text class="receiver">{{address.detail || '请选择收货地址'}}</text>
+        <text class="address-text">{{address.name ? address.name + ' ' + address.phone : '添加或选择一个配送地址'}}</text>
+      </view>
+      <image class="chevron" src="/assets/icons/chevron-right-gray.svg" mode="aspectFit" />
+    </view>
+
+    <view class="slots card">
+      <view class="slot-title-row">
+        <view class="slot-title-left">
+          <image class="slot-icon" src="/assets/icons/clock-green.svg" mode="aspectFit" />
+          <view>
+            <text class="module-title">预约配送时间</text>
+            <text class="slot-subtitle">选择一个方便收货的时间段</text>
+          </view>
+        </view>
+        <text class="slot-badge">门店配送</text>
+      </view>
+      <view class="slot-list">
+        <view
+          wx:for="{{slots}}"
+          wx:key="id"
+          class="slot {{activeSlotId === item.id ? 'active' : ''}}"
+          data-id="{{item.id}}"
+          bindtap="chooseSlot"
+        >
+          <text class="slot-label">{{item.label}}</text>
+          <text class="slot-check">✓</text>
         </view>
       </view>
-      <text class="slot-badge">门店配送</text>
     </view>
-    <view class="slot-list">
-      <view
-        wx:for="{{slots}}"
-        wx:key="id"
-        class="slot {{activeSlotId === item.id ? 'active' : ''}}"
-        data-id="{{item.id}}"
-        bindtap="chooseSlot"
-      >
-        <text class="slot-label">{{item.label}}</text>
-        <text class="slot-check">✓</text>
+
+    <view class="goods card">
+      <text class="module-title">禹邻优鲜</text>
+      <view wx:for="{{items}}" wx:key="id" class="goods-item">
+        <image class="goods-image" src="{{item.image}}" mode="aspectFill" />
+        <view class="goods-info">
+          <text class="goods-name">{{item.name || item.productName}}</text>
+          <text class="goods-spec">{{item.quantity}}{{item.saleUnit}} x1</text>
+        </view>
+        <text class="goods-price">￥{{item.amountText}}</text>
       </view>
     </view>
-  </view>
 
-  <view class="goods card">
-    <text class="module-title">禹邻优鲜</text>
-    <view wx:for="{{items}}" wx:key="id" class="goods-item">
-      <image class="goods-image" src="{{item.image}}" mode="aspectFill" />
-      <view class="goods-info">
-        <text class="goods-name">{{item.name || item.productName}}</text>
-        <text class="goods-spec">{{item.quantity}}{{item.saleUnit}} x1</text>
+    <view class="amount card">
+      <view class="amount-row">
+        <text>商品总价</text>
+        <text>￥{{productAmountText}}</text>
       </view>
-      <text class="goods-price">￥{{item.amountText}}</text>
+      <view class="amount-row">
+        <text>配送费</text>
+        <text>￥{{deliveryFeeText}}</text>
+      </view>
+      <view class="amount-row">
+        <text>包装费</text>
+        <text>￥{{packageFeeText}}</text>
+      </view>
     </view>
-  </view>
 
-  <view class="amount card">
-    <view class="amount-row">
-      <text>商品总价</text>
-      <text>￥{{productAmountText}}</text>
+    <view class="remark card">
+      <text class="module-title">给商家留言</text>
+      <textarea class="remark-input" placeholder="例如：请尽快配送，放门口请电话联系" />
     </view>
-    <view class="amount-row">
-      <text>配送费</text>
-      <text>￥{{deliveryFeeText}}</text>
-    </view>
-    <view class="amount-row">
-      <text>包装费</text>
-      <text>￥{{packageFeeText}}</text>
-    </view>
-  </view>
-
-  <view class="remark card">
-    <text class="module-title">给商家留言</text>
-    <textarea class="remark-input" placeholder="例如：请尽快配送，放门口请电话联系" />
-  </view>
+  </block>
 
   <view class="pay-bar">
     <view class="pay-total">
       <text>合计：</text>
       <text class="pay-price">￥{{totalText}}</text>
     </view>
-    <button class="primary-button pay-button" bindtap="handlePay">微信支付</button>
+    <button class="primary-button pay-button {{payDisabled ? 'disabled' : ''}}" disabled="{{payDisabled}}" bindtap="handlePay">微信支付</button>
   </view>
 </view>

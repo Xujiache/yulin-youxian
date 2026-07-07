@@ -117,6 +117,10 @@ Page({
     if (!requireCompleteProfile("/pages/cart/index")) {
       return;
     }
+    if (!this.data.selectedCount) {
+      wx.showToast({ title: "请先选择商品", icon: "none" });
+      return;
+    }
     wx.navigateTo({ url: "/pages/checkout/index" });
   }
 });

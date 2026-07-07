@@ -238,6 +238,7 @@ public class StorefrontService {
             throw new BusinessException(409, "商品已有订单记录，不能删除");
         }
         products.remove(id);
+        cartItems.values().removeIf(item -> item.productId().equals(id));
         persist();
     }
 
