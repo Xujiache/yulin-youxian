@@ -18,10 +18,29 @@
     </div>
 
     <div class="metric-grid">
-      <div v-for="item in metrics" :key="item.label" class="metric-card">
-        <div class="metric-card__label">{{ item.label }}</div>
-        <div class="metric-card__value">{{ item.value }}</div>
-      </div>
+      <ElPopover
+        v-for="item in metrics"
+        :key="item.label"
+        trigger="hover"
+        placement="bottom-start"
+        :width="280"
+        :teleported="false"
+      >
+        <template #reference>
+          <div class="metric-card metric-card--hoverable">
+            <div class="metric-card__label">{{ item.label }}</div>
+            <div class="metric-card__value">{{ item.value }}</div>
+            <div class="metric-card__hint">悬浮查看详情</div>
+          </div>
+        </template>
+        <div class="metric-detail">
+          <div class="metric-detail__title">{{ item.detailTitle }}</div>
+          <div class="metric-detail__value">{{ item.value }}</div>
+          <div v-for="line in item.details" :key="line" class="metric-detail__line">
+            {{ line }}
+          </div>
+        </div>
+      </ElPopover>
     </div>
 
     <ElCard class="fresh-card" shadow="never">
@@ -69,11 +88,7 @@
 
 <script setup lang="ts">
   import { ElMessage } from 'element-plus'
-  import {
-    exportDashboard,
-    getDashboardSummary,
-    type DashboardSummary
-  } from '@/api/admin'
+  import { exportDashboard, getDashboardSummary, type DashboardSummary } from '@/api/admin'
 
   defineOptions({ name: 'FreshDashboard' })
 
@@ -98,10 +113,46 @@
   const money = (value: number) => `￥${(Number(value || 0) / 100).toFixed(2)}`
 
   const metrics = computed(() => [
-    { label: '选择日期订单', value: summary.value.todayOrderCount },
-    { label: '选择日期销售额', value: money(summary.value.todaySalesAmount) },
-    { label: '待处理订单', value: summary.value.pendingOrderCount },
-    { label: '待审核退款', value: summary.value.refundPendingCount }
+    {
+      label: '选择日期订单',
+      value: summary.value.todayOrderCount,
+      detailTitle: '订单统计详情',
+      details: [
+        `统计日期：${selectedDate.value}`,
+        '口径：该日期创建的全部订单。',
+        '用途：判断当天客流和下单活跃度。'
+      ]
+    },
+    {
+      label: '选择日期销售额',
+      value: money(summary.value.todaySalesAmount),
+      detailTitle: '销售额统计详情',
+      details: [
+        `统计日期：${selectedDate.value}`,
+        '口径：该日期已支付订单的实付金额汇总。',
+        '退款金额请以导出的订单明细核对。'
+      ]
+    },
+    {
+      label: '待处理订单',
+      value: summary.value.pendingOrderCount,
+      detailTitle: '待处理订单详情',
+      details: [
+        `统计日期：${selectedDate.value}`,
+        '包含：待支付、已支付/待接单、备货中订单。',
+        '建议：营业时段内优先处理待接单和备货中订单。'
+      ]
+    },
+    {
+      label: '待审核退款',
+      value: summary.value.refundPendingCount,
+      detailTitle: '退款审核详情',
+      details: [
+        `统计日期：${selectedDate.value}`,
+        '口径：该日期订单关联的待审核退款申请。',
+        '建议：进入售后退款页面查看凭证并审核。'
+      ]
+    }
   ])
 
   const loadSummary = async () => {
@@ -175,6 +226,53 @@
       color: var(--art-gray-600);
       font-size: 13px;
     }
+  }
+
+  .metric-card--hoverable {
+    position: relative;
+    cursor: pointer;
+    transition:
+      border-color 0.2s ease,
+      box-shadow 0.2s ease,
+      transform 0.2s ease;
+
+    &:hover {
+      border-color: rgba(0, 132, 61, 0.28);
+      box-shadow: 0 14px 32px rgba(0, 132, 61, 0.1);
+      transform: translateY(-2px);
+    }
+  }
+
+  .metric-card__hint {
+    margin-top: 8px;
+    color: #7a8a82;
+    font-size: 12px;
+  }
+
+  .metric-detail {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 4px 2px;
+  }
+
+  .metric-detail__title {
+    color: var(--art-gray-900);
+    font-size: 15px;
+    font-weight: 700;
+  }
+
+  .metric-detail__value {
+    color: #007a39;
+    font-size: 24px;
+    font-weight: 800;
+    line-height: 1.2;
+  }
+
+  .metric-detail__line {
+    color: var(--art-gray-600);
+    font-size: 13px;
+    line-height: 20px;
   }
 
   @media (max-width: 960px) {
