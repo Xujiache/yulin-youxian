@@ -122,7 +122,7 @@
 
 .filter-panel {
   width: 100%;
-  padding: 30rpx 28rpx calc(22rpx + env(safe-area-inset-bottom));
+  padding: 30rpx 28rpx 0;
   background: #ffffff;
   border-radius: var(--radius-card) var(--radius-card) 0 0;
 }
@@ -195,32 +195,38 @@
 }
 
 .filter-actions {
-  gap: 18rpx;
-  margin-top: 16rpx;
-  padding: 10rpx;
-  background: #f7faf8;
-  border: 2rpx solid rgba(0, 122, 61, 0.12);
-  border-radius: var(--radius-pill);
+  gap: 20rpx;
+  margin: 24rpx -28rpx 0;
+  padding: 20rpx 28rpx calc(22rpx + env(safe-area-inset-bottom));
+  background: #ffffff;
+  border-top: 2rpx solid #eef1ef;
+  box-shadow: 0 -10rpx 28rpx rgba(19, 41, 28, 0.05);
 }
 
 .reset-button,
 .done-button {
   flex: 1;
-  height: 70rpx;
+  height: 76rpx;
   padding: 0;
   font-size: 26rpx;
   font-weight: 800;
-  border-radius: var(--radius-pill);
+  line-height: 76rpx;
+  border-radius: 22rpx;
 }
 
 .reset-button {
   color: #007a3d;
   background: #ffffff;
-  border: 2rpx solid rgba(0, 122, 61, 0.36);
+  border: 2rpx solid rgba(0, 122, 61, 0.42);
 }
 
 .done-button {
   color: #ffffff;
   background: #008a45;
   box-shadow: 0 10rpx 22rpx rgba(0, 122, 61, 0.18);
+}
+
+.reset-button::after,
+.done-button::after {
+  border: 0;
 }
