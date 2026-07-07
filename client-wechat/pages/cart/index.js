@@ -90,6 +90,9 @@ Page({
   },
 
   async handleClearSelected() {
+    if (!this.data.items.length) {
+      return;
+    }
     if (!this.data.selectedCount) {
       wx.showToast({ title: "请先选择商品", icon: "none" });
       return;
@@ -122,5 +125,9 @@ Page({
       return;
     }
     wx.navigateTo({ url: "/pages/checkout/index" });
+  },
+
+  goHome() {
+    wx.redirectTo({ url: "/pages/home/index" });
   }
 });

@@ -2,10 +2,24 @@
   <skeleton wx:if="{{loading}}" type="list" has-tabbar="{{true}}" />
   <view class="page-header">
     <text class="page-title">禹邻优鲜</text>
-    <text class="clear" bindtap="handleClearSelected">清空</text>
+    <text class="clear {{items.length ? '' : 'disabled'}}" bindtap="handleClearSelected">清空</text>
   </view>
 
-  <view class="cart-list">
+  <view wx:if="{{!items.length && !loading}}" class="empty-cart card">
+    <view class="empty-icon">
+      <image class="empty-icon-image" src="/assets/icons/tab-cart-active.svg" mode="aspectFit" />
+    </view>
+    <text class="empty-title">购物车还是空的</text>
+    <text class="empty-desc">去挑一些今天到店的新鲜蔬果，加入购物车后可以一起结算。</text>
+    <view class="empty-tags">
+      <text>叶菜类</text>
+      <text>瓜果类</text>
+      <text>水果类</text>
+    </view>
+    <button class="primary-button empty-action" bindtap="goHome">去首页选购</button>
+  </view>
+
+  <view wx:else class="cart-list">
     <view wx:for="{{items}}" wx:key="id" class="cart-item card">
       <view class="cart-main">
         <view class="check {{item.selected ? 'checked' : ''}}" data-id="{{item.id}}" bindtap="handleToggle">
@@ -36,8 +50,8 @@
 
   <view class="checkout-bar">
     <view class="checkout-meta">
-      <view class="select-group">
-        <view class="check checked">
+      <view class="select-group {{items.length ? '' : 'muted'}}">
+        <view class="check {{items.length ? 'checked' : ''}}">
           <image class="check-icon" src="/assets/icons/check-white.svg" mode="aspectFit" />
         </view>
         <text class="select-all">全选</text>
@@ -47,7 +61,7 @@
         <text class="total-price">￥{{totalText}}</text>
       </view>
     </view>
-    <button class="primary-button checkout-button" bindtap="handleCheckout">
+    <button class="primary-button checkout-button {{selectedCount ? '' : 'disabled'}}" disabled="{{!selectedCount}}" bindtap="handleCheckout">
       <text>去结算</text>
       <image class="checkout-arrow" src="/assets/icons/chevron-right-white.svg" mode="aspectFit" />
     </button>
