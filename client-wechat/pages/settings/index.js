@@ -1,7 +1,13 @@
+const { getHome } = require("../../api/catalog");
+
+const DEFAULT_CONTACT_PHONE = "400-800-1234";
+
 Page({
   data: {
     loading: true,
     isLoggedIn: false,
+    storeName: "禹邻优鲜",
+    contactPhone: DEFAULT_CONTACT_PHONE,
     items: [
       { key: "profile", label: "编辑个人资料", desc: "修改头像和昵称，并同步到云端" },
       { key: "privacy", label: "隐私政策", desc: "查看个人信息收集与使用说明" },
@@ -17,6 +23,17 @@ Page({
       isLoggedIn: Boolean(app.isLoggedIn && app.isLoggedIn()),
       loading: false
     });
+    this.loadStoreInfo();
+  },
+
+  async loadStoreInfo() {
+    try {
+      const home = await getHome();
+      this.setData({
+        storeName: home.storeName || "禹邻优鲜",
+        contactPhone: home.contactPhone || DEFAULT_CONTACT_PHONE
+      });
+    } catch {}
   },
 
   goBack() {
@@ -47,7 +64,10 @@ Page({
       return;
     }
     if (key === "store") {
-      this.showText("关于门店", "禹邻优鲜支持门店自配送和预约配送。客服电话：400-800-1234。");
+      this.showText(
+        "关于门店",
+        `${this.data.storeName || "禹邻优鲜"}支持门店自配送和预约配送。客服电话：${this.data.contactPhone || DEFAULT_CONTACT_PHONE}。`
+      );
     }
   },
 

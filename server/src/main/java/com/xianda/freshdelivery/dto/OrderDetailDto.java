@@ -15,6 +15,9 @@ public record OrderDetailDto(
         Integer payableAmount,
         Integer paidAmount,
         Integer refundedAmount,
-        String remark
+        String remark,
+        String createdAt,
+        String latestRefundStatus,
+        String latestRefundReason
 ) {
 }

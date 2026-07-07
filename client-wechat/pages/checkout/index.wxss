@@ -251,6 +251,34 @@
   display: flex;
 }
 
+.fee-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18rpx;
+  margin-bottom: 22rpx;
+  padding: 22rpx 26rpx;
+  color: #007a3d;
+  background: linear-gradient(135deg, #e8f7ee 0%, #ffffff 100%);
+  border: 1rpx solid rgba(0, 122, 61, 0.12);
+  border-radius: 24rpx;
+  box-shadow: 0 10rpx 28rpx rgba(8, 34, 20, 0.05);
+}
+
+.fee-banner-title {
+  flex-shrink: 0;
+  font-size: 28rpx;
+  font-weight: 800;
+}
+
+.fee-banner-desc {
+  flex: 1;
+  color: #4f5d55;
+  font-size: 24rpx;
+  line-height: 34rpx;
+  text-align: right;
+}
+
 .goods-item {
   display: flex;
   align-items: center;

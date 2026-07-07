@@ -83,6 +83,14 @@
   color: rgba(255, 255, 255, 0.86);
 }
 
+.refund-notice {
+  color: #9a4a00;
+  font-size: 26rpx;
+  line-height: 38rpx;
+  background: #fff7ed;
+  border: 1rpx solid #ffd8ad;
+}
+
 .module-title {
   display: block;
   color: #101815;

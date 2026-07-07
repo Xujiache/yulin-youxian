@@ -57,6 +57,11 @@
       </view>
     </view>
 
+    <view wx:if="{{deliveryFeeNotice}}" class="fee-banner">
+      <text class="fee-banner-title">配送费已减免</text>
+      <text class="fee-banner-desc">{{deliveryFeeNotice}}</text>
+    </view>
+
     <view class="goods card">
       <text class="module-title">禹邻优鲜</text>
       <view wx:for="{{items}}" wx:key="id" class="goods-item">

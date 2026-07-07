@@ -1,5 +1,6 @@
 const { getProfile, updateProfile, uploadAvatar } = require("../../api/auth");
 const { getCart } = require("../../api/cart");
+const { getHome } = require("../../api/catalog");
 const { requireCompleteProfile, requireLogin } = require("../../utils/auth-guard");
 const { cachedAssetUrl, cacheImage } = require("../../utils/image-cache");
 
@@ -7,6 +8,7 @@ const DEFAULT_AVATAR_PATH = "/assets/products/avatar.png";
 const PROFILE_HERO_BG_PATH = "/assets/products/profile-hero-bg.jpg";
 const DEFAULT_AVATAR = cachedAssetUrl(DEFAULT_AVATAR_PATH);
 const PROFILE_HERO_BG = cachedAssetUrl(PROFILE_HERO_BG_PATH);
+const DEFAULT_CONTACT_PHONE = "400-800-1234";
 
 const DEFAULT_ORDER_ACTIONS = [
   { label: "待付款", count: 0, url: "/pages/orders/index?status=待支付", icon: "/assets/icons/order-veg.svg" },
@@ -37,6 +39,8 @@ Page({
     editNickName: "",
     savingProfile: false,
     cartCount: 0,
+    storeName: "禹邻优鲜",
+    contactPhone: DEFAULT_CONTACT_PHONE,
     orderActions: DEFAULT_ORDER_ACTIONS,
     menus: [
       { label: "地址管理", url: "/pages/address/index", icon: "/assets/icons/location-green.svg" },
@@ -49,8 +53,19 @@ Page({
 
   onShow() {
     this.refreshStaticAssets();
+    this.loadStoreInfo();
     this.loadProfile();
     this.loadCartCount();
+  },
+
+  async loadStoreInfo() {
+    try {
+      const home = await getHome();
+      this.setData({
+        storeName: home.storeName || "禹邻优鲜",
+        contactPhone: home.contactPhone || DEFAULT_CONTACT_PHONE
+      });
+    } catch {}
   },
 
   refreshStaticAssets() {
@@ -210,9 +225,30 @@ Page({
       wx.navigateTo({ url });
       return;
     }
+    if (label === "联系客服") {
+      const phone = this.data.contactPhone || DEFAULT_CONTACT_PHONE;
+      wx.showModal({
+        title: "联系客服",
+        content: `${this.data.storeName || "禹邻优鲜"}客服电话：${phone}`,
+        confirmText: "拨打电话",
+        cancelText: "取消",
+        success(result) {
+          if (!result.confirm) return;
+          wx.makePhoneCall({
+            phoneNumber: phone,
+            fail() {
+              wx.showToast({ title: "拨号失败，请稍后重试", icon: "none" });
+            }
+          });
+        }
+      });
+      return;
+    }
     wx.showModal({
-      title: label || "禹邻优鲜",
-      content: label === "关于门店" ? "禹邻优鲜，门店自配送。" : "客服电话：400-800-1234",
+      title: label || this.data.storeName || "禹邻优鲜",
+      content: label === "关于门店"
+        ? `${this.data.storeName || "禹邻优鲜"}，门店自配送。客服电话：${this.data.contactPhone || DEFAULT_CONTACT_PHONE}`
+        : `客服电话：${this.data.contactPhone || DEFAULT_CONTACT_PHONE}`,
       showCancel: false
     });
   }

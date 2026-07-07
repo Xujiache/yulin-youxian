@@ -9,6 +9,9 @@ public record OrderDto(
         Integer totalAmount,
         String deliverySlot,
         String summary,
-        List<String> images
+        List<String> images,
+        String createdAt,
+        String latestRefundStatus,
+        String latestRefundReason
 ) {
 }

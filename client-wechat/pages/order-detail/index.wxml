@@ -13,11 +13,15 @@
     <text class="status-desc">订单编号：{{orderNo}}</text>
   </view>
 
+  <view wx:if="{{refundNotice}}" class="refund-notice card">
+    <text>{{refundNotice}}</text>
+  </view>
+
   <view class="card">
     <text class="module-title">收货信息</text>
     <text class="line">{{address.name}} {{address.phone}}</text>
     <text class="line muted">{{address.detail}}</text>
-    <text class="line muted">期望送达时间：今日 14:00-16:00</text>
+    <text class="line muted">期望送达时间：{{deliverySlotText}}</text>
   </view>
 
   <view class="card">
@@ -35,19 +39,23 @@
   <view class="card">
     <view class="amount-row">
       <text>商品总额</text>
-      <text>￥{{totalText}}</text>
+      <text>￥{{productAmountText}}</text>
     </view>
     <view class="amount-row">
       <text>配送费</text>
-      <text>￥5.00</text>
+      <text>￥{{deliveryFeeText}}</text>
     </view>
     <view class="amount-row">
-      <text>门店优惠</text>
-      <text>-￥10.00</text>
+      <text>包装费</text>
+      <text>￥{{packageFeeText}}</text>
+    </view>
+    <view wx:if="{{hasRefundedAmount}}" class="amount-row">
+      <text>已退款</text>
+      <text>-￥{{refundedText}}</text>
     </view>
     <view class="amount-row strong">
       <text>实付款</text>
-      <text>￥{{totalText}}</text>
+      <text>￥{{payableText}}</text>
     </view>
   </view>
 

@@ -3,7 +3,7 @@
     <div class="fresh-page__head">
       <div>
         <h1 class="fresh-page__title">门店设置</h1>
-        <p class="fresh-page__desc">配置小程序门店基础信息、下单结算费用和联系方式。</p>
+        <p class="fresh-page__desc">配置小程序门店信息、结算费用、联系电话和免配送规则。</p>
       </div>
       <div class="settings-actions">
         <ElButton :loading="seeding" @click="handleSeedDemoData">补齐示例数据</ElButton>
@@ -15,15 +15,15 @@
       <template #header>
         <div class="card-header">
           <strong>基础信息</strong>
-          <span>影响小程序门店名称、费用和联系电话。</span>
+          <span>影响小程序门店名称、费用和联系电话，保存后用户端会实时读取。</span>
         </div>
       </template>
-      <ElSkeleton v-if="loading" :rows="7" animated />
-      <ElForm v-else :model="form" label-width="130px" class="settings-form">
+      <ElSkeleton v-if="loading" :rows="9" animated />
+      <ElForm v-else :model="form" label-width="150px" class="settings-form">
         <ElFormItem label="门店名称" required>
           <ElInput v-model.trim="form.storeName" maxlength="30" show-word-limit />
         </ElFormItem>
-        <ElFormItem label="首页Logo">
+        <ElFormItem label="首页 Logo">
           <div class="logo-upload-row">
             <ElImage class="logo-preview" :src="assetUrl(form.logoUrl)" fit="cover">
               <template #error>
@@ -36,26 +36,101 @@
                 accept=".jpg,.jpeg,.png,.webp"
                 :http-request="uploadLogo"
               >
-                <ElButton :loading="uploadingLogo">上传Logo</ElButton>
+                <ElButton :loading="uploadingLogo">上传 Logo</ElButton>
               </ElUpload>
               <p>建议使用 1:1 图片，小程序首页左上角展示。</p>
             </div>
           </div>
         </ElFormItem>
-        <ElFormItem label="起送价（分）" required>
-          <ElInputNumber v-model="form.minOrderAmount" :min="0" class="form-full" />
+        <ElFormItem label="起送价（元）" required>
+          <ElInputNumber
+            :model-value="centToYuan(form.minOrderAmount)"
+            :min="0"
+            :precision="2"
+            :step="1"
+            class="form-full"
+            @update:model-value="(value) => updateAmount('minOrderAmount', value)"
+          />
         </ElFormItem>
-        <ElFormItem label="配送费（分）" required>
-          <ElInputNumber v-model="form.deliveryFee" :min="0" class="form-full" />
+        <ElFormItem label="配送费（元）" required>
+          <ElInputNumber
+            :model-value="centToYuan(form.deliveryFee)"
+            :min="0"
+            :precision="2"
+            :step="0.5"
+            class="form-full"
+            @update:model-value="(value) => updateAmount('deliveryFee', value)"
+          />
         </ElFormItem>
-        <ElFormItem label="包装费（分）" required>
-          <ElInputNumber v-model="form.packageFee" :min="0" class="form-full" />
+        <ElFormItem label="包装费（元）" required>
+          <ElInputNumber
+            :model-value="centToYuan(form.packageFee)"
+            :min="0"
+            :precision="2"
+            :step="0.5"
+            class="form-full"
+            @update:model-value="(value) => updateAmount('packageFee', value)"
+          />
         </ElFormItem>
         <ElFormItem label="营业时间" required>
           <ElInput v-model.trim="form.businessHours" placeholder="例如：08:00-20:00" />
         </ElFormItem>
         <ElFormItem label="联系电话" required>
           <ElInput v-model.trim="form.contactPhone" maxlength="20" />
+        </ElFormItem>
+
+        <ElDivider />
+
+        <ElFormItem label="首单免配送">
+          <ElSwitch
+            v-model="form.firstOrderFreeDelivery"
+            active-text="开启"
+            inactive-text="关闭"
+          />
+          <span class="form-tip">开启后，新用户第一次下单自动减免配送费。</span>
+        </ElFormItem>
+
+        <ElFormItem label="全平台免配送">
+          <div class="campaign-editor">
+            <div class="campaign-create">
+              <ElInput v-model.trim="newCampaign.reason" placeholder="活动原因，例如：开业福利" />
+              <ElDatePicker
+                v-model="newCampaign.range"
+                type="daterange"
+                value-format="YYYY-MM-DD"
+                start-placeholder="开始日期"
+                end-placeholder="结束日期"
+              />
+              <ElButton type="primary" plain @click="addCampaign">新增活动</ElButton>
+            </div>
+            <ElTable
+              :data="form.freeDeliveryCampaigns"
+              border
+              empty-text="暂无全平台免配送活动"
+            >
+              <ElTableColumn prop="reason" label="原因" min-width="160" />
+              <ElTableColumn label="时间范围" min-width="180">
+                <template #default="{ row }">{{ row.startDate }} 至 {{ row.endDate }}</template>
+              </ElTableColumn>
+              <ElTableColumn label="状态" width="110">
+                <template #default="{ row }">
+                  <ElTag :type="row.enabled ? 'success' : 'info'">
+                    {{ row.enabled ? '运行中' : '已终止' }}
+                  </ElTag>
+                </template>
+              </ElTableColumn>
+              <ElTableColumn label="操作" width="180">
+                <template #default="{ row, $index }">
+                  <ElButton size="small" @click="toggleCampaign(row)">
+                    {{ row.enabled ? '手动终止' : '重新开启' }}
+                  </ElButton>
+                  <ElButton size="small" type="danger" plain @click="removeCampaign($index)">
+                    删除
+                  </ElButton>
+                </template>
+              </ElTableColumn>
+            </ElTable>
+          </div>
         </ElFormItem>
       </ElForm>
     </ElCard>
@@ -69,6 +144,7 @@
     seedDemoData,
     updateSettings,
     uploadLogoImage,
+    type FreeDeliveryCampaign,
     type StoreSettings
   } from '@/api/admin'
   import { resolveFreshAssetUrl } from '@/utils/fresh-assets'
@@ -86,14 +162,45 @@
     deliveryFee: 0,
     packageFee: 0,
     businessHours: '',
-    contactPhone: ''
+    contactPhone: '',
+    firstOrderFreeDelivery: false,
+    freeDeliveryCampaigns: []
   })
+  const newCampaign = reactive<{ reason: string; range: string[] }>({
+    reason: '',
+    range: []
+  })
+
+  const centToYuan = (value: number) => Number((Number(value || 0) / 100).toFixed(2))
+  const yuanToCent = (value: number) => Math.max(0, Math.round(Number(value || 0) * 100))
+  const updateAmount = (
+    field: 'minOrderAmount' | 'deliveryFee' | 'packageFee',
+    value: number | undefined
+  ) => {
+    form[field] = yuanToCent(Number(value || 0))
+  }
+
+  const normalizeCampaigns = (items?: FreeDeliveryCampaign[]) =>
+    (items || []).map((item) => ({
+      id: item.id,
+      reason: item.reason || '',
+      startDate: item.startDate || '',
+      endDate: item.endDate || '',
+      enabled: Boolean(item.enabled)
+    }))
+
+  const applySettings = (settingsResult: StoreSettings) => {
+    Object.assign(form, {
+      ...settingsResult,
+      firstOrderFreeDelivery: Boolean(settingsResult.firstOrderFreeDelivery),
+      freeDeliveryCampaigns: normalizeCampaigns(settingsResult.freeDeliveryCampaigns)
+    })
+  }
 
   const loadSettings = async () => {
     loading.value = true
     try {
-      const settingsResult = await getSettings()
-      Object.assign(form, settingsResult)
+      applySettings(await getSettings())
     } catch (error) {
       ElMessage.error(error instanceof Error ? error.message : '门店设置加载失败')
     } finally {
@@ -108,13 +215,12 @@
     try {
       const result = await uploadLogoImage(options.file)
       form.logoUrl = result.url
-      const settingsResult = await updateSettings({ ...form })
-      Object.assign(form, settingsResult)
+      applySettings(await updateSettings({ ...form, freeDeliveryCampaigns: normalizeCampaigns(form.freeDeliveryCampaigns) }))
       options.onSuccess?.(result)
-      ElMessage.success('Logo已上传并保存')
+      ElMessage.success('Logo 已上传并保存')
     } catch (error) {
       options.onError?.(error)
-      ElMessage.error(error instanceof Error ? error.message : 'Logo上传失败')
+      ElMessage.error(error instanceof Error ? error.message : 'Logo 上传失败')
     } finally {
       uploadingLogo.value = false
     }
@@ -124,7 +230,34 @@
     if (!form.storeName) return '请填写门店名称'
     if (!form.businessHours) return '请填写营业时间'
     if (!form.contactPhone) return '请填写联系电话'
+    const invalidCampaign = form.freeDeliveryCampaigns.find(
+      (item) => !item.reason || !item.startDate || !item.endDate
+    )
+    if (invalidCampaign) return '请补全免配送活动的原因和时间'
     return ''
+  }
+
+  const addCampaign = () => {
+    if (!newCampaign.reason || newCampaign.range.length !== 2) {
+      ElMessage.warning('请填写活动原因并选择日期范围')
+      return
+    }
+    form.freeDeliveryCampaigns.push({
+      reason: newCampaign.reason,
+      startDate: newCampaign.range[0],
+      endDate: newCampaign.range[1],
+      enabled: true
+    })
+    newCampaign.reason = ''
+    newCampaign.range = []
+  }
+
+  const toggleCampaign = (row: FreeDeliveryCampaign) => {
+    row.enabled = !row.enabled
+  }
+
+  const removeCampaign = (index: number) => {
+    form.freeDeliveryCampaigns.splice(index, 1)
   }
 
   const saveSettings = async () => {
@@ -135,8 +268,7 @@
     }
     saving.value = true
     try {
-      const settingsResult = await updateSettings(form)
-      Object.assign(form, settingsResult)
+      applySettings(await updateSettings({ ...form, freeDeliveryCampaigns: normalizeCampaigns(form.freeDeliveryCampaigns) }))
       ElMessage.success('门店设置已保存')
     } catch (error) {
       ElMessage.error(error instanceof Error ? error.message : '门店设置保存失败')
@@ -170,7 +302,7 @@
   }
 
   .settings-form {
-    max-width: 620px;
+    max-width: 860px;
   }
 
   .logo-upload-row {
@@ -222,6 +354,32 @@
       color: var(--art-text-gray-600);
       font-size: 13px;
       font-weight: 400;
+    }
+  }
+
+  .form-tip {
+    margin-left: 12px;
+    color: var(--art-gray-600);
+    font-size: 13px;
+  }
+
+  .campaign-editor {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    width: 100%;
+  }
+
+  .campaign-create {
+    display: grid;
+    grid-template-columns: minmax(180px, 1fr) 280px auto;
+    gap: 10px;
+    align-items: center;
+  }
+
+  @media (max-width: 960px) {
+    .campaign-create {
+      grid-template-columns: 1fr;
     }
   }
 </style>

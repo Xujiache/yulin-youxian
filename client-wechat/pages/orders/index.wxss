@@ -156,6 +156,17 @@
   font-weight: 800;
 }
 
+.refund-notice {
+  margin-top: 18rpx;
+  padding: 16rpx 18rpx;
+  color: #9a4a00;
+  font-size: 24rpx;
+  line-height: 34rpx;
+  background: #fff7ed;
+  border: 1rpx solid #ffd8ad;
+  border-radius: 18rpx;
+}
+
 .order-body {
   display: flex;
   gap: 22rpx;

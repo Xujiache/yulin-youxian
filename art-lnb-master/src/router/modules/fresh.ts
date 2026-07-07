@@ -62,6 +62,16 @@ export const freshRoutes: AppRouteRecord = {
       }
     },
     {
+      path: 'stock-overview',
+      name: 'FreshStockOverview',
+      component: '/fresh/stock-overview',
+      meta: {
+        title: '备货总览',
+        icon: 'ri:archive-stack-line',
+        keepAlive: true
+      }
+    },
+    {
       path: 'refunds',
       name: 'FreshRefunds',
       component: '/fresh/refunds',

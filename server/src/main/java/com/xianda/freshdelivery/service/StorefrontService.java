@@ -13,6 +13,7 @@ import com.xianda.freshdelivery.dto.CreateAddressRequest;
 import com.xianda.freshdelivery.dto.CreateOrderRequest;
 import com.xianda.freshdelivery.dto.DeliverySlotDto;
 import com.xianda.freshdelivery.dto.DeliverySlotSaveRequest;
+import com.xianda.freshdelivery.dto.FreeDeliveryCampaignDto;
 import com.xianda.freshdelivery.dto.HomeDto;
 import com.xianda.freshdelivery.dto.OrderDetailDto;
 import com.xianda.freshdelivery.dto.OrderDto;
@@ -27,6 +28,7 @@ import com.xianda.freshdelivery.dto.RefundDto;
 import com.xianda.freshdelivery.dto.RefundNotifyRequest;
 import com.xianda.freshdelivery.dto.RefundRequest;
 import com.xianda.freshdelivery.dto.SettingsDto;
+import com.xianda.freshdelivery.dto.StockOverviewItemDto;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -34,13 +36,16 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.StandardCopyOption;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -72,7 +77,7 @@ public class StorefrontService {
     private final Map<Long, OrderState> orders = new LinkedHashMap<>();
     private final Map<Long, RefundState> refunds = new LinkedHashMap<>();
 
-    private SettingsDto settings = new SettingsDto("禹邻优鲜", "/assets/products/store-logo.png", 0, DEFAULT_DELIVERY_FEE, DEFAULT_PACKAGE_FEE, "08:00-20:00", "400-800-1234");
+    private SettingsDto settings = new SettingsDto("禹邻优鲜", "/assets/products/store-logo.png", 0, DEFAULT_DELIVERY_FEE, DEFAULT_PACKAGE_FEE, "08:00-20:00", "400-800-1234", false, List.of());
 
     @Autowired
     public StorefrontService(
@@ -103,12 +108,13 @@ public class StorefrontService {
                 logoUrlOrDefault(settings.logoUrl()),
                 "今日新鲜到店",
                 "蔬菜水果 · 门店自配送",
+                settings.contactPhone(),
                 banners.stream()
                         .filter(banner -> Boolean.TRUE.equals(banner.enabled()))
                         .sorted(Comparator.comparing(BannerDto::sortOrder))
                         .toList(),
                 categories.stream().limit(5).toList(),
-                products.values().stream().filter(product -> product.status() == 1).limit(4).toList()
+                recommendedProducts()
         );
     }
 
@@ -437,7 +443,9 @@ public class StorefrontService {
                 request.deliveryFee(),
                 request.packageFee(),
                 request.businessHours(),
-                request.contactPhone()
+                request.contactPhone(),
+                Boolean.TRUE.equals(request.firstOrderFreeDelivery()),
+                normalizeFreeDeliveryCampaigns(request.freeDeliveryCampaigns())
         );
         persist();
         return settings;
@@ -463,7 +471,19 @@ public class StorefrontService {
         DeliverySlotDto deliverySlot = availableDeliverySlot(request.deliverySlotId());
         List<OrderItemDto> items = buildOrderItems(request.cartItemIds());
         int productAmount = items.stream().mapToInt(OrderItemDto::amount).sum();
-        return new OrderPreviewDto(address, deliverySlot, items, productAmount, settings.deliveryFee(), settings.packageFee(), productAmount + settings.deliveryFee() + settings.packageFee());
+        DeliveryDiscount deliveryDiscount = deliveryDiscount(LocalDate.now(), currentUserId());
+        int deliveryFee = deliveryDiscount.waived() ? 0 : settings.deliveryFee();
+        return new OrderPreviewDto(
+                address,
+                deliverySlot,
+                items,
+                productAmount,
+                deliveryFee,
+                settings.packageFee(),
+                productAmount + deliveryFee + settings.packageFee(),
+                deliveryDiscount.waived(),
+                deliveryDiscount.notice()
+        );
     }
 
     public synchronized OrderDetailDto createOrder(CreateOrderRequest request) {
@@ -474,7 +494,10 @@ public class StorefrontService {
         }
         preview.items().forEach(this::decreaseStock);
         long id = orderId.incrementAndGet();
-        String orderNo = "XD" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss")) + id;
+        LocalDateTime now = LocalDateTime.now();
+        String createdAt = now.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+        String deliveryDate = deliveryDateForSlot(preview.deliverySlot().label(), now.toLocalDate()).toString();
+        String orderNo = "XD" + now.format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss")) + id;
         OrderState state = new OrderState(
                 id,
                 userId,
@@ -489,7 +512,9 @@ public class StorefrontService {
                 preview.payableAmount(),
                 0,
                 0,
-                request.remark()
+                request.remark(),
+                createdAt,
+                deliveryDate
         );
         orders.put(id, state);
         request.cartItemIds().forEach(cartItems::remove);
@@ -686,22 +711,81 @@ public class StorefrontService {
     }
 
     public synchronized Map<String, Object> adminDashboardSummary() {
-        int todaySalesAmount = orders.values().stream()
+        return adminDashboardSummary(LocalDate.now());
+    }
+
+    public synchronized Map<String, Object> adminDashboardSummary(LocalDate date) {
+        LocalDate targetDate = date == null ? LocalDate.now() : date;
+        List<OrderState> dayOrders = orders.values().stream()
+                .filter(order -> createdDate(order).equals(targetDate))
+                .toList();
+        int todaySalesAmount = dayOrders.stream()
                 .filter(order -> order.paidAmount() > 0)
                 .mapToInt(OrderState::paidAmount)
                 .sum();
-        long pendingOrderCount = orders.values().stream()
+        long pendingOrderCount = dayOrders.stream()
                 .filter(order -> List.of("待支付", "已支付/待接单", "备货中").contains(order.status()))
                 .count();
         long refundPendingCount = refunds.values().stream()
                 .filter(state -> "待审核".equals(state.refund().status()))
+                .filter(state -> createdDate(adminOrderState(state.refund().orderId())).equals(targetDate))
                 .count();
         return Map.of(
-                "todayOrderCount", orders.size(),
+                "date", targetDate.toString(),
+                "todayOrderCount", dayOrders.size(),
                 "todaySalesAmount", todaySalesAmount,
                 "pendingOrderCount", pendingOrderCount,
                 "refundPendingCount", refundPendingCount
         );
+    }
+
+    public synchronized Map<String, Object> adminDashboardExport(LocalDate startDate, LocalDate endDate) {
+        LocalDate start = startDate == null ? LocalDate.MIN : startDate;
+        LocalDate end = endDate == null ? LocalDate.MAX : endDate;
+        if (start.isAfter(end)) {
+            throw new BusinessException(400, "开始日期不能晚于结束日期");
+        }
+        StringBuilder csv = new StringBuilder();
+        csv.append('\uFEFF');
+        csv.append("订单日期,订单编号,订单状态,预约配送,收货人,联系电话,收货地址,商品明细,商品总额(元),配送费(元),包装费(元),应付金额(元),实付金额(元),已退款(元),用户备注\n");
+        orders.values().stream()
+                .filter(order -> {
+                    LocalDate date = createdDate(order);
+                    return !date.isBefore(start) && !date.isAfter(end);
+                })
+                .sorted(Comparator.comparing(this::createdAt).reversed())
+                .forEach(order -> csv.append(csv(orderDateTimeText(order))).append(',')
+                        .append(csv(order.orderNo())).append(',')
+                        .append(csv(order.status())).append(',')
+                        .append(csv(order.deliverySlot())).append(',')
+                        .append(csv(order.address().name())).append(',')
+                        .append(csv(order.address().phone())).append(',')
+                        .append(csv(order.address().locationName() + " " + order.address().detail())).append(',')
+                        .append(csv(orderItemsText(order))).append(',')
+                        .append(yuan(order.productAmount())).append(',')
+                        .append(yuan(order.deliveryFee())).append(',')
+                        .append(yuan(order.packageFee())).append(',')
+                        .append(yuan(order.payableAmount())).append(',')
+                        .append(yuan(order.paidAmount())).append(',')
+                        .append(yuan(order.refundedAmount())).append(',')
+                        .append(csv(order.remark()))
+                        .append('\n'));
+        String filename = "yulin-orders-" + (startDate == null ? "all" : startDate) + "-" + (endDate == null ? "all" : endDate) + ".csv";
+        return Map.of("filename", filename, "content", csv.toString());
+    }
+
+    public synchronized List<StockOverviewItemDto> stockOverview(LocalDate date) {
+        LocalDate targetDate = date == null ? LocalDate.now().plusDays(1) : date;
+        Map<Long, StockAccumulator> stockMap = new LinkedHashMap<>();
+        orders.values().stream()
+                .filter(order -> deliveryDate(order).equals(targetDate))
+                .filter(order -> List.of("已支付/待接单", "备货中", "配送中", "已完成").contains(order.status()))
+                .forEach(order -> order.items().forEach(item -> stockMap
+                        .computeIfAbsent(item.productId(), productId -> new StockAccumulator(item))
+                        .add(order.orderNo(), item)));
+        return stockMap.values().stream()
+                .map(StockAccumulator::toDto)
+                .toList();
     }
 
     public synchronized OrderDetailDto acceptOrder(Long id) {
@@ -855,7 +939,8 @@ public class StorefrontService {
                 request.stepQty(),
                 request.stockQty(),
                 request.badge(),
-                request.status()
+                request.status(),
+                Boolean.TRUE.equals(request.recommended())
         );
     }
 
@@ -872,7 +957,8 @@ public class StorefrontService {
                 product.stepQty(),
                 stockQty,
                 product.badge(),
-                status
+                status,
+                Boolean.TRUE.equals(product.recommended())
         );
     }
 
@@ -1063,6 +1149,7 @@ public class StorefrontService {
     }
 
     private OrderDto toOrderDto(OrderState order) {
+        RefundDto latestRefund = latestRefund(order.id());
         return new OrderDto(
                 order.id(),
                 order.orderNo(),
@@ -1070,11 +1157,15 @@ public class StorefrontService {
                 order.payableAmount(),
                 order.deliverySlot(),
                 "共 " + order.items().size() + " 件商品",
-                order.items().stream().map(OrderItemDto::imageUrl).limit(3).toList()
+                order.items().stream().map(OrderItemDto::imageUrl).limit(3).toList(),
+                orderDateTimeText(order),
+                latestRefund == null ? "" : latestRefund.status(),
+                latestRefund == null ? "" : latestRefund.reason()
         );
     }
 
     private OrderDetailDto toOrderDetailDto(OrderState order) {
+        RefundDto latestRefund = latestRefund(order.id());
         return new OrderDetailDto(
                 order.id(),
                 order.orderNo(),
@@ -1088,7 +1179,10 @@ public class StorefrontService {
                 order.payableAmount(),
                 order.paidAmount(),
                 order.refundedAmount(),
-                order.remark()
+                order.remark(),
+                orderDateTimeText(order),
+                latestRefund == null ? "" : latestRefund.status(),
+                latestRefund == null ? "" : latestRefund.reason()
         );
     }
 
@@ -1097,6 +1191,131 @@ public class StorefrontService {
                 .multiply(quantity)
                 .setScale(0, RoundingMode.HALF_UP)
                 .intValue();
+    }
+
+    private List<ProductDto> recommendedProducts() {
+        return products.values().stream()
+                .filter(product -> product.status() == 1)
+                .filter(product -> Boolean.TRUE.equals(product.recommended()))
+                .toList();
+    }
+
+    private RefundDto latestRefund(Long orderId) {
+        return refunds.values().stream()
+                .map(RefundState::refund)
+                .filter(refund -> refund.orderId().equals(orderId))
+                .max(Comparator.comparing(RefundDto::id))
+                .orElse(null);
+    }
+
+    private List<FreeDeliveryCampaignDto> normalizeFreeDeliveryCampaigns(List<FreeDeliveryCampaignDto> source) {
+        List<FreeDeliveryCampaignDto> result = new ArrayList<>();
+        long index = 1;
+        for (FreeDeliveryCampaignDto item : source == null ? List.<FreeDeliveryCampaignDto>of() : source) {
+            if (item == null || item.startDate() == null || item.startDate().isBlank() || item.endDate() == null || item.endDate().isBlank()) {
+                continue;
+            }
+            LocalDate start = LocalDate.parse(item.startDate());
+            LocalDate end = LocalDate.parse(item.endDate());
+            if (start.isAfter(end)) {
+                throw new BusinessException(400, "免配送开始日期不能晚于结束日期");
+            }
+            Long id = item.id() == null || item.id() <= 0 ? index++ : item.id();
+            result.add(new FreeDeliveryCampaignDto(
+                    id,
+                    item.reason() == null || item.reason().isBlank() ? "平台免配送费" : item.reason().trim(),
+                    start.toString(),
+                    end.toString(),
+                    item.enabled() == null || item.enabled()
+            ));
+            index = Math.max(index, id + 1);
+        }
+        return result;
+    }
+
+    private DeliveryDiscount deliveryDiscount(LocalDate date, Long userId) {
+        if (Boolean.TRUE.equals(settings.firstOrderFreeDelivery()) && !hasPaidOrder(userId)) {
+            return new DeliveryDiscount(true, "新用户首单免配送费");
+        }
+        FreeDeliveryCampaignDto campaign = activeFreeDeliveryCampaign(date);
+        if (campaign != null) {
+            return new DeliveryDiscount(true, campaign.reason());
+        }
+        return new DeliveryDiscount(false, "");
+    }
+
+    private boolean hasPaidOrder(Long userId) {
+        return orders.values().stream()
+                .anyMatch(order -> order.userId().equals(userId) && order.paidAmount() > 0);
+    }
+
+    private FreeDeliveryCampaignDto activeFreeDeliveryCampaign(LocalDate date) {
+        LocalDate targetDate = date == null ? LocalDate.now() : date;
+        return (settings.freeDeliveryCampaigns() == null ? List.<FreeDeliveryCampaignDto>of() : settings.freeDeliveryCampaigns()).stream()
+                .filter(item -> item.enabled() == null || item.enabled())
+                .filter(item -> {
+                    LocalDate start = LocalDate.parse(item.startDate());
+                    LocalDate end = LocalDate.parse(item.endDate());
+                    return !targetDate.isBefore(start) && !targetDate.isAfter(end);
+                })
+                .findFirst()
+                .orElse(null);
+    }
+
+    private LocalDate deliveryDateForSlot(String deliverySlot, LocalDate createdDate) {
+        LocalDate baseDate = createdDate == null ? LocalDate.now() : createdDate;
+        if (deliverySlot != null && deliverySlot.contains("明日")) {
+            return baseDate.plusDays(1);
+        }
+        return baseDate;
+    }
+
+    private LocalDateTime createdAt(OrderState order) {
+        if (order.createdAt() != null && !order.createdAt().isBlank()) {
+            return LocalDateTime.parse(order.createdAt());
+        }
+        return createdAtFromOrderNo(order.orderNo());
+    }
+
+    private LocalDateTime createdAtFromOrderNo(String value) {
+        String orderNo = value == null ? "" : value.replaceAll("\\D", "");
+        if (orderNo.length() >= 14) {
+            return LocalDateTime.parse(orderNo.substring(0, 14), DateTimeFormatter.ofPattern("yyyyMMddHHmmss"));
+        }
+        return LocalDateTime.now();
+    }
+
+    private LocalDate createdDate(OrderState order) {
+        return createdAt(order).toLocalDate();
+    }
+
+    private LocalDate deliveryDate(OrderState order) {
+        if (order.deliveryDate() != null && !order.deliveryDate().isBlank()) {
+            return LocalDate.parse(order.deliveryDate());
+        }
+        return deliveryDateForSlot(order.deliverySlot(), createdDate(order));
+    }
+
+    private String orderDateTimeText(OrderState order) {
+        return createdAt(order).format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+    }
+
+    private String orderItemsText(OrderState order) {
+        return order.items().stream()
+                .map(item -> item.productName() + " " + item.quantity().stripTrailingZeros().toPlainString() + item.saleUnit())
+                .reduce((left, right) -> left + "；" + right)
+                .orElse("");
+    }
+
+    private String csv(String value) {
+        String text = value == null ? "" : value;
+        return "\"" + text.replace("\"", "\"\"") + "\"";
+    }
+
+    private String yuan(Integer amount) {
+        return BigDecimal.valueOf(amount == null ? 0 : amount)
+                .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP)
+                .toPlainString();
     }
 
     private Long currentUserId() {
@@ -1220,7 +1439,9 @@ public class StorefrontService {
                 source.deliveryFee(),
                 source.packageFee(),
                 source.businessHours(),
-                source.contactPhone()
+                source.contactPhone(),
+                Boolean.TRUE.equals(source.firstOrderFreeDelivery()),
+                normalizeFreeDeliveryCampaigns(source.freeDeliveryCampaigns())
         );
     }
 
@@ -1241,18 +1462,18 @@ public class StorefrontService {
     }
 
     private void seedProducts() {
-        putProduct(new ProductDto(101L, 3L, "有机水培西红柿", "自然熟透 沙瓤多汁", "/assets/products/tomato.png", "斤", 399, new BigDecimal("0.5"), new BigDecimal("0.5"), new BigDecimal("32"), "热销", 1));
-        putProduct(new ProductDto(102L, 3L, "本地鲜摘黄瓜", "清脆爽口 今日到店", "/assets/products/cucumber.png", "斤", 292, new BigDecimal("0.5"), new BigDecimal("0.5"), new BigDecimal("26"), "新鲜", 1));
-        putProduct(new ProductDto(103L, 1L, "高山脆甜生菜", "适合沙拉轻食", "/assets/products/lettuce.png", "份", 480, BigDecimal.ONE, BigDecimal.ONE, new BigDecimal("18"), "新鲜直达", 1));
-        putProduct(new ProductDto(104L, 1L, "精选有机菠菜", "营养丰富 无农残", "/assets/products/spinach.png", "份", 550, BigDecimal.ONE, BigDecimal.ONE, new BigDecimal("21"), "今日上新", 1));
-        putProduct(new ProductDto(105L, 2L, "脆甜胡萝卜", "脆甜多汁 适合炖煮", "/assets/products/carrot.png", "斤", 399, new BigDecimal("0.5"), new BigDecimal("0.5"), new BigDecimal("30"), "根茎优选", 1));
-        putProduct(new ProductDto(106L, 5L, "红颜草莓", "酸甜可口 产地直发", "/assets/products/strawberry.png", "盒", 2990, BigDecimal.ONE, BigDecimal.ONE, new BigDecimal("12"), "精选", 1));
-        putProduct(new ProductDto(107L, 1L, "嫩叶小白菜", "口感清甜 适合清炒", "/assets/products/lettuce.png", "斤", 358, new BigDecimal("0.5"), new BigDecimal("0.5"), new BigDecimal("35"), "当日采收", 1));
-        putProduct(new ProductDto(108L, 2L, "本地土豆", "粉糯绵密 炖煮煎炒都合适", "/assets/products/carrot.png", "斤", 260, new BigDecimal("0.5"), new BigDecimal("0.5"), new BigDecimal("48"), null, 1));
-        putProduct(new ProductDto(109L, 4L, "精品香菇", "菌香浓郁 适合煲汤", "/assets/products/spinach.png", "份", 680, BigDecimal.ONE, BigDecimal.ONE, new BigDecimal("16"), "菌菇鲜到", 1));
-        putProduct(new ProductDto(110L, 5L, "应季苹果", "脆甜多汁 家庭装", "/assets/products/strawberry.png", "斤", 699, new BigDecimal("0.5"), new BigDecimal("0.5"), new BigDecimal("40"), "上新榜", 1));
-        putProduct(new ProductDto(111L, 6L, "散养鲜鸡蛋", "壳厚蛋香 每日补货", "/assets/products/hero.png", "份", 1280, BigDecimal.ONE, BigDecimal.ONE, new BigDecimal("24"), "民生", 1));
-        putProduct(new ProductDto(112L, 3L, "紫皮茄子", "肉质细嫩 少籽好炒", "/assets/products/cucumber.png", "斤", 499, new BigDecimal("0.5"), new BigDecimal("0.5"), new BigDecimal("22"), null, 0));
+        putProduct(new ProductDto(101L, 3L, "有机水培西红柿", "自然熟透 沙瓤多汁", "/assets/products/tomato.png", "斤", 399, new BigDecimal("0.5"), new BigDecimal("0.5"), new BigDecimal("32"), "热销", 1, true));
+        putProduct(new ProductDto(102L, 3L, "本地鲜摘黄瓜", "清脆爽口 今日到店", "/assets/products/cucumber.png", "斤", 292, new BigDecimal("0.5"), new BigDecimal("0.5"), new BigDecimal("26"), "新鲜", 1, true));
+        putProduct(new ProductDto(103L, 1L, "高山脆甜生菜", "适合沙拉轻食", "/assets/products/lettuce.png", "份", 480, BigDecimal.ONE, BigDecimal.ONE, new BigDecimal("18"), "新鲜直达", 1, true));
+        putProduct(new ProductDto(104L, 1L, "精选有机菠菜", "营养丰富 无农残", "/assets/products/spinach.png", "份", 550, BigDecimal.ONE, BigDecimal.ONE, new BigDecimal("21"), "今日上新", 1, true));
+        putProduct(new ProductDto(105L, 2L, "脆甜胡萝卜", "脆甜多汁 适合炖煮", "/assets/products/carrot.png", "斤", 399, new BigDecimal("0.5"), new BigDecimal("0.5"), new BigDecimal("30"), "根茎优选", 1, false));
+        putProduct(new ProductDto(106L, 5L, "红颜草莓", "酸甜可口 产地直发", "/assets/products/strawberry.png", "盒", 2990, BigDecimal.ONE, BigDecimal.ONE, new BigDecimal("12"), "精选", 1, false));
+        putProduct(new ProductDto(107L, 1L, "嫩叶小白菜", "口感清甜 适合清炒", "/assets/products/lettuce.png", "斤", 358, new BigDecimal("0.5"), new BigDecimal("0.5"), new BigDecimal("35"), "当日采收", 1, false));
+        putProduct(new ProductDto(108L, 2L, "本地土豆", "粉糯绵密 炖煮煎炒都合适", "/assets/products/carrot.png", "斤", 260, new BigDecimal("0.5"), new BigDecimal("0.5"), new BigDecimal("48"), null, 1, false));
+        putProduct(new ProductDto(109L, 4L, "精品香菇", "菌香浓郁 适合煲汤", "/assets/products/spinach.png", "份", 680, BigDecimal.ONE, BigDecimal.ONE, new BigDecimal("16"), "菌菇鲜到", 1, false));
+        putProduct(new ProductDto(110L, 5L, "应季苹果", "脆甜多汁 家庭装", "/assets/products/strawberry.png", "斤", 699, new BigDecimal("0.5"), new BigDecimal("0.5"), new BigDecimal("40"), "上新榜", 1, false));
+        putProduct(new ProductDto(111L, 6L, "散养鲜鸡蛋", "壳厚蛋香 每日补货", "/assets/products/hero.png", "份", 1280, BigDecimal.ONE, BigDecimal.ONE, new BigDecimal("24"), "民生", 1, false));
+        putProduct(new ProductDto(112L, 3L, "紫皮茄子", "肉质细嫩 少籽好炒", "/assets/products/cucumber.png", "斤", 499, new BigDecimal("0.5"), new BigDecimal("0.5"), new BigDecimal("22"), null, 0, false));
     }
 
     private void putProduct(ProductDto product) {
@@ -1341,7 +1562,9 @@ public class StorefrontService {
                 payableAmount,
                 paid ? payableAmount : 0,
                 refundedAmount,
-                remark
+                remark,
+                createdAtFromOrderNo(orderNo).format(DateTimeFormatter.ISO_LOCAL_DATE_TIME),
+                deliveryDateForSlot(deliverySlot, createdAtFromOrderNo(orderNo).toLocalDate()).toString()
         ));
     }
 
@@ -1386,6 +1609,48 @@ public class StorefrontService {
         }
     }
 
+    private record DeliveryDiscount(
+            boolean waived,
+            String notice
+    ) {
+    }
+
+    private static class StockAccumulator {
+        private final Long productId;
+        private final String productName;
+        private final String imageUrl;
+        private final String saleUnit;
+        private BigDecimal quantity = BigDecimal.ZERO;
+        private int amount = 0;
+        private final Set<String> orderNos = new HashSet<>();
+
+        StockAccumulator(OrderItemDto item) {
+            this.productId = item.productId();
+            this.productName = item.productName();
+            this.imageUrl = item.imageUrl();
+            this.saleUnit = item.saleUnit();
+        }
+
+        void add(String orderNo, OrderItemDto item) {
+            quantity = quantity.add(item.quantity());
+            amount += item.amount();
+            orderNos.add(orderNo);
+        }
+
+        StockOverviewItemDto toDto() {
+            return new StockOverviewItemDto(
+                    productId,
+                    productName,
+                    imageUrl,
+                    saleUnit,
+                    quantity,
+                    orderNos.size(),
+                    amount,
+                    new ArrayList<>(orderNos)
+            );
+        }
+    }
+
     public record OrderState(
             Long id,
             Long userId,
@@ -1400,18 +1665,20 @@ public class StorefrontService {
             Integer payableAmount,
             Integer paidAmount,
             Integer refundedAmount,
-            String remark
+            String remark,
+            String createdAt,
+            String deliveryDate
     ) {
         OrderState withStatus(String nextStatus) {
-            return new OrderState(id, userId, orderNo, nextStatus, address, deliverySlot, items, productAmount, deliveryFee, packageFee, payableAmount, paidAmount, refundedAmount, remark);
+            return new OrderState(id, userId, orderNo, nextStatus, address, deliverySlot, items, productAmount, deliveryFee, packageFee, payableAmount, paidAmount, refundedAmount, remark, createdAt, deliveryDate);
         }
 
         OrderState withPaidAmount(Integer nextPaidAmount) {
-            return new OrderState(id, userId, orderNo, status, address, deliverySlot, items, productAmount, deliveryFee, packageFee, payableAmount, nextPaidAmount, refundedAmount, remark);
+            return new OrderState(id, userId, orderNo, status, address, deliverySlot, items, productAmount, deliveryFee, packageFee, payableAmount, nextPaidAmount, refundedAmount, remark, createdAt, deliveryDate);
         }
 
         OrderState withRefundedAmount(Integer nextRefundedAmount) {
-            return new OrderState(id, userId, orderNo, status, address, deliverySlot, items, productAmount, deliveryFee, packageFee, payableAmount, paidAmount, nextRefundedAmount, remark);
+            return new OrderState(id, userId, orderNo, status, address, deliverySlot, items, productAmount, deliveryFee, packageFee, payableAmount, paidAmount, nextRefundedAmount, remark, createdAt, deliveryDate);
         }
     }
 }

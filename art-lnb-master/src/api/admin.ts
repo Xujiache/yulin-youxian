@@ -14,6 +14,11 @@ export interface DashboardSummary {
   refundPendingCount: number
 }
 
+export interface DashboardExport {
+  filename: string
+  content: string
+}
+
 export interface Category {
   id?: number
   name: string
@@ -33,6 +38,7 @@ export interface Product {
   stockQty: number
   badge: string
   status: number
+  recommended: boolean
 }
 
 export interface OrderSummary {
@@ -81,6 +87,9 @@ export interface OrderDetail {
   paidAmount: number
   refundedAmount: number
   remark: string
+  createdAt?: string
+  latestRefundStatus?: string
+  latestRefundReason?: string
 }
 
 export interface Refund {
@@ -108,6 +117,27 @@ export interface StoreSettings {
   packageFee: number
   businessHours: string
   contactPhone: string
+  firstOrderFreeDelivery: boolean
+  freeDeliveryCampaigns: FreeDeliveryCampaign[]
+}
+
+export interface FreeDeliveryCampaign {
+  id?: number
+  reason: string
+  startDate: string
+  endDate: string
+  enabled: boolean
+}
+
+export interface StockOverviewItem {
+  productId: number
+  productName: string
+  imageUrl: string
+  saleUnit: string
+  quantity: number
+  orderCount: number
+  amount: number
+  orderNos: string[]
 }
 
 export interface Banner {
@@ -131,9 +161,20 @@ const deliverySlotPayload = (data: DeliverySlot) => {
   return payload
 }
 
-export function getDashboardSummary() {
+export function getDashboardSummary(date?: string) {
   return request.get<DashboardSummary>({
-    url: '/api/admin/dashboard/summary'
+    url: '/api/admin/dashboard/summary',
+    params: date ? { date } : undefined
+  })
+}
+
+export function exportDashboard(startDate?: string, endDate?: string) {
+  return request.get<DashboardExport>({
+    url: '/api/admin/dashboard/export',
+    params: {
+      ...(startDate ? { startDate } : {}),
+      ...(endDate ? { endDate } : {})
+    }
   })
 }
 
@@ -324,6 +365,13 @@ export function updateSettings(data: StoreSettings) {
   return request.put<StoreSettings>({
     url: '/api/admin/settings',
     data
+  })
+}
+
+export function getStockOverview(date?: string) {
+  return request.get<StockOverviewItem[]>({
+    url: '/api/admin/stock/overview',
+    params: date ? { date } : undefined
   })
 }
 

@@ -3,7 +3,7 @@
     <div class="fresh-page__head">
       <div>
         <h1 class="fresh-page__title">商品管理</h1>
-        <p class="fresh-page__desc">按重量、起购量、步进值、库存和上下架状态维护商品。</p>
+        <p class="fresh-page__desc">维护商品图片、价格、库存、上下架状态和首页今日推荐。</p>
       </div>
       <ElButton type="primary" @click="openCreate">新增商品</ElButton>
     </div>
@@ -60,6 +60,13 @@
         <ElTableColumn label="价格" width="130">
           <template #default="{ row }">
             <span class="money">{{ money(row.unitPrice) }}/{{ row.saleUnit }}</span>
+          </template>
+        </ElTableColumn>
+        <ElTableColumn label="首页推荐" width="110">
+          <template #default="{ row }">
+            <ElTag :type="row.recommended ? 'success' : 'info'" effect="light">
+              {{ row.recommended ? '推荐' : '普通' }}
+            </ElTag>
           </template>
         </ElTableColumn>
         <ElTableColumn label="重量规则" min-width="170">
@@ -137,8 +144,15 @@
         <ElFormItem label="销售单位" required>
           <ElInput v-model.trim="form.saleUnit" placeholder="斤、份、盒等" />
         </ElFormItem>
-        <ElFormItem label="单价（分）" required>
-          <ElInputNumber v-model="form.unitPrice" :min="1" class="form-full" />
+        <ElFormItem label="单价（元）" required>
+          <ElInputNumber
+            :model-value="centToYuan(form.unitPrice)"
+            :min="0.01"
+            :precision="2"
+            :step="0.1"
+            class="form-full"
+            @update:model-value="updateUnitPrice"
+          />
         </ElFormItem>
         <ElFormItem label="起购重量" required>
           <ElInputNumber v-model="form.minPurchaseQty" :min="0.001" :step="0.5" class="form-full" />
@@ -151,6 +165,9 @@
         </ElFormItem>
         <ElFormItem label="商品标签">
           <ElInput v-model.trim="form.badge" placeholder="热销、新鲜、今日到店等" />
+        </ElFormItem>
+        <ElFormItem label="首页今日推荐">
+          <ElSwitch v-model="form.recommended" active-text="展示" inactive-text="不展示" />
         </ElFormItem>
         <ElFormItem label="商品状态">
           <ElSwitch v-model="form.status" :active-value="1" :inactive-value="0" />
@@ -200,19 +217,25 @@
       subtitle: '',
       imageUrl: '',
       saleUnit: '斤',
-      unitPrice: 1,
+      unitPrice: 100,
       minPurchaseQty: 0.5,
       stepQty: 0.5,
       stockQty: 0,
       badge: '',
-      status: 1
+      status: 1,
+      recommended: false
     }
   }
 
-  const money = (value: number) => `￥${(Number(value || 0) / 100).toFixed(2)}`
+  const centToYuan = (value: number) => Number((Number(value || 0) / 100).toFixed(2))
+  const yuanToCent = (value: number) => Math.max(1, Math.round(Number(value || 0) * 100))
+  const updateUnitPrice = (value: number | undefined) => {
+    form.unitPrice = yuanToCent(Number(value || 0))
+  }
+  const money = (value: number) => `￥${centToYuan(value).toFixed(2)}`
   const imageUrl = resolveFreshAssetUrl
 
-  const categoryName = (categoryId: number) =>
+  const categoryName = (categoryId: number | null) =>
     categories.value.find((item) => item.id === categoryId)?.name || '未分类'
 
   const loadCategories = async () => {
@@ -223,7 +246,10 @@
     loading.value = true
     try {
       const result = await getProducts({ categoryId: query.categoryId })
-      products.value = result.items || []
+      products.value = (result.items || []).map((item) => ({
+        ...item,
+        recommended: Boolean(item.recommended)
+      }))
     } catch (error) {
       ElMessage.error(error instanceof Error ? error.message : '商品加载失败')
     } finally {
@@ -242,7 +268,7 @@
   }
 
   const openEdit = (row: Product) => {
-    Object.assign(form, emptyForm(), row)
+    Object.assign(form, emptyForm(), row, { recommended: Boolean(row.recommended) })
     dialogVisible.value = true
   }
 

@@ -16,7 +16,7 @@ class WechatPayClientTests {
     @Test
     void developmentModeReturnsMiniProgramPaymentParams() {
         WechatPayClient client = newClient();
-        OrderDetailDto order = new OrderDetailDto(1L, "XD20260705001", "待支付", null, "今日 14:00-16:00", List.of(), 0, 0, 0, 100, 0, 0, "");
+        OrderDetailDto order = new OrderDetailDto(1L, "XD20260705001", "待支付", null, "今日 14:00-16:00", List.of(), 0, 0, 0, 100, 0, 0, "", "", "", "");
 
         PaymentDto payment = client.createJsapiPayment(order, "dev_openid");
 

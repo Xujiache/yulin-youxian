@@ -9,7 +9,8 @@ const EMPTY_AMOUNT = {
   productAmountText: "0.00",
   deliveryFeeText: "0.00",
   packageFeeText: "0.00",
-  totalText: "0.00"
+  totalText: "0.00",
+  deliveryFeeNotice: ""
 };
 
 function requestWechatPayment(payment) {
@@ -40,6 +41,7 @@ Page({
     deliveryFeeText: "5.00",
     packageFeeText: "1.00",
     totalText: "0.00",
+    deliveryFeeNotice: "",
     cartItemIds: [],
     loadError: "",
     payDisabled: true
@@ -144,6 +146,7 @@ Page({
         deliveryFeeText: yuan(preview.deliveryFee),
         packageFeeText: yuan(preview.packageFee),
         totalText: yuan(preview.payableAmount),
+        deliveryFeeNotice: preview.deliveryFeeNotice || "",
         payDisabled: false,
         loadError: ""
       });
@@ -191,6 +194,7 @@ Page({
         deliveryFeeText: yuan(preview.deliveryFee),
         packageFeeText: yuan(preview.packageFee),
         totalText: yuan(preview.payableAmount),
+        deliveryFeeNotice: preview.deliveryFeeNotice || "",
         payDisabled: false,
         loadError: ""
       });

@@ -4,36 +4,50 @@ const { getOrders } = require("../../api/orders");
 
 const TABS = ["全部", "待支付", "待接单", "备货中", "配送中", "已完成", "售后"];
 
-function primaryActionText(status) {
-  if (status === "待支付") {
+function isAfterSaleStatus(status) {
+  return ["退款中", "部分退款", "已退款", "已拒绝"].includes(status);
+}
+
+function primaryActionText(order) {
+  if (order.latestRefundStatus === "已拒绝") {
+    return "查看拒绝原因";
+  }
+  if (order.status === "待支付") {
     return "去支付";
   }
-  if (["退款中", "部分退款", "已退款", "已拒绝"].includes(status)) {
+  if (isAfterSaleStatus(order.status)) {
     return "查看售后";
   }
-  if (status === "已完成") {
+  if (order.status === "已完成") {
     return "申请售后";
   }
-  if (["备货中", "配送中"].includes(status)) {
+  if (["备货中", "配送中"].includes(order.status)) {
     return "查看进度";
   }
   return "查看详情";
 }
 
-function secondaryActionText(status) {
-  if (status === "待支付") {
+function secondaryActionText(order) {
+  if (order.status === "待支付") {
     return "取消订单";
   }
-  if (["待接单", "备货中", "配送中"].includes(status)) {
+  if (["待接单", "备货中", "配送中"].includes(order.status)) {
     return "联系客服";
   }
-  if (["退款中", "部分退款", "已退款", "已拒绝"].includes(status)) {
+  if (isAfterSaleStatus(order.status)) {
     return "订单详情";
   }
-  if (status === "已完成") {
+  if (order.status === "已完成") {
     return "再来一单";
   }
   return "订单详情";
+}
+
+function refundNotice(order) {
+  if (order.latestRefundStatus !== "已拒绝") {
+    return "";
+  }
+  return `退款申请未通过：${order.latestRefundReason || "请联系门店客服了解原因"}`;
 }
 
 Page({
@@ -90,8 +104,9 @@ Page({
         orders: remoteOrders.map((item) => ({
           ...item,
           totalText: yuan(item.totalAmount),
-          primaryActionText: primaryActionText(item.status),
-          secondaryActionText: secondaryActionText(item.status)
+          refundNotice: refundNotice(item),
+          primaryActionText: primaryActionText(item),
+          secondaryActionText: secondaryActionText(item)
         })),
         emptyTitle: status === "全部" ? "还没有下过单" : `暂无${status}订单`,
         emptyDesc: status === "全部"

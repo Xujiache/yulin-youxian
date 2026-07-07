@@ -17,6 +17,7 @@ public record ProductSaveRequest(
         @NotNull @DecimalMin("0.001") BigDecimal stepQty,
         @NotNull @DecimalMin("0") BigDecimal stockQty,
         String badge,
-        @NotNull Integer status
+        @NotNull Integer status,
+        Boolean recommended
 ) {
 }

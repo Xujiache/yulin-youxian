@@ -9,6 +9,8 @@ public record OrderPreviewDto(
         Integer productAmount,
         Integer deliveryFee,
         Integer packageFee,
-        Integer payableAmount
+        Integer payableAmount,
+        Boolean deliveryFeeWaived,
+        String deliveryFeeNotice
 ) {
 }

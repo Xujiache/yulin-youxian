@@ -45,6 +45,9 @@
         <text>订单号：{{item.orderNo}}</text>
         <text class="order-status">{{item.status}}</text>
       </view>
+      <view wx:if="{{item.refundNotice}}" class="refund-notice">
+        <text>{{item.refundNotice}}</text>
+      </view>
       <view class="order-body">
         <view class="thumbs">
           <image wx:for="{{item.images}}" wx:key="*this" class="thumb" src="{{item}}" mode="aspectFill" />
@@ -52,7 +55,7 @@
         <view class="order-info">
           <text>{{item.summary}}</text>
           <text>预约配送：{{item.deliverySlot}}</text>
-          <text class="order-total">合计：¥{{item.totalText}}</text>
+          <text class="order-total">合计：￥{{item.totalText}}</text>
         </view>
       </view>
       <view wx:if="{{item.primaryActionText || item.secondaryActionText}}" class="order-actions">

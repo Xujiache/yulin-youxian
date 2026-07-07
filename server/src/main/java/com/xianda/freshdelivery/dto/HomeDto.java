@@ -7,6 +7,7 @@ public record HomeDto(
         String logoUrl,
         String bannerTitle,
         String bannerSubtitle,
+        String contactPhone,
         List<BannerDto> banners,
         List<CategoryDto> categories,
         List<ProductDto> recommendedProducts

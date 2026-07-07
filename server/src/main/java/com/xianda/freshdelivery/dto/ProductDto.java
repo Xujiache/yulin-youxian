@@ -14,6 +14,7 @@ public record ProductDto(
         BigDecimal stepQty,
         BigDecimal stockQty,
         String badge,
-        Integer status
+        Integer status,
+        Boolean recommended
 ) {
 }

@@ -1,21 +1,38 @@
 const { yuan } = require("../../utils/format");
+const { getHome } = require("../../api/catalog");
 const { getOrder } = require("../../api/orders");
 
-const CONTACT_PHONE = "400-800-1234";
+const DEFAULT_CONTACT_PHONE = "400-800-1234";
+
+function buildRefundNotice(order) {
+  if (!order || order.latestRefundStatus !== "已拒绝") {
+    return "";
+  }
+  return `退款申请未通过：${order.latestRefundReason || "请联系门店客服了解原因"}`;
+}
 
 Page({
   data: {
     loading: true,
-    address: null,
+    address: {},
     items: [],
     order: null,
     orderId: null,
     orderNo: "",
     statusText: "",
-    totalText: "0.00"
+    deliverySlotText: "",
+    productAmountText: "0.00",
+    deliveryFeeText: "0.00",
+    packageFeeText: "0.00",
+    payableText: "0.00",
+    refundedText: "0.00",
+    hasRefundedAmount: false,
+    refundNotice: "",
+    contactPhone: DEFAULT_CONTACT_PHONE
   },
 
   async onLoad(options) {
+    this.loadContactPhone();
     const id = Number(options.id || 0);
     if (!id) {
       this.setData({ loading: false });
@@ -29,12 +46,19 @@ Page({
         orderId: order.id,
         orderNo: order.orderNo,
         statusText: order.status,
-        address: order.address,
+        address: order.address || {},
+        deliverySlotText: order.deliverySlot || "",
         items: (order.items || []).map((item) => ({
           ...item,
           amountText: yuan(item.amount)
         })),
-        totalText: yuan(order.payableAmount)
+        productAmountText: yuan(order.productAmount),
+        deliveryFeeText: yuan(order.deliveryFee),
+        packageFeeText: yuan(order.packageFee),
+        payableText: yuan(order.payableAmount),
+        refundedText: yuan(order.refundedAmount),
+        hasRefundedAmount: Number(order.refundedAmount || 0) > 0,
+        refundNotice: buildRefundNotice(order)
       });
       return;
     } catch {
@@ -42,6 +66,13 @@ Page({
     } finally {
       this.setData({ loading: false });
     }
+  },
+
+  async loadContactPhone() {
+    try {
+      const home = await getHome();
+      this.setData({ contactPhone: home.contactPhone || DEFAULT_CONTACT_PHONE });
+    } catch {}
   },
 
   handleRefund() {
@@ -54,9 +85,10 @@ Page({
   },
 
   handleService() {
+    const phone = this.data.contactPhone || DEFAULT_CONTACT_PHONE;
     wx.showModal({
       title: "联系客服",
-      content: `禹邻优鲜客服电话：${CONTACT_PHONE}`,
+      content: `禹邻优鲜客服电话：${phone}`,
       confirmText: "拨打电话",
       cancelText: "取消",
       success(result) {
@@ -64,7 +96,7 @@ Page({
           return;
         }
         wx.makePhoneCall({
-          phoneNumber: CONTACT_PHONE,
+          phoneNumber: phone,
           fail() {
             wx.showToast({ title: "拨号失败，请稍后重试", icon: "none" });
           }
