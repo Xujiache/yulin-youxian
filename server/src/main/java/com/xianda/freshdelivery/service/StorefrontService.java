@@ -385,6 +385,12 @@ public class StorefrontService {
         return new ArrayList<>(deliverySlots.values());
     }
 
+    public synchronized List<DeliverySlotDto> availableDeliverySlots() {
+        return deliverySlots.values().stream()
+                .filter(DeliverySlotDto::available)
+                .toList();
+    }
+
     public synchronized DeliverySlotDto createDeliverySlot(DeliverySlotSaveRequest request) {
         long id = deliverySlotId.incrementAndGet();
         DeliverySlotDto slot = new DeliverySlotDto(id, request.label(), request.maxOrders(), request.available());
@@ -394,7 +400,7 @@ public class StorefrontService {
     }
 
     public synchronized DeliverySlotDto updateDeliverySlot(Long id, DeliverySlotSaveRequest request) {
-        deliverySlot(id);
+        existingDeliverySlot(id);
         DeliverySlotDto slot = new DeliverySlotDto(id, request.label(), request.maxOrders(), request.available());
         deliverySlots.put(id, slot);
         persist();
@@ -402,7 +408,7 @@ public class StorefrontService {
     }
 
     public synchronized DeliverySlotDto updateDeliverySlotStatus(Long id, boolean available) {
-        DeliverySlotDto current = deliverySlot(id);
+        DeliverySlotDto current = existingDeliverySlot(id);
         DeliverySlotDto slot = new DeliverySlotDto(id, current.label(), current.maxOrders(), available);
         deliverySlots.put(id, slot);
         persist();
@@ -410,7 +416,7 @@ public class StorefrontService {
     }
 
     public synchronized void deleteDeliverySlot(Long id) {
-        deliverySlot(id);
+        existingDeliverySlot(id);
         boolean used = orders.values().stream().anyMatch(order -> order.deliverySlot().equals(deliverySlots.get(id).label()));
         if (used) {
             throw new BusinessException(409, "时间段已有订单记录，不能删除");
@@ -454,7 +460,7 @@ public class StorefrontService {
 
     public synchronized OrderPreviewDto preview(OrderPreviewRequest request) {
         AddressDto address = address(request.addressId());
-        DeliverySlotDto deliverySlot = deliverySlot(request.deliverySlotId());
+        DeliverySlotDto deliverySlot = availableDeliverySlot(request.deliverySlotId());
         List<OrderItemDto> items = buildOrderItems(request.cartItemIds());
         int productAmount = items.stream().mapToInt(OrderItemDto::amount).sum();
         return new OrderPreviewDto(address, deliverySlot, items, productAmount, settings.deliveryFee(), settings.packageFee(), productAmount + settings.deliveryFee() + settings.packageFee());
@@ -943,9 +949,17 @@ public class StorefrontService {
         return state;
     }
 
-    private DeliverySlotDto deliverySlot(Long id) {
+    private DeliverySlotDto existingDeliverySlot(Long id) {
         DeliverySlotDto slot = deliverySlots.get(id);
-        if (slot == null || !slot.available()) {
+        if (slot == null) {
+            throw new BusinessException(404, "预约配送时间不存在");
+        }
+        return slot;
+    }
+
+    private DeliverySlotDto availableDeliverySlot(Long id) {
+        DeliverySlotDto slot = existingDeliverySlot(id);
+        if (!slot.available()) {
             throw new BusinessException(404, "预约配送时间不可用");
         }
         return slot;

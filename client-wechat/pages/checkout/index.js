@@ -92,12 +92,13 @@ Page({
       const address = (storedAddress && storedAddress.id)
         ? storedAddress
         : remoteAddresses.find((item) => item.isDefault) || remoteAddresses[0];
-      const slot = remoteSlots[0];
+      const availableSlots = (remoteSlots || []).filter((item) => item && item.available !== false);
+      const slot = availableSlots[0];
       const cartItemIds = selectedItems.map((item) => item.id);
       if (!cartItemIds.length) {
         this.setData({
           address: address || null,
-          slots: remoteSlots,
+          slots: availableSlots,
           items: [],
           cartItemIds: [],
           payDisabled: true,
@@ -113,6 +114,15 @@ Page({
         return;
       }
       if (!slot) {
+        this.setData({
+          address: address || null,
+          slots: [],
+          items: [],
+          cartItemIds,
+          payDisabled: true,
+          loadError: "暂无可预约配送时间",
+          ...EMPTY_AMOUNT
+        });
         wx.showToast({ title: "暂无可预约配送时间", icon: "none" });
         return;
       }
@@ -123,7 +133,7 @@ Page({
       });
       this.setData({
         address: preview.address,
-        slots: remoteSlots,
+        slots: availableSlots,
         activeSlotId: slot.id,
         items: preview.items.map((item) => ({
           ...item,

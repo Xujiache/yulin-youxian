@@ -19,6 +19,6 @@ public class WxDeliveryController {
 
     @GetMapping
     public ApiResponse<List<DeliverySlotDto>> deliverySlots() {
-        return ApiResponse.ok(storefrontService.deliverySlots());
+        return ApiResponse.ok(storefrontService.availableDeliverySlots());
     }
 }
