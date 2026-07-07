@@ -108,8 +108,10 @@
     try {
       const result = await uploadLogoImage(options.file)
       form.logoUrl = result.url
+      const settingsResult = await updateSettings({ ...form })
+      Object.assign(form, settingsResult)
       options.onSuccess?.(result)
-      ElMessage.success('Logo已上传')
+      ElMessage.success('Logo已上传并保存')
     } catch (error) {
       options.onError?.(error)
       ElMessage.error(error instanceof Error ? error.message : 'Logo上传失败')
