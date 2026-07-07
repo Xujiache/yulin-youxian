@@ -10,54 +10,36 @@
     </view>
   </view>
 
-  <view class="home-stage">
-    <view class="search-card" bindtap="goSearch">
-      <image class="search-icon" src="/assets/icons/search.svg" mode="aspectFit" />
-      <text class="search-placeholder">搜索蔬菜、水果、生鲜商品</text>
-      <button class="search-button" catchtap="goSearch">搜索</button>
-    </view>
-
-    <view class="service-strip">
-      <view class="service-item">
-        <text class="service-dot"></text>
-        <text>门店自配</text>
-      </view>
-      <view class="service-item">
-        <text class="service-dot"></text>
-        <text>预约送达</text>
-      </view>
-      <view class="service-item">
-        <text class="service-dot"></text>
-        <text>微信支付</text>
-      </view>
-    </view>
-
-    <swiper
-      class="hero-swiper"
-      indicator-dots="{{banners.length > 1}}"
-      autoplay="{{banners.length > 1}}"
-      circular="{{banners.length > 1}}"
-      interval="3600"
-      duration="420"
-    >
-      <swiper-item
-        wx:for="{{banners}}"
-        wx:key="id"
-        data-link-type="{{item.linkType}}"
-        data-link-target="{{item.linkTarget}}"
-        bindtap="handleBannerTap"
-      >
-        <view class="hero card">
-          <image class="hero-image" src="{{item.imageUrl}}" mode="aspectFill" />
-          <view class="hero-mask">
-            <text class="hero-kicker">禹邻优鲜</text>
-            <text class="hero-title">{{item.title}}</text>
-            <text class="hero-subtitle">{{item.subtitle}}</text>
-          </view>
-        </view>
-      </swiper-item>
-    </swiper>
+  <view class="search-card" bindtap="goSearch">
+    <image class="search-icon" src="/assets/icons/search.svg" mode="aspectFit" />
+    <text class="search-placeholder">搜索蔬菜、水果、生鲜商品</text>
+    <button class="search-button" catchtap="goSearch">搜索</button>
   </view>
+
+  <swiper
+    class="hero-swiper"
+    indicator-dots="{{banners.length > 1}}"
+    autoplay="{{banners.length > 1}}"
+    circular="{{banners.length > 1}}"
+    interval="3600"
+    duration="420"
+  >
+    <swiper-item
+      wx:for="{{banners}}"
+      wx:key="id"
+      data-link-type="{{item.linkType}}"
+      data-link-target="{{item.linkTarget}}"
+      bindtap="handleBannerTap"
+    >
+      <view class="hero">
+        <image class="hero-image" src="{{item.imageUrl}}" mode="aspectFill" />
+        <view class="hero-copy">
+          <text class="hero-title">{{item.title}}</text>
+          <text class="hero-subtitle">{{item.subtitle}}</text>
+        </view>
+      </view>
+    </swiper-item>
+  </swiper>
 
   <view class="category-grid">
     <view
@@ -77,7 +59,6 @@
   <view class="section-head">
     <view>
       <text class="section-title">今日推荐</text>
-      <text class="section-subtitle">门店精选，当日新鲜</text>
     </view>
     <view class="section-more">
       <text>更多</text>
