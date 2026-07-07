@@ -29,6 +29,26 @@ Page({
     });
   },
 
+  onShareAppMessage() {
+    const product = this.data.product || {};
+    const productId = product.id || "";
+    return {
+      title: product.name ? `禹邻优鲜｜${product.name}` : "禹邻优鲜",
+      path: `/pages/product-detail/index?id=${productId}`,
+      imageUrl: product.image || ""
+    };
+  },
+
+  onShareTimeline() {
+    const product = this.data.product || {};
+    const productId = product.id || "";
+    return {
+      title: product.name ? `禹邻优鲜｜${product.name}` : "禹邻优鲜",
+      query: productId ? `id=${productId}` : "",
+      imageUrl: product.image || ""
+    };
+  },
+
   handleQuantityChange(event) {
     const quantity = event.detail.value;
     this.setData({

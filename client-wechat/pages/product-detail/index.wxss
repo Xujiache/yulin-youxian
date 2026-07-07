@@ -76,11 +76,20 @@
   justify-content: center;
   min-width: 72rpx;
   height: 48rpx;
+  padding: 0 18rpx;
+  margin: 0;
+  box-sizing: border-box;
   color: #007a3d;
   font-size: 24rpx;
   font-weight: 600;
+  line-height: 48rpx;
   background: #e8f7ee;
+  border: 0;
   border-radius: 999rpx;
+}
+
+.share::after {
+  border: 0;
 }
 
 .product-hero {

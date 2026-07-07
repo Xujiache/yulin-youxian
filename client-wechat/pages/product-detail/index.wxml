@@ -5,7 +5,7 @@
       <image class="back-icon" src="/assets/icons/back-green.svg" mode="aspectFit" />
     </view>
     <text class="title">商品详情</text>
-    <text class="share">分享</text>
+    <button class="share" open-type="share">分享</button>
   </view>
 
   <image class="product-hero" src="{{product.image}}" mode="aspectFill" />
