@@ -74,9 +74,11 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  min-width: 72rpx;
+  width: 76rpx;
+  min-width: 0;
+  max-width: 76rpx;
   height: 48rpx;
-  padding: 0 18rpx;
+  padding: 0;
   margin: 0;
   box-sizing: border-box;
   color: #007a3d;
