@@ -71,6 +71,7 @@
     uploadLogoImage,
     type StoreSettings
   } from '@/api/admin'
+  import { resolveFreshAssetUrl } from '@/utils/fresh-assets'
 
   defineOptions({ name: 'FreshSettings' })
 
@@ -100,13 +101,7 @@
     }
   }
 
-  const assetUrl = (url: string) => {
-    if (!url || /^https?:\/\//.test(url)) return url
-    if (url.startsWith('/assets/') || url.startsWith('/uploads/')) {
-      return `${import.meta.env.VITE_API_URL}${url}`
-    }
-    return url
-  }
+  const assetUrl = resolveFreshAssetUrl
 
   const uploadLogo = async (options: any) => {
     uploadingLogo.value = true

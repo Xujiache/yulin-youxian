@@ -178,6 +178,7 @@
     type Category,
     type Product
   } from '@/api/admin'
+  import { resolveFreshAssetUrl } from '@/utils/fresh-assets'
 
   defineOptions({ name: 'FreshProducts' })
 
@@ -209,7 +210,7 @@
   }
 
   const money = (value: number) => `￥${(Number(value || 0) / 100).toFixed(2)}`
-  const imageUrl = (url: string) => url
+  const imageUrl = resolveFreshAssetUrl
 
   const categoryName = (categoryId: number) =>
     categories.value.find((item) => item.id === categoryId)?.name || '未分类'
