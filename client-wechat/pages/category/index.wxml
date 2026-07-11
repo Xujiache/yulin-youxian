@@ -1,4 +1,4 @@
-<view class="category-page">
+<view class="category-page {{glassMode ? 'glass-mode' : ''}}">
   <skeleton wx:if="{{loading}}" type="category" has-tabbar="{{true}}" />
   <view class="page-header">
     <text class="page-title">禹邻优鲜</text>
@@ -31,6 +31,23 @@
         <text>{{activeFilterText}}</text>
       </view>
 
+      <view class="filter-toolbar">
+        <text class="toolbar-result">共{{products.length}}件商品</text>
+        <view class="toolbar-actions">
+          <view class="toolbar-item {{sortMode === 'default' ? 'active' : ''}}" data-value="default" bindtap="chooseQuickSort">
+            <text>综合</text>
+          </view>
+          <view class="toolbar-item {{sortMode === 'priceAsc' || sortMode === 'priceDesc' ? 'active' : ''}}" bindtap="togglePriceSort">
+            <text>价格</text>
+            <text class="toolbar-arrow">{{sortMode === 'priceDesc' ? '↓' : '↑'}}</text>
+          </view>
+          <view class="toolbar-item toolbar-filter {{filterCount ? 'has-filter' : ''}}" bindtap="openFilter">
+            <text>筛选</text>
+            <text wx:if="{{filterCount}}" class="filter-count-badge">{{filterCount}}</text>
+          </view>
+        </view>
+      </view>
+
       <view wx:if="{{products.length}}" class="product-grid">
         <product-card
           wx:for="{{products}}"
@@ -61,7 +78,7 @@
           <view
             wx:for="{{sortOptions}}"
             wx:key="value"
-            class="filter-chip {{sortMode === item.value ? 'active' : ''}}"
+            class="filter-chip {{draftSortMode === item.value ? 'active' : ''}}"
             data-value="{{item.value}}"
             catchtap="chooseSort"
           >
@@ -76,7 +93,7 @@
           <view
             wx:for="{{priceOptions}}"
             wx:key="value"
-            class="filter-chip {{priceRange === item.value ? 'active' : ''}}"
+            class="filter-chip {{draftPriceRange === item.value ? 'active' : ''}}"
             data-value="{{item.value}}"
             catchtap="choosePrice"
           >
@@ -90,12 +107,12 @@
           <text class="filter-title">只看有货</text>
           <text class="stock-tip">库存为 0 的商品将隐藏</text>
         </view>
-        <switch checked="{{onlyStock}}" color="#008a45" bindchange="handleStockChange" />
+        <switch checked="{{draftOnlyStock}}" color="#008a45" bindchange="handleStockChange" />
       </view>
 
       <view class="filter-actions">
         <button class="reset-button" catchtap="resetFilter">重置</button>
-        <button class="done-button" catchtap="closeFilter">完成</button>
+        <button class="done-button" catchtap="applyFilterAndClose">完成</button>
       </view>
     </view>
   </view>

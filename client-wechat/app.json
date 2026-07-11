@@ -21,6 +21,12 @@
     "backgroundColor": "#F8F9FB",
     "backgroundTextStyle": "dark"
   },
+  "networkTimeout": {
+    "request": 12000,
+    "connectSocket": 10000,
+    "uploadFile": 30000,
+    "downloadFile": 12000
+  },
   "permission": {
     "scope.userLocation": {
       "desc": "用于在地图上选择收货位置，方便门店准确配送"

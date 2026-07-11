@@ -1,4 +1,5 @@
 const { createAddress, deleteAddress, getAddresses, setDefaultAddress, updateAddress } = require("../../api/addresses");
+const { syncTheme } = require("../../utils/theme");
 
 const EMPTY_FORM = {
   id: 0,
@@ -13,6 +14,7 @@ const EMPTY_FORM = {
 
 Page({
   data: {
+    glassMode: false,
     loading: true,
     addresses: [],
     selectMode: false,
@@ -26,10 +28,10 @@ Page({
       selectMode: options.select === "1",
       selectedId: Number(options.selectedId || 0)
     });
-    this.loadAddresses();
   },
 
   onShow() {
+    syncTheme(this);
     this.loadAddresses();
   },
 

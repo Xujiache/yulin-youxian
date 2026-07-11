@@ -1,5 +1,6 @@
 const { getProfile, updateProfile, uploadAvatar } = require("../../api/auth");
 const { cachedAssetUrl, cacheImage } = require("../../utils/image-cache");
+const { syncTheme } = require("../../utils/theme");
 
 const DEFAULT_AVATAR_PATH = "/assets/products/avatar.png";
 const SETUP_BG_PATH = "/assets/products/setup-hero-bg.jpg";
@@ -8,6 +9,7 @@ const SETUP_BG = cachedAssetUrl(SETUP_BG_PATH);
 
 Page({
   data: {
+    glassMode: false,
     loading: true,
     redirect: "",
     setupBg: SETUP_BG,
@@ -19,10 +21,12 @@ Page({
     pageSubtitle: "首次登录需要设置头像和昵称，后续会同步到云端。",
     fieldTip: "首次设置必填",
     submitText: "完成设置",
-    submitting: false
+    submitting: false,
+    avatarChoosing: false
   },
 
   onLoad(options) {
+    syncTheme(this);
     const isEdit = options.mode === "edit";
     this.setData({
       redirect: decodeURIComponent(options.redirect || ""),
@@ -66,10 +70,28 @@ Page({
   },
 
   handleChooseAvatar(event) {
+    clearTimeout(this.avatarChooseTimer);
     this.setData({
       avatarUrl: event.detail.avatarUrl,
-      avatarTempPath: event.detail.avatarUrl
+      avatarTempPath: event.detail.avatarUrl,
+      avatarChoosing: false
     });
+  },
+
+  handleAvatarTap() {
+    if (this.data.avatarChoosing || this.data.submitting) {
+      return;
+    }
+    clearTimeout(this.avatarChooseTimer);
+    this.setData({ avatarChoosing: true });
+    this.avatarChooseTimer = setTimeout(() => {
+      this.setData({ avatarChoosing: false });
+    }, 5000);
+  },
+
+  onHide() {
+    clearTimeout(this.avatarChooseTimer);
+    this.setData({ avatarChoosing: false });
   },
 
   handleNameInput(event) {

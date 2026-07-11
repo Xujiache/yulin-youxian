@@ -23,17 +23,25 @@ Component({
   },
 
   data: {
-    displayText: "1"
-  },
-
-  observers: {
-    "value, unit": function () {
-      this.updateDisplay();
-    }
+    displayText: "1",
+    glassMode: false
   },
 
   lifetimes: {
     attached() {
+      this.setData({ glassMode: Boolean(wx.getStorageSync("glassMode")) });
+      this.updateDisplay();
+    }
+  },
+
+  pageLifetimes: {
+    show() {
+      this.setData({ glassMode: Boolean(wx.getStorageSync("glassMode")) });
+    }
+  },
+
+  observers: {
+    "value, unit": function () {
       this.updateDisplay();
     }
   },

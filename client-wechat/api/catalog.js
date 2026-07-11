@@ -1,6 +1,16 @@
 const request = require("../utils/request");
 const { normalizeAssetUrl, normalizeProduct } = require("./normalize");
 
+function normalizeCategory(category) {
+  if (!category) {
+    return category;
+  }
+  return {
+    ...category,
+    iconUrl: normalizeAssetUrl(category.iconUrl || category.imageUrl)
+  };
+}
+
 async function getHome() {
   const home = await request({
     url: "/api/wx/home",
@@ -13,15 +23,17 @@ async function getHome() {
       ...banner,
       imageUrl: normalizeAssetUrl(banner.imageUrl)
     })),
+    categories: (home.categories || []).map(normalizeCategory),
     recommendedProducts: (home.recommendedProducts || []).map(normalizeProduct)
   };
 }
 
-function getCategories() {
-  return request({
+async function getCategories() {
+  const categories = await request({
     url: "/api/wx/categories",
     skipAuth: true
   });
+  return (categories || []).map(normalizeCategory);
 }
 
 async function getProducts(params = {}) {

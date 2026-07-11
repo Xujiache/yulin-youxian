@@ -90,6 +90,12 @@
   white-space: nowrap;
 }
 
+.account-id {
+  color: rgba(255, 255, 255, 0.95);
+  font-size: 22rpx;
+  font-weight: 700;
+}
+
 .panel {
   margin-top: 20rpx;
   background: #ffffff;
@@ -197,12 +203,13 @@
 .menu-left {
   display: flex;
   align-items: center;
-  gap: 18rpx;
+  gap: 16rpx;
 }
 
 .menu-icon {
-  width: 42rpx;
-  height: 42rpx;
+  flex-shrink: 0;
+  width: 48rpx;
+  height: 48rpx;
 }
 
 .edit-mask {

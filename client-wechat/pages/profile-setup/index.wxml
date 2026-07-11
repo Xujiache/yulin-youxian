@@ -1,4 +1,4 @@
-<view class="setup-page">
+<view class="setup-page {{glassMode ? 'glass-mode' : ''}}">
   <skeleton wx:if="{{loading}}" type="form" />
   <view class="setup-hero">
     <image class="setup-bg" src="{{setupBg}}" mode="aspectFill" />
@@ -15,7 +15,13 @@
       <text class="card-subtitle">用于配送通知、订单沟通和售后服务</text>
     </view>
 
-    <button class="avatar-button" open-type="chooseAvatar" bindchooseavatar="handleChooseAvatar">
+    <button
+      class="avatar-button"
+      open-type="chooseAvatar"
+      disabled="{{avatarChoosing || submitting}}"
+      bindtap="handleAvatarTap"
+      bindchooseavatar="handleChooseAvatar"
+    >
       <view class="avatar-shell">
         <image class="avatar-preview" src="{{avatarUrl}}" mode="aspectFill" />
         <view class="avatar-badge">换</view>

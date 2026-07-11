@@ -1,4 +1,4 @@
-<view class="checkout-page">
+<view class="checkout-page {{glassMode ? 'glass-mode' : ''}}">
   <skeleton wx:if="{{loading}}" type="list" />
   <view class="checkout-header">
     <navigator class="back" open-type="navigateBack">
@@ -65,7 +65,7 @@
     <view class="goods card">
       <text class="module-title">禹邻优鲜</text>
       <view wx:for="{{items}}" wx:key="id" class="goods-item">
-        <image class="goods-image" src="{{item.image}}" mode="aspectFill" />
+        <image class="goods-image" src="{{item.image}}" mode="aspectFill" lazy-load="{{true}}" />
         <view class="goods-info">
           <text class="goods-name">{{item.name || item.productName}}</text>
           <text class="goods-spec">{{item.quantity}}{{item.saleUnit}} x1</text>

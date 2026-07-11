@@ -1,4 +1,4 @@
-<view class="login-page">
+<view class="login-page {{glassMode ? 'glass-mode' : ''}}">
   <skeleton wx:if="{{loading}}" type="form" />
   <view class="login-hero">
     <image class="hero-image" src="{{brandImage}}" mode="aspectFill" />

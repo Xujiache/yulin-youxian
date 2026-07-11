@@ -1,4 +1,4 @@
-<view class="page home-page">
+<view class="page home-page {{glassMode ? 'glass-mode' : ''}}">
   <skeleton wx:if="{{loading}}" type="home" has-tabbar="{{true}}" />
   <view class="page-header">
     <view class="brand">

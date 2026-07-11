@@ -1,4 +1,4 @@
-<view class="refund-page">
+<view class="refund-page {{glassMode ? 'glass-mode' : ''}}">
   <skeleton wx:if="{{loading}}" type="form" />
   <view class="refund-header">
     <navigator class="back" open-type="navigateBack">
@@ -11,7 +11,7 @@
   <view class="card product">
     <text class="module-title">退款商品</text>
     <view wx:for="{{items}}" wx:key="id" class="product-row">
-      <image class="product-image" src="{{item.image}}" mode="aspectFill" />
+      <image class="product-image" src="{{item.image}}" mode="aspectFill" lazy-load="{{true}}" />
       <view class="product-info">
         <text class="product-name">{{item.name}}</text>
         <text class="product-spec">数量：{{item.quantity}}{{item.saleUnit}}</text>
@@ -81,7 +81,7 @@
         data-index="{{index}}"
         bindtap="handlePreviewEvidence"
       >
-        <image class="evidence-image" src="{{item.displayUrl}}" mode="aspectFill" />
+        <image class="evidence-image" src="{{item.displayUrl}}" mode="aspectFill" lazy-load="{{true}}" />
         <view class="evidence-remove" data-index="{{index}}" catchtap="handleRemoveEvidence">×</view>
       </view>
       <view wx:if="{{evidenceImages.length < 3}}" class="upload-box" bindtap="handleChooseEvidence">

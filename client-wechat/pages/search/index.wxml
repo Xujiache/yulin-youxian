@@ -1,4 +1,4 @@
-<view class="search-page">
+<view class="search-page {{glassMode ? 'glass-mode' : ''}}">
   <skeleton wx:if="{{loading}}" type="search" />
   <view class="page-header search-header">
     <image class="back-icon" src="/assets/icons/back-green.svg" mode="aspectFit" bindtap="goBack" />
@@ -42,7 +42,7 @@
   <view class="rank-section">
     <view class="section-head">
       <text class="section-title">大家都在搜</text>
-      <text class="section-note">按热销与库存生成</text>
+      <text class="section-note">本店热搜</text>
     </view>
     <view class="rank-list">
       <view
@@ -52,9 +52,13 @@
         data-keyword="{{item.name}}"
         bindtap="handleKeyword"
       >
-        <text class="rank-no rank-hot">{{item.rank}}</text>
+        <text class="rank-no rank-hot rank-{{item.rank}} {{item.topClass}}">{{item.rank}}</text>
+        <image wx:if="{{item.image}}" class="rank-image" src="{{item.image}}" mode="aspectFill" lazy-load="{{true}}" />
         <view class="rank-copy">
-          <text class="rank-name">{{item.name}}</text>
+          <view class="rank-name-line">
+            <text class="rank-name">{{item.name}}</text>
+            <text wx:if="{{item.badge}}" class="rank-badge">{{item.badge}}</text>
+          </view>
           <text class="rank-subtitle">{{item.subtitle}}</text>
         </view>
       </view>
@@ -74,9 +78,13 @@
         data-keyword="{{item.name}}"
         bindtap="handleKeyword"
       >
-        <text class="rank-no rank-new">{{item.rank}}</text>
+        <text class="rank-no rank-new rank-{{item.rank}} {{item.topClass}}">{{item.rank}}</text>
+        <image wx:if="{{item.image}}" class="rank-image" src="{{item.image}}" mode="aspectFill" lazy-load="{{true}}" />
         <view class="rank-copy">
-          <text class="rank-name">{{item.name}}</text>
+          <view class="rank-name-line">
+            <text class="rank-name">{{item.name}}</text>
+            <text wx:if="{{item.badge}}" class="rank-badge">{{item.badge}}</text>
+          </view>
           <text class="rank-subtitle">{{item.subtitle}}</text>
         </view>
       </view>

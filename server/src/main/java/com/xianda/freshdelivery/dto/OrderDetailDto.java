@@ -18,6 +18,8 @@ public record OrderDetailDto(
         String remark,
         String createdAt,
         String latestRefundStatus,
-        String latestRefundReason
+        String latestRefundReason,
+        Long userId,
+        List<RefundDto> refunds
 ) {
 }

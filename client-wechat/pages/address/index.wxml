@@ -1,4 +1,4 @@
-<view class="address-page">
+<view class="address-page {{glassMode ? 'glass-mode' : ''}}">
   <skeleton wx:if="{{loading}}" type="list" />
   <view class="address-header">
     <navigator class="back" open-type="navigateBack">

@@ -3,6 +3,7 @@ const { getCart } = require("../../api/cart");
 const { getHome } = require("../../api/catalog");
 const { requireCompleteProfile, requireLogin } = require("../../utils/auth-guard");
 const { cachedAssetUrl, cacheImage } = require("../../utils/image-cache");
+const { syncTheme } = require("../../utils/theme");
 
 const DEFAULT_AVATAR_PATH = "/assets/products/avatar.png";
 const PROFILE_HERO_BG_PATH = "/assets/products/profile-hero-bg.jpg";
@@ -11,10 +12,10 @@ const PROFILE_HERO_BG = cachedAssetUrl(PROFILE_HERO_BG_PATH);
 const DEFAULT_CONTACT_PHONE = "400-800-1234";
 
 const DEFAULT_ORDER_ACTIONS = [
-  { label: "待付款", count: 0, url: "/pages/orders/index?status=待支付", icon: "/assets/icons/order-veg.svg" },
-  { label: "待发货", count: 0, url: "/pages/orders/index?status=待接单", icon: "/assets/icons/order-veg.svg" },
-  { label: "待收货", count: 0, url: "/pages/orders/index?status=配送中", icon: "/assets/icons/order-veg.svg" },
-  { label: "待评价", count: 0, url: "/pages/orders/index?status=已完成", icon: "/assets/icons/order-veg.svg" }
+  { label: "待付款", count: 0, url: "/pages/orders/index?status=待支付", icon: "/assets/icons/order-pending-payment.png" },
+  { label: "待发货", count: 0, url: "/pages/orders/index?status=待接单", icon: "/assets/icons/order-pending-shipment.png" },
+  { label: "待收货", count: 0, url: "/pages/orders/index?status=配送中", icon: "/assets/icons/order-pending-receipt.png" },
+  { label: "待评价", count: 0, url: "/pages/orders/index?status=已完成", icon: "/assets/icons/order-pending-review.png" }
 ];
 
 function buildOrderActions(stats) {
@@ -27,10 +28,12 @@ function buildOrderActions(stats) {
 
 Page({
   data: {
+    glassMode: false,
     loading: true,
     heroBg: PROFILE_HERO_BG,
     avatarUrl: DEFAULT_AVATAR,
     displayName: "未登录用户",
+    accountId: "",
     profileTip: "登录后可同步订单、地址和售后进度",
     isLoggedIn: false,
     editVisible: false,
@@ -38,20 +41,22 @@ Page({
     editAvatarTempPath: "",
     editNickName: "",
     savingProfile: false,
+    avatarChoosing: false,
     cartCount: 0,
     storeName: "禹邻优鲜",
     contactPhone: DEFAULT_CONTACT_PHONE,
     orderActions: DEFAULT_ORDER_ACTIONS,
     menus: [
-      { label: "地址管理", url: "/pages/address/index", icon: "/assets/icons/location-green.svg" },
-      { label: "售后退款", url: "/pages/orders/index", icon: "/assets/icons/refund-green.svg" },
-      { label: "联系客服", url: "", icon: "/assets/icons/service-green.svg" },
-      { label: "关于门店", url: "", icon: "/assets/icons/store-green.svg" },
-      { label: "设置", url: "/pages/settings/index", icon: "/assets/icons/settings-green.svg" }
+      { label: "地址管理", url: "/pages/address/index", icon: "/assets/icons/profile-menu-location.png" },
+      { label: "售后退款", url: "/pages/orders/index", icon: "/assets/icons/profile-menu-refund.png" },
+      { label: "联系客服", url: "", icon: "/assets/icons/profile-menu-service.png" },
+      { label: "关于门店", url: "", icon: "/assets/icons/profile-menu-store.png" },
+      { label: "设置", url: "/pages/settings/index", icon: "/assets/icons/profile-menu-settings.png" }
     ]
   },
 
   onShow() {
+    syncTheme(this);
     this.refreshStaticAssets();
     this.loadStoreInfo();
     this.loadProfile();
@@ -85,11 +90,30 @@ Page({
         loading: false,
         avatarUrl: DEFAULT_AVATAR,
         displayName: "未登录用户",
+        accountId: "",
         profileTip: "登录后可同步订单、地址和售后进度",
         isLoggedIn: false,
         orderActions: buildOrderActions()
       });
       return;
+    }
+    const cachedProfile = wx.getStorageSync("userProfile") || {};
+    if (cachedProfile.nickName || cachedProfile.avatarUrl) {
+      this.setData({
+        loading: false,
+        avatarUrl: cachedProfile.avatarUrl || DEFAULT_AVATAR,
+        displayName: cachedProfile.nickName || "微信用户",
+        accountId: cachedProfile.userId || "",
+        profileTip: "正在同步最新资料",
+        isLoggedIn: true,
+        orderActions: buildOrderActions(cachedProfile.orderStats)
+      });
+    } else {
+      this.setData({
+        loading: false,
+        isLoggedIn: true,
+        accountId: (app.globalData.user && app.globalData.user.userId) || ""
+      });
     }
     try {
       const profile = await getProfile();
@@ -97,6 +121,7 @@ Page({
         loading: false,
         avatarUrl: profile.avatarUrl || DEFAULT_AVATAR,
         displayName: profile.nickName || "微信用户",
+        accountId: profile.userId || "",
         profileTip: "资料已同步，换设备登录也会保持一致",
         isLoggedIn: true,
         orderActions: buildOrderActions(profile.orderStats)
@@ -109,6 +134,7 @@ Page({
         loading: false,
         avatarUrl: DEFAULT_AVATAR,
         displayName: "未登录用户",
+        accountId: "",
         profileTip: "登录后可同步订单、地址和售后进度",
         isLoggedIn: false,
         orderActions: buildOrderActions()
@@ -138,7 +164,8 @@ Page({
       editVisible: true,
       editAvatarUrl: this.data.avatarUrl,
       editAvatarTempPath: "",
-      editNickName: this.data.displayName
+      editNickName: this.data.displayName,
+      avatarChoosing: false
     });
   },
 
@@ -149,10 +176,28 @@ Page({
   noop() {},
 
   handleChooseAvatar(event) {
+    clearTimeout(this.avatarChooseTimer);
     this.setData({
       editAvatarUrl: event.detail.avatarUrl,
-      editAvatarTempPath: event.detail.avatarUrl
+      editAvatarTempPath: event.detail.avatarUrl,
+      avatarChoosing: false
     });
+  },
+
+  handleAvatarTap() {
+    if (this.data.avatarChoosing || this.data.savingProfile) {
+      return;
+    }
+    clearTimeout(this.avatarChooseTimer);
+    this.setData({ avatarChoosing: true });
+    this.avatarChooseTimer = setTimeout(() => {
+      this.setData({ avatarChoosing: false });
+    }, 5000);
+  },
+
+  onHide() {
+    clearTimeout(this.avatarChooseTimer);
+    this.setData({ avatarChoosing: false });
   },
 
   handleNameInput(event) {
@@ -189,6 +234,7 @@ Page({
       this.setData({
         avatarUrl: displayAvatar || profile.avatarUrl,
         displayName: profile.nickName,
+        accountId: profile.userId || this.data.accountId,
         profileTip: "资料已同步，换设备登录也会保持一致",
         editVisible: false,
         isLoggedIn: true

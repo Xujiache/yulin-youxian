@@ -30,6 +30,18 @@
   box-shadow: 0 12rpx 30rpx rgba(10, 39, 22, 0.08);
 }
 
+.glass-mode .search-area {
+  background: transparent;
+}
+
+.glass-mode .search-card {
+  position: relative;
+  z-index: 1;
+  background: rgba(255, 255, 255, 0.78);
+  border-color: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 14rpx 30rpx rgba(25, 73, 47, 0.14), inset 0 1rpx 0 rgba(255, 255, 255, 0.8);
+}
+
 .search-icon {
   flex-shrink: 0;
   width: 32rpx;
@@ -91,6 +103,10 @@
   height: 100%;
   padding: 16rpx 14rpx 182rpx;
   background: #ffffff;
+}
+
+.category-page .panel-head {
+  display: none;
 }
 
 .panel-head {

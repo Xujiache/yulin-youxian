@@ -1,5 +1,5 @@
 const request = require("../utils/request");
-const { normalizeOrder, normalizeOrderItem } = require("./normalize");
+const { normalizeOrder, normalizeOrderItem, normalizeRefund } = require("./normalize");
 const { API_BASE_URL } = require("../utils/config");
 
 function getBaseUrl() {
@@ -28,7 +28,8 @@ async function getOrder(id) {
   });
   return {
     ...order,
-    items: (order.items || []).map(normalizeOrderItem)
+    items: (order.items || []).map(normalizeOrderItem),
+    refunds: (order.refunds || []).map(normalizeRefund)
   };
 }
 

@@ -40,13 +40,13 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 48rpx;
-  height: 44rpx;
+  width: 54rpx;
+  height: 54rpx;
 }
 
 .tab-icon {
-  width: 36rpx;
-  height: 36rpx;
+  width: 50rpx;
+  height: 50rpx;
 }
 
 .tab-text {
@@ -67,4 +67,16 @@
   text-align: center;
   background: #c92222;
   border-radius: 999rpx;
+}
+
+.tabbar.glass-mode {
+  background: var(--surface);
+  border-color: var(--surface-line);
+  box-shadow: var(--shadow-float);
+  backdrop-filter: blur(var(--glass-blur)) saturate(145%);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(145%);
+}
+
+.tabbar.glass-mode .tab-item.active {
+  background: var(--brand-soft);
 }

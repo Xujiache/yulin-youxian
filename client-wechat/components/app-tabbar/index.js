@@ -7,6 +7,7 @@ const routeMap = {
 };
 
 const protectedTabs = ["cart", "orders", "profile"];
+const { isGlassModeEnabled } = require("../../utils/theme");
 
 Component({
   properties: {
@@ -21,13 +22,26 @@ Component({
   },
 
   data: {
+    glassMode: false,
     tabs: [
-      { key: "home", text: "首页", icon: "/assets/icons/tab-home.svg", activeIcon: "/assets/icons/tab-home-active.svg" },
-      { key: "category", text: "分类", icon: "/assets/icons/tab-category.svg", activeIcon: "/assets/icons/tab-category-active.svg" },
-      { key: "cart", text: "购物车", icon: "/assets/icons/tab-cart.svg", activeIcon: "/assets/icons/tab-cart-active.svg" },
-      { key: "orders", text: "订单", icon: "/assets/icons/tab-orders.svg", activeIcon: "/assets/icons/tab-orders-active.svg" },
-      { key: "profile", text: "我的", icon: "/assets/icons/tab-profile.svg", activeIcon: "/assets/icons/tab-profile-active.svg" }
+      { key: "home", text: "首页", icon: "/assets/icons/tab-home.png", activeIcon: "/assets/icons/tab-home-active.png" },
+      { key: "category", text: "分类", icon: "/assets/icons/tab-category.png", activeIcon: "/assets/icons/tab-category-active.png" },
+      { key: "cart", text: "购物车", icon: "/assets/icons/tab-cart.png", activeIcon: "/assets/icons/tab-cart-active.png" },
+      { key: "orders", text: "订单", icon: "/assets/icons/tab-orders.png", activeIcon: "/assets/icons/tab-orders-active.png" },
+      { key: "profile", text: "我的", icon: "/assets/icons/tab-profile.png", activeIcon: "/assets/icons/tab-profile-active.png" }
     ]
+  },
+
+  lifetimes: {
+    attached() {
+      this.setData({ glassMode: isGlassModeEnabled() });
+    }
+  },
+
+  pageLifetimes: {
+    show() {
+      this.setData({ glassMode: isGlassModeEnabled() });
+    }
   },
 
   methods: {

@@ -1,6 +1,7 @@
 const { yuan } = require("../../utils/format");
 const { getHome } = require("../../api/catalog");
 const { getOrder } = require("../../api/orders");
+const { syncTheme } = require("../../utils/theme");
 
 const DEFAULT_CONTACT_PHONE = "400-800-1234";
 
@@ -13,6 +14,7 @@ function buildRefundNotice(order) {
 
 Page({
   data: {
+    glassMode: false,
     loading: true,
     address: {},
     items: [],
@@ -28,10 +30,12 @@ Page({
     refundedText: "0.00",
     hasRefundedAmount: false,
     refundNotice: "",
+    refundRecords: [],
     contactPhone: DEFAULT_CONTACT_PHONE
   },
 
   async onLoad(options) {
+    syncTheme(this);
     this.loadContactPhone();
     const id = Number(options.id || 0);
     if (!id) {
@@ -58,7 +62,13 @@ Page({
         payableText: yuan(order.payableAmount),
         refundedText: yuan(order.refundedAmount),
         hasRefundedAmount: Number(order.refundedAmount || 0) > 0,
-        refundNotice: buildRefundNotice(order)
+        refundNotice: buildRefundNotice(order),
+        refundRecords: (order.refunds || []).map((refund) => ({
+          ...refund,
+          amountText: yuan(refund.refundAmount),
+          sourceText: refund.source === "ADMIN" ? "管理员发起" : "用户申请",
+          createdAtText: refund.createdAt ? refund.createdAt.replace("T", " ").slice(0, 19) : ""
+        }))
       });
       return;
     } catch {

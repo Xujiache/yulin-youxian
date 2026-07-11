@@ -58,9 +58,28 @@ function getOptionLabel(options, value) {
   return option ? option.label : "";
 }
 
+function getActiveFilterCount(filters) {
+  const current = filters || {};
+  let count = 0;
+  if (current.sortMode && current.sortMode !== "default") {
+    count += 1;
+  }
+  if (current.priceRange && current.priceRange !== "all") {
+    count += 1;
+  }
+  if (current.onlyStock) {
+    count += 1;
+  }
+  if (current.categoryId) {
+    count += 1;
+  }
+  return count;
+}
+
 module.exports = {
   SORT_OPTIONS,
   PRICE_OPTIONS,
   applyProductFilters,
-  getOptionLabel
+  getOptionLabel,
+  getActiveFilterCount
 };

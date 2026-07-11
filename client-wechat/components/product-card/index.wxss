@@ -116,3 +116,19 @@
   width: 28rpx;
   height: 28rpx;
 }
+
+.product-card.glass-mode {
+  background: var(--surface);
+  border: 1rpx solid var(--surface-line);
+  box-shadow: var(--shadow-soft);
+  backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+}
+
+.product-card.glass-mode .image-wrap {
+  background: rgba(240, 250, 244, 0.44);
+}
+
+.product-card.glass-mode .body {
+  background: rgba(255, 255, 255, 0.24);
+}

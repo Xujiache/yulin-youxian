@@ -1,6 +1,6 @@
-<view class="product-card" bindtap="handleTap">
+<view class="product-card {{glassMode ? 'glass-mode' : ''}}" bindtap="handleTap">
   <view class="image-wrap">
-    <image class="product-image" src="{{product.image}}" mode="aspectFill" />
+    <image class="product-image" src="{{product.image}}" mode="aspectFill" lazy-load="{{true}}" />
     <text wx:if="{{product.badge}}" class="badge">{{product.badge}}</text>
   </view>
   <view class="body">

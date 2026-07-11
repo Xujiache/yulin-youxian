@@ -3,6 +3,7 @@ package com.xianda.freshdelivery.service;
 import com.xianda.freshdelivery.common.BusinessException;
 import com.xianda.freshdelivery.common.CurrentUserContext;
 import com.xianda.freshdelivery.dto.OrderDetailDto;
+import com.xianda.freshdelivery.dto.AdminRefundCreateRequest;
 import com.xianda.freshdelivery.dto.PaymentDto;
 import com.xianda.freshdelivery.dto.RefundDto;
 import org.springframework.stereotype.Service;
@@ -40,5 +41,10 @@ public class WechatPaymentService {
         }
         wechatPayClient.requestRefund(refund, order);
         return storefrontService.markRefundProcessing(refundId);
+    }
+
+    public RefundDto createAdminRefund(AdminRefundCreateRequest request) {
+        RefundDto refund = storefrontService.createAdminRefund(request);
+        return approveRefund(refund.id());
     }
 }

@@ -1,6 +1,20 @@
 spring:
   application:
     name: fresh-delivery-server
+  datasource:
+    url: ${MYSQL_URL:jdbc:mysql://127.0.0.1:3306/yulin_fresh?useUnicode=true&characterEncoding=UTF-8&connectionCollation=utf8mb4_unicode_ci&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true}
+    username: ${MYSQL_USERNAME:yulin_fresh}
+    password: ${MYSQL_PASSWORD:}
+    hikari:
+      maximum-pool-size: ${MYSQL_POOL_MAX_SIZE:10}
+      minimum-idle: ${MYSQL_POOL_MIN_IDLE:2}
+      connection-timeout: ${MYSQL_CONNECTION_TIMEOUT:10000}
+      validation-timeout: 3000
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+    validate-on-migrate: true
   servlet:
     multipart:
       max-file-size: 5MB
@@ -43,3 +57,9 @@ auth:
 storefront:
   storage-path: ${STOREFRONT_STORAGE_PATH:data/storefront-state.json}
   seed-demo-data: ${STOREFRONT_SEED_DEMO_DATA:false}
+
+persistence:
+  mode: ${PERSISTENCE_MODE:mysql}
+  mysql:
+    shadow-write-legacy-json: ${MYSQL_SHADOW_WRITE_LEGACY_JSON:true}
+    reject-suspicious-question-marks: ${MYSQL_REJECT_SUSPICIOUS_QUESTION_MARKS:true}

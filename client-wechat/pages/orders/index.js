@@ -1,6 +1,7 @@
 const { yuan } = require("../../utils/format");
 const { getCart } = require("../../api/cart");
 const { getOrders } = require("../../api/orders");
+const { syncTheme } = require("../../utils/theme");
 
 const TABS = ["全部", "待支付", "待接单", "备货中", "配送中", "已完成", "售后"];
 
@@ -52,6 +53,7 @@ function refundNotice(order) {
 
 Page({
   data: {
+    glassMode: false,
     loading: true,
     tabs: TABS,
     activeStatus: "全部",
@@ -68,6 +70,7 @@ Page({
   },
 
   onShow() {
+    syncTheme(this);
     this.updateOrders(this.data.activeStatus);
     this.loadCartCount();
   },

@@ -1,4 +1,5 @@
 const { yuan, lineAmount } = require("../../utils/format");
+const { isGlassModeEnabled } = require("../../utils/theme");
 
 Component({
   properties: {
@@ -15,7 +16,20 @@ Component({
   data: {
     quantity: 1,
     unitPriceText: "0.00",
-    amountText: "0.00"
+    amountText: "0.00",
+    glassMode: false
+  },
+
+  lifetimes: {
+    attached() {
+      this.setData({ glassMode: isGlassModeEnabled() });
+    }
+  },
+
+  pageLifetimes: {
+    show() {
+      this.setData({ glassMode: isGlassModeEnabled() });
+    }
   },
 
   observers: {

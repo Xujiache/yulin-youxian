@@ -1,4 +1,5 @@
 const { getProducts } = require("../../api/catalog");
+const { syncTheme } = require("../../utils/theme");
 
 const FALLBACK_PRODUCTS = [
   { id: 101, name: "有机水培西红柿", subtitle: "自然熟透 沙瓤多汁", badge: "热销", unitPrice: 399, stockQty: 32, status: 1 },
@@ -25,8 +26,11 @@ function toRankItem(product, index, type) {
   return {
     id: product.id,
     name: product.name,
+    image: product.image,
+    badge: product.badge || "",
     subtitle: type === "new" ? (product.badge || "今日上新") : (product.subtitle || "门店热搜"),
-    rank: index + 1
+    rank: index + 1,
+    topClass: index < 3 ? "rank-top" : ""
   };
 }
 
@@ -51,6 +55,7 @@ function buildRankings(products) {
 
 Page({
   data: {
+    glassMode: false,
     loading: true,
     keyword: "",
     hotRanks: [],
@@ -59,6 +64,7 @@ Page({
   },
 
   onLoad(options) {
+    syncTheme(this);
     const keyword = decodeURIComponent(options.keyword || "");
     this.setData({
       keyword,

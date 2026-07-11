@@ -1,14 +1,17 @@
 const { getHome } = require("../../api/catalog");
+const { setGlassMode, syncTheme } = require("../../utils/theme");
 
 const DEFAULT_CONTACT_PHONE = "400-800-1234";
 
 Page({
   data: {
+    glassMode: false,
     loading: true,
     isLoggedIn: false,
     storeName: "禹邻优鲜",
     contactPhone: DEFAULT_CONTACT_PHONE,
     items: [
+      { key: "glass", label: "液态玻璃", desc: "开启高质感半透明材质，低端设备自动降级" },
       { key: "profile", label: "编辑个人资料", desc: "修改头像和昵称，并同步到云端" },
       { key: "privacy", label: "隐私政策", desc: "查看个人信息收集与使用说明" },
       { key: "agreement", label: "用户协议", desc: "查看下单、配送和售后规则" },
@@ -18,6 +21,7 @@ Page({
   },
 
   onShow() {
+    syncTheme(this);
     const app = getApp();
     this.setData({
       isLoggedIn: Boolean(app.isLoggedIn && app.isLoggedIn()),
@@ -42,6 +46,9 @@ Page({
 
   handleItem(event) {
     const key = event.currentTarget.dataset.key;
+    if (key === "glass") {
+      return;
+    }
     if (key === "profile") {
       if (!this.data.isLoggedIn) {
         wx.navigateTo({ url: "/pages/login/index?redirect=%2Fpages%2Fsettings%2Findex" });
@@ -70,6 +77,14 @@ Page({
       );
     }
   },
+
+  handleGlassChange(event) {
+    const glassMode = setGlassMode(event.detail.value);
+    this.setData({ glassMode });
+    wx.showToast({ title: glassMode ? "液态玻璃已开启" : "已恢复标准模式", icon: "none" });
+  },
+
+  noop() {},
 
   showText(title, content) {
     wx.showModal({

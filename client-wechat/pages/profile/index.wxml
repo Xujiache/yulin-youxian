@@ -1,4 +1,4 @@
-<view class="profile-page">
+<view class="profile-page {{glassMode ? 'glass-mode' : ''}}">
   <skeleton wx:if="{{loading}}" type="profile" has-tabbar="{{true}}" />
   <view class="profile-hero">
     <image class="hero-bg" src="{{heroBg}}" mode="aspectFill" />
@@ -7,6 +7,7 @@
       <image class="avatar" src="{{avatarUrl}}" mode="aspectFill" />
       <view class="profile-main">
         <text class="display-name">{{displayName}}</text>
+        <text wx:if="{{isLoggedIn && accountId}}" class="account-id">账号 ID：{{accountId}}</text>
         <text class="profile-tip">{{profileTip}}</text>
       </view>
     </view>
@@ -63,7 +64,13 @@
         <text>编辑资料</text>
         <text class="edit-close" catchtap="closeEdit">关闭</text>
       </view>
-      <button class="edit-avatar-button" open-type="chooseAvatar" bindchooseavatar="handleChooseAvatar">
+      <button
+        class="edit-avatar-button"
+        open-type="chooseAvatar"
+        disabled="{{avatarChoosing || savingProfile}}"
+        bindtap="handleAvatarTap"
+        bindchooseavatar="handleChooseAvatar"
+      >
         <image class="edit-avatar" src="{{editAvatarUrl}}" mode="aspectFill" />
         <text>更换头像</text>
       </button>

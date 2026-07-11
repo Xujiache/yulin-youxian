@@ -4,12 +4,15 @@ const {
   SORT_OPTIONS,
   PRICE_OPTIONS,
   applyProductFilters,
-  getOptionLabel
+  getOptionLabel,
+  getActiveFilterCount
 } = require("../../utils/product-filter");
 const { requireCompleteProfile } = require("../../utils/auth-guard");
+const { syncTheme } = require("../../utils/theme");
 
 Page({
   data: {
+    glassMode: false,
     loading: true,
     keyword: "",
     searchText: "",
@@ -21,6 +24,12 @@ Page({
     sortMode: "default",
     priceRange: "all",
     onlyStock: false,
+    draftCategoryId: 0,
+    draftSortMode: "default",
+    draftPriceRange: "all",
+    draftOnlyStock: false,
+    filterCount: 0,
+    draftFilterCount: 0,
     sortOptions: SORT_OPTIONS,
     priceOptions: PRICE_OPTIONS,
     activeFilterText: "综合排序",
@@ -40,6 +49,7 @@ Page({
   },
 
   onShow() {
+    syncTheme(this);
     this.loadCartCount();
   },
 
@@ -95,9 +105,15 @@ Page({
     this.setData({
       keyword,
       categoryId: 0,
+      draftCategoryId: 0,
       sortMode: "default",
+      draftSortMode: "default",
       priceRange: "all",
-      onlyStock: false
+      draftPriceRange: "all",
+      onlyStock: false,
+      draftOnlyStock: false,
+      filterCount: 0,
+      draftFilterCount: 0
     });
     wx.setStorageSync("recentSearchKeywords", [
       keyword,
@@ -107,7 +123,23 @@ Page({
   },
 
   openFilter() {
-    this.setData({ filterVisible: true });
+    const draftCategoryId = this.data.categoryId;
+    const draftSortMode = this.data.sortMode;
+    const draftPriceRange = this.data.priceRange;
+    const draftOnlyStock = this.data.onlyStock;
+    this.setData({
+      filterVisible: true,
+      draftCategoryId,
+      draftSortMode,
+      draftPriceRange,
+      draftOnlyStock,
+      draftFilterCount: getActiveFilterCount({
+        categoryId: draftCategoryId,
+        sortMode: draftSortMode,
+        priceRange: draftPriceRange,
+        onlyStock: draftOnlyStock
+      })
+    });
   },
 
   closeFilter() {
@@ -117,33 +149,108 @@ Page({
   noop() {},
 
   async chooseCategory(event) {
-    this.setData({ categoryId: Number(event.currentTarget.dataset.id || 0) });
-    await this.loadProducts();
+    const draftCategoryId = Number(event.currentTarget.dataset.id || 0);
+    this.setData({
+      draftCategoryId,
+      draftFilterCount: getActiveFilterCount({
+        categoryId: draftCategoryId,
+        sortMode: this.data.draftSortMode,
+        priceRange: this.data.draftPriceRange,
+        onlyStock: this.data.draftOnlyStock
+      })
+    });
   },
 
   chooseSort(event) {
-    this.setData({ sortMode: event.currentTarget.dataset.value });
-    this.applyFilters();
+    const draftSortMode = event.currentTarget.dataset.value;
+    this.setData({
+      draftSortMode,
+      draftFilterCount: getActiveFilterCount({
+        categoryId: this.data.draftCategoryId,
+        sortMode: draftSortMode,
+        priceRange: this.data.draftPriceRange,
+        onlyStock: this.data.draftOnlyStock
+      })
+    });
   },
 
   choosePrice(event) {
-    this.setData({ priceRange: event.currentTarget.dataset.value });
-    this.applyFilters();
+    const draftPriceRange = event.currentTarget.dataset.value;
+    this.setData({
+      draftPriceRange,
+      draftFilterCount: getActiveFilterCount({
+        categoryId: this.data.draftCategoryId,
+        sortMode: this.data.draftSortMode,
+        priceRange: draftPriceRange,
+        onlyStock: this.data.draftOnlyStock
+      })
+    });
   },
 
   handleStockChange(event) {
-    this.setData({ onlyStock: event.detail.value });
-    this.applyFilters();
+    const draftOnlyStock = Boolean(event.detail.value);
+    this.setData({
+      draftOnlyStock,
+      draftFilterCount: getActiveFilterCount({
+        categoryId: this.data.draftCategoryId,
+        sortMode: this.data.draftSortMode,
+        priceRange: this.data.draftPriceRange,
+        onlyStock: draftOnlyStock
+      })
+    });
   },
 
   resetFilter() {
     this.setData({
-      categoryId: 0,
-      sortMode: "default",
-      priceRange: "all",
-      onlyStock: false
+      draftCategoryId: 0,
+      draftSortMode: "default",
+      draftPriceRange: "all",
+      draftOnlyStock: false,
+      draftFilterCount: 0
     });
-    this.loadProducts();
+  },
+
+  applyFilterAndClose() {
+    this.setData({
+      categoryId: this.data.draftCategoryId,
+      sortMode: this.data.draftSortMode,
+      priceRange: this.data.draftPriceRange,
+      onlyStock: this.data.draftOnlyStock,
+      filterCount: this.data.draftFilterCount,
+      filterVisible: false
+    }, () => this.loadProducts());
+  },
+
+  chooseQuickSort(event) {
+    const sortMode = event.currentTarget.dataset.value || "default";
+    const filterCount = getActiveFilterCount({
+      categoryId: this.data.categoryId,
+      sortMode,
+      priceRange: this.data.priceRange,
+      onlyStock: this.data.onlyStock
+    });
+    this.setData({
+      sortMode,
+      draftSortMode: sortMode,
+      filterCount,
+      draftFilterCount: filterCount
+    }, () => this.applyFilters());
+  },
+
+  togglePriceSort() {
+    const sortMode = this.data.sortMode === "priceAsc" ? "priceDesc" : "priceAsc";
+    const filterCount = getActiveFilterCount({
+      categoryId: this.data.categoryId,
+      sortMode,
+      priceRange: this.data.priceRange,
+      onlyStock: this.data.onlyStock
+    });
+    this.setData({
+      sortMode,
+      draftSortMode: sortMode,
+      filterCount,
+      draftFilterCount: filterCount
+    }, () => this.applyFilters());
   },
 
   applyFilters() {
@@ -154,6 +261,7 @@ Page({
     });
     this.setData({
       products,
+      filterCount: getActiveFilterCount(this.data),
       activeFilterText: getOptionLabel(SORT_OPTIONS, this.data.sortMode) || "综合排序"
     });
   },

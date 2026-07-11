@@ -2,6 +2,7 @@ const { yuan, lineAmount } = require("../../utils/format");
 const { getHome } = require("../../api/catalog");
 const { addCartItem, clearSelectedCartItems, getCart, setCartItemSelected, updateCartItem } = require("../../api/cart");
 const { requireCompleteProfile } = require("../../utils/auth-guard");
+const { syncTheme } = require("../../utils/theme");
 
 function decorateItems(items) {
   return items.map((item) => ({
@@ -12,6 +13,7 @@ function decorateItems(items) {
 
 Page({
   data: {
+    glassMode: false,
     loading: true,
     items: [],
     recommendedProducts: [],
@@ -19,15 +21,8 @@ Page({
     totalText: "0.00"
   },
 
-  onLoad() {
-    if (!requireCompleteProfile("/pages/cart/index")) {
-      this.setData({ loading: false });
-      return;
-    }
-    this.loadCart();
-  },
-
   onShow() {
+    syncTheme(this);
     if (!requireCompleteProfile("/pages/cart/index")) {
       this.setData({ loading: false });
       return;

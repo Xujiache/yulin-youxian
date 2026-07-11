@@ -2,16 +2,30 @@ const { yuan, lineAmount } = require("../../utils/format");
 const { getProduct } = require("../../api/catalog");
 const { addCartItem } = require("../../api/cart");
 const { requireCompleteProfile } = require("../../utils/auth-guard");
+const { syncTheme } = require("../../utils/theme");
 
 Page({
   data: {
+    glassMode: false,
     loading: true,
-    product: null,
+    product: {
+      id: 0,
+      name: "",
+      subtitle: "",
+      badge: "",
+      image: "",
+      unitPrice: 0,
+      stockQty: 0,
+      minPurchaseQty: 1,
+      stepQty: 1,
+      saleUnit: ""
+    },
     quantity: 1,
     amountText: "0.00"
   },
 
   async onLoad(options) {
+    syncTheme(this);
     let product;
     try {
       product = await getProduct(Number(options.id));

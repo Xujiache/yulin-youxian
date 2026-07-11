@@ -1,9 +1,11 @@
 const { cachedAssetUrl, cacheImage } = require("../../utils/image-cache");
+const { syncTheme } = require("../../utils/theme");
 
 const LOGIN_HERO = "/assets/products/login-hero-illustration.jpg";
 
 Page({
   data: {
+    glassMode: false,
     loading: true,
     redirect: "",
     submitting: false,
@@ -12,6 +14,7 @@ Page({
   },
 
   onLoad(options) {
+    syncTheme(this);
     this.setData({
       redirect: decodeURIComponent(options.redirect || "")
     });

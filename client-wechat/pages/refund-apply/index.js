@@ -1,5 +1,6 @@
 const { getOrder, submitRefund, uploadRefundEvidence } = require("../../api/orders");
 const { yuan } = require("../../utils/format");
+const { syncTheme } = require("../../utils/theme");
 
 const REFUND_REASONS = [
   { value: "商品质量问题", desc: "腐坏、变质、有异味，或明显不符合正常食用状态" },
@@ -59,6 +60,7 @@ function clampRefundAmount(amount, maxAmount) {
 
 Page({
   data: {
+    glassMode: false,
     loading: true,
     reasons: REFUND_REASONS,
     activeReason: REFUND_REASONS[0].value,
@@ -80,6 +82,7 @@ Page({
   },
 
   onLoad(options) {
+    syncTheme(this);
     const orderId = Number(options.orderId || 0);
     this.setData({ orderId });
     this.loadOrder(orderId);

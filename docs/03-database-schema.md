@@ -1,5 +1,21 @@
 # 数据库表结构草案
 
+## 当前迁移阶段
+
+生产后端已支持 MySQL 主存储。为保证原 JSON 数据首次迁移时不丢字段、不改变金额精度、不破坏历史订单快照，当前先使用 `application_state` 保存经过 UTF-8 和 SHA-256 校验的完整状态文档：
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| state_key | varchar(64) | `storefront` 或 `user-profiles` |
+| payload | longtext/utf8mb4 | 完整 JSON 状态 |
+| payload_sha256 | char(64) | 写入和读取完整性校验 |
+| version | bigint | 每次成功写入递增 |
+| migration_source | varchar(512) | 首次导入的原文件路径 |
+| imported_at | datetime(6) | 首次导入时间 |
+| updated_at | datetime(6) | 最近写入时间 |
+
+下方关系表是后续规范化目标。关系表拆分必须在 MySQL 主存储稳定运行并完成生产数据备份后单独实施，不能与首次 JSON 迁移同时进行。
+
 ## 1. 设计约定
 
 - 金额统一使用 `int`，单位为分。

@@ -333,14 +333,23 @@
 
   const removeProduct = async (row: Product) => {
     if (!row.id) return
-    await ElMessageBox.confirm(`确认删除商品「${row.name}」？`, '删除商品', {
-      type: 'warning',
-      confirmButtonText: '删除',
-      cancelButtonText: '取消'
-    })
-    await deleteProduct(row.id)
-    await loadProducts()
-    ElMessage.success('商品已删除')
+    try {
+      await ElMessageBox.confirm(
+        `确认删除商品「${row.name}」？商品将从商城和购物车移除，历史订单记录仍会完整保留。`,
+        '删除商品',
+        {
+          type: 'warning',
+          confirmButtonText: '确认删除',
+          cancelButtonText: '取消'
+        }
+      )
+      await deleteProduct(row.id)
+      await loadProducts()
+      ElMessage.success('商品已删除，历史订单不受影响')
+    } catch (error) {
+      if (error === 'cancel' || error === 'close') return
+      ElMessage.error(error instanceof Error ? error.message : '商品删除失败')
+    }
   }
 
   const goCategories = () => {

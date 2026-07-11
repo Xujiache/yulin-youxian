@@ -33,6 +33,7 @@ import org.springframework.web.multipart.MultipartFile;
 @RequestMapping("/api/admin")
 public class AdminProductController {
     private static final Path PRODUCT_IMAGE_DIR = Path.of("data", "uploads", "products");
+    private static final Path CATEGORY_IMAGE_DIR = Path.of("data", "uploads", "categories");
     private static final List<String> ALLOWED_IMAGE_EXTENSIONS = List.of(".jpg", ".jpeg", ".png", ".webp");
 
     private final StorefrontService storefrontService;
@@ -49,6 +50,11 @@ public class AdminProductController {
     @PostMapping("/categories")
     public ApiResponse<CategoryDto> createCategory(@RequestBody CategoryDto request) {
         return ApiResponse.ok(storefrontService.createCategory(request));
+    }
+
+    @PostMapping("/categories/images")
+    public ApiResponse<Map<String, String>> uploadCategoryImage(@RequestParam("file") MultipartFile file) throws IOException {
+        return ApiResponse.ok(Map.of("url", saveImage(file, CATEGORY_IMAGE_DIR, "category", "/uploads/categories/")));
     }
 
     @PutMapping("/categories/{id}")
@@ -79,23 +85,27 @@ public class AdminProductController {
 
     @PostMapping("/products/images")
     public ApiResponse<Map<String, String>> uploadProductImage(@RequestParam("file") MultipartFile file) throws IOException {
+        return ApiResponse.ok(Map.of("url", saveImage(file, PRODUCT_IMAGE_DIR, "product", "/uploads/products/")));
+    }
+
+    private String saveImage(MultipartFile file, Path directory, String prefix, String publicPath) throws IOException {
         if (file == null || file.isEmpty()) {
-            throw new BusinessException(400, "Product image cannot be empty");
+            throw new BusinessException(400, "图片不能为空");
         }
         if (file.getSize() > 5 * 1024 * 1024) {
-            throw new BusinessException(400, "Product image cannot exceed 5MB");
+            throw new BusinessException(400, "图片不能超过 5MB");
         }
         String extension = extension(file.getOriginalFilename());
         if (!ALLOWED_IMAGE_EXTENSIONS.contains(extension)) {
-            throw new BusinessException(400, "Only jpg, png and webp images are supported");
+            throw new BusinessException(400, "仅支持 jpg、png 和 webp 图片");
         }
-        Files.createDirectories(PRODUCT_IMAGE_DIR);
-        String filename = "product_" + System.currentTimeMillis() + "_" + UUID.randomUUID().toString().replace("-", "") + extension;
-        Path target = PRODUCT_IMAGE_DIR.resolve(filename).normalize();
+        Files.createDirectories(directory);
+        String filename = prefix + "_" + System.currentTimeMillis() + "_" + UUID.randomUUID().toString().replace("-", "") + extension;
+        Path target = directory.resolve(filename).normalize();
         try (InputStream inputStream = file.getInputStream()) {
             Files.copy(inputStream, target, StandardCopyOption.REPLACE_EXISTING);
         }
-        return ApiResponse.ok(Map.of("url", "/uploads/products/" + filename));
+        return publicPath + filename;
     }
 
     @PutMapping("/products/{id}")

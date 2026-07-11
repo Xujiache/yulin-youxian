@@ -11,6 +11,7 @@ import com.xianda.freshdelivery.dto.UserProfileDto;
 import com.xianda.freshdelivery.dto.UserProfileUpdateRequest;
 import com.xianda.freshdelivery.dto.WxLoginRequest;
 import com.xianda.freshdelivery.dto.WxLoginResponse;
+import com.xianda.freshdelivery.persistence.StateStore;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
@@ -22,12 +23,14 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 @Service
 public class AuthService {
+    private static final String STATE_KEY = "user-profiles";
     private static final String DEFAULT_AVATAR = "/assets/products/avatar.png";
 
     private final AtomicLong userIdSequence = new AtomicLong(1000);
@@ -37,20 +40,25 @@ public class AuthService {
     private final Map<String, AdminSession> adminSessionsByToken = new ConcurrentHashMap<>();
     private final ObjectMapper objectMapper = new ObjectMapper().enable(SerializationFeature.INDENT_OUTPUT);
     private final Path profileStoragePath;
+    private final StateStore stateStore;
     private final WechatMiniAppClient wechatMiniAppClient;
     private final String adminUsername;
     private final String adminPassword;
 
+    @Autowired
     public AuthService(
             WechatMiniAppClient wechatMiniAppClient,
             @Value("${auth.admin.username:}") String adminUsername,
             @Value("${auth.admin.password:}") String adminPassword,
-            @Value("${auth.profile-storage-path:data/user-profiles.json}") String profileStoragePath
+            @Value("${auth.profile-storage-path:data/user-profiles.json}") String profileStoragePath,
+            StateStore stateStore
     ) {
         this.wechatMiniAppClient = wechatMiniAppClient;
         this.adminUsername = adminUsername;
         this.adminPassword = adminPassword;
-        this.profileStoragePath = Path.of(profileStoragePath);
+        Path configuredPath = Path.of(profileStoragePath);
+        this.profileStoragePath = configuredPath.isAbsolute() ? configuredPath : Path.of(System.getProperty("user.dir")).resolve(configuredPath);
+        this.stateStore = stateStore;
         loadProfiles();
     }
 
@@ -135,6 +143,19 @@ public class AuthService {
         return new UserProfileDto(userId, profile.nickName(), profile.avatarUrl(), profile.profileCompleted(), orderStats);
     }
 
+    public Optional<UserProfileDto> adminUserProfile(Long userId) {
+        return profilesByOpenId.values().stream()
+                .filter(profile -> profile.userId().equals(userId))
+                .findFirst()
+                .map(profile -> new UserProfileDto(
+                        profile.userId(),
+                        profile.nickName(),
+                        profile.avatarUrl(),
+                        profile.profileCompleted(),
+                        List.of()
+                ));
+    }
+
     public UserProfileDto updateProfile(Long userId, UserProfileUpdateRequest request, List<OrderStatusCountDto> orderStats) {
         UserSession session = sessionForUser(userId);
         UserProfile current = profilesByOpenId.getOrDefault(session.openId(), new UserProfile(userId, defaultName(userId), DEFAULT_AVATAR, false));
@@ -170,13 +191,14 @@ public class AuthService {
     }
 
     private void loadProfiles() {
-        if (!Files.exists(profileStoragePath)) {
+        byte[] payload = stateStore.load(STATE_KEY, profileStoragePath).orElse(null);
+        if (payload == null) {
             return;
         }
         try {
-            UserProfileSnapshot snapshot = objectMapper.readValue(profileStoragePath.toFile(), UserProfileSnapshot.class);
+            UserProfileSnapshot snapshot = objectMapper.readValue(payload, UserProfileSnapshot.class);
             long maxUserId = userIdSequence.get() - 1;
-            for (UserProfileState state : snapshot.profiles()) {
+            for (UserProfileState state : snapshot.profiles() == null ? List.<UserProfileState>of() : snapshot.profiles()) {
                 if (!hasText(state.openId()) || state.userId() == null) {
                     continue;
                 }
@@ -196,10 +218,6 @@ public class AuthService {
 
     private synchronized void persistProfiles() {
         try {
-            Path parent = profileStoragePath.getParent();
-            if (parent != null) {
-                Files.createDirectories(parent);
-            }
             List<UserProfileState> profiles = profilesByOpenId.entrySet().stream()
                     .map(entry -> new UserProfileState(
                             entry.getKey(),
@@ -209,7 +227,7 @@ public class AuthService {
                             entry.getValue().profileCompleted()
                     ))
                     .toList();
-            objectMapper.writeValue(profileStoragePath.toFile(), new UserProfileSnapshot(profiles));
+            stateStore.save(STATE_KEY, profileStoragePath, objectMapper.writeValueAsBytes(new UserProfileSnapshot(profiles)));
         } catch (IOException exception) {
             throw new BusinessException(500, "用户资料保存失败");
         }

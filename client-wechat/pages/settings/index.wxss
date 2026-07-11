@@ -73,6 +73,11 @@
   margin-left: 18rpx;
 }
 
+.settings-item switch {
+  flex-shrink: 0;
+  transform: scale(0.88);
+}
+
 .logout-button {
   display: flex;
   align-items: center;

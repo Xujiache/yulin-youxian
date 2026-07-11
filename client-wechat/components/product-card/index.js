@@ -1,4 +1,5 @@
 const { yuan } = require("../../utils/format");
+const { isGlassModeEnabled } = require("../../utils/theme");
 
 Component({
   properties: {
@@ -9,7 +10,20 @@ Component({
   },
 
   data: {
-    priceText: "0.00"
+    priceText: "0.00",
+    glassMode: false
+  },
+
+  lifetimes: {
+    attached() {
+      this.setData({ glassMode: isGlassModeEnabled() });
+    }
+  },
+
+  pageLifetimes: {
+    show() {
+      this.setData({ glassMode: isGlassModeEnabled() });
+    }
   },
 
   observers: {

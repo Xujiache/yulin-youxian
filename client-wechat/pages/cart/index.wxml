@@ -1,4 +1,4 @@
-<view class="cart-page">
+<view class="cart-page {{glassMode ? 'glass-mode' : ''}}">
   <skeleton wx:if="{{loading}}" type="list" has-tabbar="{{true}}" />
   <view class="page-header">
     <text class="page-title">禹邻优鲜</text>
@@ -37,7 +37,7 @@
         <view class="check {{item.selected ? 'checked' : ''}}" data-id="{{item.id}}" bindtap="handleToggle">
           <image wx:if="{{item.selected}}" class="check-icon" src="/assets/icons/check-white.svg" mode="aspectFit" />
         </view>
-        <image class="item-image" src="{{item.image}}" mode="aspectFill" />
+        <image class="item-image" src="{{item.image}}" mode="aspectFill" lazy-load="{{true}}" />
         <view class="item-info">
           <text class="item-name">{{item.name}}</text>
           <text class="item-subtitle">{{item.subtitle}}</text>
@@ -47,10 +47,10 @@
               <quantity-stepper
                 data-id="{{item.id}}"
                 value="{{item.quantity}}"
-                min="{{item.minPurchaseQty}}"
-                max="{{item.stockQty}}"
-                step="{{item.stepQty}}"
-                unit="{{item.saleUnit}}"
+                min="{{item.minPurchaseQty || 1}}"
+                max="{{item.stockQty || 9999}}"
+                step="{{item.stepQty || 1}}"
+                unit="{{item.saleUnit || ''}}"
                 bind:change="handleQuantityChange"
               />
             </view>

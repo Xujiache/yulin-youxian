@@ -23,6 +23,7 @@ export interface Category {
   id?: number
   name: string
   sortOrder: number
+  iconUrl: string
 }
 
 export interface Product {
@@ -90,6 +91,8 @@ export interface OrderDetail {
   createdAt?: string
   latestRefundStatus?: string
   latestRefundReason?: string
+  userId: number
+  refunds: Refund[]
 }
 
 export interface Refund {
@@ -100,6 +103,17 @@ export interface Refund {
   reason: string
   status: string
   evidenceImages: string[]
+  userId: number
+  orderNo: string
+  source: 'USER' | 'ADMIN'
+  createdAt: string
+}
+
+export interface AdminCustomer {
+  userId: number
+  nickName: string
+  avatarUrl: string
+  orderCount: number
 }
 
 export interface DeliverySlot {
@@ -204,6 +218,15 @@ export function deleteCategory(id: number) {
   })
 }
 
+export function uploadCategoryImage(file: File) {
+  const data = new FormData()
+  data.append('file', file)
+  return request.post<{ url: string }>({
+    url: '/api/admin/categories/images',
+    data
+  })
+}
+
 export function getProducts(params?: { categoryId?: number | null }) {
   return request.get<PageResult<Product>>({
     url: '/api/admin/products',
@@ -297,9 +320,36 @@ export function cancelOrder(id: number) {
   })
 }
 
-export function getRefunds() {
+export function getRefunds(params?: { userId?: number; orderId?: number }) {
   return request.get<PageResult<Refund>>({
-    url: '/api/admin/refunds'
+    url: '/api/admin/refunds',
+    params
+  })
+}
+
+export function searchCustomers(accountId: number) {
+  return request.get<PageResult<AdminCustomer>>({
+    url: '/api/admin/customers',
+    params: { accountId }
+  })
+}
+
+export function createAdminRefund(data: {
+  userId: number
+  orderId: number
+  refundAmount: number
+  reason: string
+}) {
+  return request.post<Refund>({
+    url: '/api/admin/refunds',
+    data
+  })
+}
+
+export function updateRefundAmount(id: number, refundAmount: number) {
+  return request.put<Refund>({
+    url: `/api/admin/refunds/${id}/amount`,
+    data: { refundAmount }
   })
 }
 

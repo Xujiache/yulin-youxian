@@ -71,6 +71,10 @@
   font-size: 24rpx;
 }
 
+.result-page .summary-row {
+  display: none;
+}
+
 .product-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

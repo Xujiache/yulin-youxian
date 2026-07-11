@@ -16,6 +16,19 @@
       </div>
 
       <ElTable v-loading="loading" :data="categories" border empty-text="暂无分类">
+        <ElTableColumn label="分类图标" width="110">
+          <template #default="{ row }">
+            <ElImage
+              v-if="row.iconUrl"
+              class="category-icon"
+              :src="assetUrl(row.iconUrl)"
+              fit="cover"
+              :preview-src-list="[assetUrl(row.iconUrl)]"
+              preview-teleported
+            />
+            <div v-else class="category-icon category-icon--empty">无图</div>
+          </template>
+        </ElTableColumn>
         <ElTableColumn prop="name" label="分类名称" min-width="180" />
         <ElTableColumn prop="sortOrder" label="排序值" width="120" />
         <ElTableColumn label="操作" width="180" fixed="right">
@@ -32,6 +45,19 @@
         <ElFormItem label="分类名称" required>
           <ElInput v-model.trim="form.name" maxlength="20" show-word-limit />
         </ElFormItem>
+        <ElFormItem label="分类图标">
+          <div class="upload-row">
+            <ElImage v-if="form.iconUrl" class="upload-preview" :src="assetUrl(form.iconUrl)" fit="cover" />
+            <div v-else class="upload-preview upload-preview--empty">待上传</div>
+            <ElUpload
+              accept=".jpg,.jpeg,.png,.webp"
+              :show-file-list="false"
+              :http-request="uploadIcon"
+            >
+              <ElButton :loading="uploading">上传图标</ElButton>
+            </ElUpload>
+          </div>
+        </ElFormItem>
         <ElFormItem label="排序值" required>
           <ElInputNumber v-model="form.sortOrder" :min="0" :step="10" class="form-full" />
         </ElFormItem>
@@ -45,32 +71,37 @@
 </template>
 
 <script setup lang="ts">
-  import { ElMessage, ElMessageBox } from 'element-plus'
+  import { ElMessage, ElMessageBox, type UploadRequestOptions } from 'element-plus'
   import {
     createCategory,
     deleteCategory,
     getCategories,
     updateCategory,
+    uploadCategoryImage,
     type Category
   } from '@/api/admin'
+  import { resolveFreshAssetUrl } from '@/utils/fresh-assets'
 
   defineOptions({ name: 'FreshCategories' })
 
   const loading = ref(false)
   const saving = ref(false)
+  const uploading = ref(false)
   const dialogVisible = ref(false)
   const categories = ref<Category[]>([])
   const form = reactive<Category>({
     id: undefined,
     name: '',
-    sortOrder: 10
+    sortOrder: 10,
+    iconUrl: ''
   })
 
   const resetForm = () => {
     Object.assign(form, {
       id: undefined,
       name: '',
-      sortOrder: (categories.value.length + 1) * 10
+      sortOrder: (categories.value.length + 1) * 10,
+      iconUrl: ''
     })
   }
 
@@ -93,6 +124,23 @@
   const openEdit = (row: Category) => {
     Object.assign(form, row)
     dialogVisible.value = true
+  }
+
+  const assetUrl = resolveFreshAssetUrl
+
+  const uploadIcon = async (options: UploadRequestOptions) => {
+    uploading.value = true
+    try {
+      const result = await uploadCategoryImage(options.file)
+      form.iconUrl = result.url
+      options.onSuccess(result)
+      ElMessage.success('分类图标已上传')
+    } catch (error) {
+      options.onError(error as any)
+      ElMessage.error(error instanceof Error ? error.message : '分类图标上传失败')
+    } finally {
+      uploading.value = false
+    }
   }
 
   const saveCategory = async () => {
@@ -134,4 +182,29 @@
 
 <style scoped lang="scss">
   @use '../style.scss';
+
+  .category-icon,
+  .upload-preview {
+    width: 64px;
+    height: 64px;
+    overflow: hidden;
+    border: 1px solid var(--art-border-color);
+    border-radius: 8px;
+    background: #f4f8f5;
+  }
+
+  .category-icon--empty,
+  .upload-preview--empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--art-text-gray-600);
+    font-size: 12px;
+  }
+
+  .upload-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
 </style>

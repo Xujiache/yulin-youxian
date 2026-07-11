@@ -9,6 +9,10 @@ public record RefundDto(
         Integer refundAmount,
         String reason,
         String status,
-        List<String> evidenceImages
+        List<String> evidenceImages,
+        Long userId,
+        String orderNo,
+        String source,
+        String createdAt
 ) {
 }

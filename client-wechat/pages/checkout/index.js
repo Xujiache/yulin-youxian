@@ -4,6 +4,7 @@ const { getCart } = require("../../api/cart");
 const { getDeliverySlots } = require("../../api/delivery");
 const { confirmDevelopmentPayment, createOrder, payOrder, previewOrder } = require("../../api/orders");
 const { requireCompleteProfile } = require("../../utils/auth-guard");
+const { syncTheme } = require("../../utils/theme");
 
 const EMPTY_AMOUNT = {
   productAmountText: "0.00",
@@ -32,6 +33,7 @@ function requestWechatPayment(payment) {
 
 Page({
   data: {
+    glassMode: false,
     loading: true,
     address: null,
     items: [],
@@ -56,6 +58,7 @@ Page({
   },
 
   onShow() {
+    syncTheme(this);
     const selectedAddress = wx.getStorageSync("checkoutSelectedAddress");
     if (!selectedAddress || !selectedAddress.id) {
       return;

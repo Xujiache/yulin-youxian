@@ -1,4 +1,4 @@
-<view class="settings-page">
+<view class="settings-page {{glassMode ? 'glass-mode' : ''}}">
   <skeleton wx:if="{{loading}}" type="list" />
   <view class="page-header">
     <image class="back-icon" src="/assets/icons/back-green.svg" mode="aspectFit" bindtap="goBack" />
@@ -19,7 +19,14 @@
           <text class="item-title">{{item.label}}</text>
           <text class="item-desc">{{item.desc}}</text>
         </view>
-        <image class="arrow" src="/assets/icons/chevron-right-gray.svg" mode="aspectFit" />
+        <switch
+          wx:if="{{item.key === 'glass'}}"
+          checked="{{glassMode}}"
+          color="#008a52"
+          bindchange="handleGlassChange"
+          catchtap="noop"
+        />
+        <image wx:else class="arrow" src="/assets/icons/chevron-right-gray.svg" mode="aspectFit" />
       </view>
     </view>
 

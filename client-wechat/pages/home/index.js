@@ -2,9 +2,11 @@ const { getHome } = require("../../api/catalog");
 const { addCartItem, getCart } = require("../../api/cart");
 const { requireCompleteProfile } = require("../../utils/auth-guard");
 const { cachedAssetUrl } = require("../../utils/image-cache");
+const { syncTheme } = require("../../utils/theme");
 
 Page({
   data: {
+    glassMode: false,
     loading: true,
     storeLogoUrl: "",
     banners: [],
@@ -20,6 +22,7 @@ Page({
   },
 
   onShow() {
+    syncTheme(this);
     this.loadCartCount();
   },
 
@@ -54,7 +57,7 @@ Page({
         banners,
         categories: (home.categories || []).slice(0, 5).map((item) => ({
           ...item,
-          icon: item.imageUrl || "/assets/icons/category-default.svg"
+          icon: item.iconUrl || item.imageUrl || "/assets/icons/category-default.svg"
         })),
         products: home.recommendedProducts || []
       });

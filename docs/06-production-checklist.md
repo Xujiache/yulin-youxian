@@ -19,6 +19,11 @@
 - `WECHAT_PAY_REFUND_NOTIFY_URL`：退款回调 HTTPS 地址。
 - `STOREFRONT_STORAGE_PATH`：业务数据 JSON 存储路径。
 - `AUTH_PROFILE_STORAGE_PATH`：用户资料 JSON 存储路径。
+- `PERSISTENCE_MODE=mysql`：生产环境使用 MySQL。
+- `MYSQL_URL`：MySQL JDBC 地址，必须包含 UTF-8 和 `utf8mb4` 连接配置。
+- `MYSQL_USERNAME`：MySQL 应用账号。
+- `MYSQL_PASSWORD`：MySQL 应用账号密码。
+- `MYSQL_SHADOW_WRITE_LEGACY_JSON=true`：迁移观察期保留 JSON 影子备份。
 
 ## 小程序发布
 
@@ -39,3 +44,6 @@
 - `server/data` 是运行态数据目录，不应提交到代码仓库。
 - 上线前确认没有测试订单、测试用户、测试退款和测试上传文件。
 - 建议对 `STOREFRONT_STORAGE_PATH`、`AUTH_PROFILE_STORAGE_PATH` 和 `data/uploads` 做定期备份。
+- 首次切换 MySQL 前必须按 `docs/07-mysql-migration.md` 停机备份和校验，禁止直接删除旧 JSON。
+- MySQL 数据库、表和连接字符集必须全部使用 `utf8mb4`。
+- 迁移后执行 `server/scripts/verify-mysql-migration.sql`，确认校验值和实体数量一致。

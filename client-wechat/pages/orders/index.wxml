@@ -1,4 +1,4 @@
-<view class="orders-page">
+<view class="orders-page {{glassMode ? 'glass-mode' : ''}}">
   <skeleton wx:if="{{loading}}" type="list" has-tabbar="{{true}}" />
   <view class="page-header">
     <text class="page-title">我的订单</text>
@@ -50,7 +50,7 @@
       </view>
       <view class="order-body">
         <view class="thumbs">
-          <image wx:for="{{item.images}}" wx:key="*this" class="thumb" src="{{item}}" mode="aspectFill" />
+          <image wx:for="{{item.images}}" wx:key="*this" class="thumb" src="{{item}}" mode="aspectFill" lazy-load="{{true}}" />
         </view>
         <view class="order-info">
           <text>{{item.summary}}</text>

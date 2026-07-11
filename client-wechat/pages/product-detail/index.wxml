@@ -1,4 +1,4 @@
-<view class="detail-page">
+<view class="detail-page {{glassMode ? 'glass-mode' : ''}}">
   <skeleton wx:if="{{loading}}" type="detail" />
   <view class="detail-header">
     <view class="back" bindtap="handleBack">
@@ -35,10 +35,10 @@
       <quantity-stepper
         class="buy-stepper"
         value="{{quantity}}"
-        min="{{product.minPurchaseQty}}"
-        max="{{product.stockQty}}"
-        step="{{product.stepQty}}"
-        unit="{{product.saleUnit}}"
+        min="{{product.minPurchaseQty || 1}}"
+        max="{{product.stockQty || 9999}}"
+        step="{{product.stepQty || 1}}"
+        unit="{{product.saleUnit || ''}}"
         bind:change="handleQuantityChange"
       />
     </view>

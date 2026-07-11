@@ -37,11 +37,13 @@ App({
     apiBaseUrl: API_BASE_URL,
     cartCount: 0,
     authToken: "",
-    user: null
+    user: null,
+    glassMode: false
   },
 
   onLaunch() {
-    preloadStaticImages();
+    this.globalData.glassMode = Boolean(wx.getStorageSync("glassMode"));
+    preloadStaticImages().catch(() => []);
     const cachedToken = wx.getStorageSync("authToken");
     const cachedUser = wx.getStorageSync("userProfile");
     const loginConfirmed = wx.getStorageSync("loginConfirmed");
@@ -80,7 +82,7 @@ App({
           wx.request({
             url: `${this.globalData.apiBaseUrl}/api/wx/auth/login`,
             method: "POST",
-            timeout: 8000,
+            timeout: 15000,
             data: {
               code: code || "dev-code",
               clientId: getClientId(),

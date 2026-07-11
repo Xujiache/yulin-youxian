@@ -4,12 +4,15 @@ const {
   SORT_OPTIONS,
   PRICE_OPTIONS,
   applyProductFilters,
-  getOptionLabel
+  getOptionLabel,
+  getActiveFilterCount
 } = require("../../utils/product-filter");
 const { requireCompleteProfile } = require("../../utils/auth-guard");
+const { syncTheme } = require("../../utils/theme");
 
 Page({
   data: {
+    glassMode: false,
     loading: true,
     categories: [],
     rawProducts: [],
@@ -19,6 +22,11 @@ Page({
     sortMode: "default",
     priceRange: "all",
     onlyStock: false,
+    draftSortMode: "default",
+    draftPriceRange: "all",
+    draftOnlyStock: false,
+    filterCount: 0,
+    draftFilterCount: 0,
     sortOptions: SORT_OPTIONS,
     priceOptions: PRICE_OPTIONS,
     activeFilterText: "综合排序",
@@ -39,6 +47,7 @@ Page({
   },
 
   onShow() {
+    syncTheme(this);
     this.loadCartCount();
   },
 
@@ -84,7 +93,20 @@ Page({
   },
 
   openFilter() {
-    this.setData({ filterVisible: true });
+    const draftSortMode = this.data.sortMode;
+    const draftPriceRange = this.data.priceRange;
+    const draftOnlyStock = this.data.onlyStock;
+    this.setData({
+      filterVisible: true,
+      draftSortMode,
+      draftPriceRange,
+      draftOnlyStock,
+      draftFilterCount: getActiveFilterCount({
+        sortMode: draftSortMode,
+        priceRange: draftPriceRange,
+        onlyStock: draftOnlyStock
+      })
+    });
   },
 
   closeFilter() {
@@ -94,27 +116,88 @@ Page({
   noop() {},
 
   chooseSort(event) {
-    this.setData({ sortMode: event.currentTarget.dataset.value });
-    this.applyFilters();
+    const draftSortMode = event.currentTarget.dataset.value;
+    this.setData({
+      draftSortMode,
+      draftFilterCount: getActiveFilterCount({
+        sortMode: draftSortMode,
+        priceRange: this.data.draftPriceRange,
+        onlyStock: this.data.draftOnlyStock
+      })
+    });
   },
 
   choosePrice(event) {
-    this.setData({ priceRange: event.currentTarget.dataset.value });
-    this.applyFilters();
+    const draftPriceRange = event.currentTarget.dataset.value;
+    this.setData({
+      draftPriceRange,
+      draftFilterCount: getActiveFilterCount({
+        sortMode: this.data.draftSortMode,
+        priceRange: draftPriceRange,
+        onlyStock: this.data.draftOnlyStock
+      })
+    });
   },
 
   handleStockChange(event) {
-    this.setData({ onlyStock: event.detail.value });
-    this.applyFilters();
+    const draftOnlyStock = Boolean(event.detail.value);
+    this.setData({
+      draftOnlyStock,
+      draftFilterCount: getActiveFilterCount({
+        sortMode: this.data.draftSortMode,
+        priceRange: this.data.draftPriceRange,
+        onlyStock: draftOnlyStock
+      })
+    });
   },
 
   resetFilter() {
     this.setData({
-      sortMode: "default",
-      priceRange: "all",
-      onlyStock: false
+      draftSortMode: "default",
+      draftPriceRange: "all",
+      draftOnlyStock: false,
+      draftFilterCount: 0
     });
-    this.applyFilters();
+  },
+
+  applyFilterAndClose() {
+    this.setData({
+      sortMode: this.data.draftSortMode,
+      priceRange: this.data.draftPriceRange,
+      onlyStock: this.data.draftOnlyStock,
+      filterCount: this.data.draftFilterCount,
+      filterVisible: false
+    }, () => this.applyFilters());
+  },
+
+  chooseQuickSort(event) {
+    const sortMode = event.currentTarget.dataset.value || "default";
+    const filterCount = getActiveFilterCount({
+      sortMode,
+      priceRange: this.data.priceRange,
+      onlyStock: this.data.onlyStock
+    });
+    this.setData({
+      sortMode,
+      draftSortMode: sortMode,
+      filterCount,
+      draftFilterCount: filterCount
+    }, () => this.applyFilters());
+  },
+
+  togglePriceSort() {
+    const sortMode = this.data.sortMode === "priceAsc" ? "priceDesc" : "priceAsc";
+    const filterCount = getActiveFilterCount({
+      sortMode,
+      priceRange: this.data.priceRange,
+      onlyStock: this.data.onlyStock
+    });
+    this.setData({
+      sortMode,
+      draftSortMode: sortMode,
+      filterCount,
+      draftFilterCount: filterCount
+    }, () => this.applyFilters());
   },
 
   applyFilters() {
@@ -125,6 +208,7 @@ Page({
     });
     this.setData({
       products,
+      filterCount: getActiveFilterCount(this.data),
       activeFilterText: getOptionLabel(SORT_OPTIONS, this.data.sortMode) || "综合排序"
     });
   },
