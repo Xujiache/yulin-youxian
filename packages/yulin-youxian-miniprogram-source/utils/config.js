@@ -1,4 +1,4 @@
-const API_BASE_URL = "https://xujiacheng.top";
+const API_BASE_URL = "https://hqhjxt.vip";
 
 function assetUrl(path) {
   if (!path || /^https?:\/\//.test(path)) {
