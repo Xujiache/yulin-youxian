@@ -1,0 +1,122 @@
+<view class="refund-page">
+  <skeleton wx:if="{{loading}}" type="form" />
+  <view class="refund-header">
+    <navigator class="back" open-type="navigateBack">
+      <image class="back-icon" src="/assets/icons/back-green.svg" mode="aspectFit" />
+    </navigator>
+    <text class="title">申请退款</text>
+    <view class="placeholder"></view>
+  </view>
+
+  <view class="card product">
+    <text class="module-title">退款商品</text>
+    <view wx:for="{{items}}" wx:key="id" class="product-row">
+      <image class="product-image" src="{{item.image}}" mode="aspectFill" />
+      <view class="product-info">
+        <text class="product-name">{{item.name}}</text>
+        <text class="product-spec">数量：{{item.quantity}}{{item.saleUnit}}</text>
+        <text class="product-price">￥{{item.amountText}}</text>
+      </view>
+    </view>
+  </view>
+
+  <view class="card">
+    <text class="module-title">退款原因</text>
+    <view class="reason-selector" bindtap="openReasonSheet">
+      <view class="reason-copy">
+        <text class="reason-label">当前选择</text>
+        <text class="reason-value">{{activeReason}}</text>
+      </view>
+      <image class="reason-arrow" src="/assets/icons/chevron-right-green.svg" mode="aspectFit" />
+    </view>
+  </view>
+
+  <view class="card amount-card">
+    <view class="amount-head">
+      <view class="amount-copy">
+        <text class="module-title">退款金额</text>
+        <text class="tip">最多可退 ￥{{maxRefundAmountText}}，实际退款以后台审核为准</text>
+      </view>
+      <text class="amount">￥{{refundAmountText}}</text>
+    </view>
+    <view class="amount-input-box">
+      <text class="currency">￥</text>
+      <input
+        class="amount-input"
+        type="digit"
+        value="{{refundAmountYuan}}"
+        placeholder="请输入退款金额"
+        bindinput="handleRefundAmountInput"
+        bindblur="handleRefundAmountBlur"
+      />
+    </view>
+    <slider
+      wx:if="{{maxRefundAmount > 0}}"
+      class="amount-slider"
+      min="1"
+      max="{{maxRefundAmount}}"
+      step="1"
+      value="{{refundAmount || 1}}"
+      activeColor="#007a3d"
+      backgroundColor="#e2ebe1"
+      block-color="#007a3d"
+      block-size="20"
+      bindchange="handleRefundSliderChange"
+    />
+    <view class="amount-quick-list">
+      <view class="amount-quick {{activeAmountQuick === 'all' ? 'active' : ''}}" data-type="all" bindtap="handleQuickAmount">全额退款</view>
+      <view class="amount-quick {{activeAmountQuick === 'product' ? 'active' : ''}}" data-type="product" bindtap="handleQuickAmount">商品金额 ￥{{productRefundAmountText}}</view>
+      <view class="amount-quick {{activeAmountQuick === 'half' ? 'active' : ''}}" data-type="half" bindtap="handleQuickAmount">退一半</view>
+    </view>
+  </view>
+
+  <view class="card">
+    <text class="module-title">补充描述和凭证</text>
+    <textarea class="desc" placeholder="请描述商品问题，可选" bindinput="handleDescription" />
+    <view class="evidence-grid">
+      <view
+        wx:for="{{evidenceImages}}"
+        wx:key="url"
+        class="evidence-item"
+        data-index="{{index}}"
+        bindtap="handlePreviewEvidence"
+      >
+        <image class="evidence-image" src="{{item.displayUrl}}" mode="aspectFill" />
+        <view class="evidence-remove" data-index="{{index}}" catchtap="handleRemoveEvidence">×</view>
+      </view>
+      <view wx:if="{{evidenceImages.length < 3}}" class="upload-box" bindtap="handleChooseEvidence">
+        <image class="upload-icon" src="/assets/icons/upload-green.svg" mode="aspectFit" />
+        <text>{{uploadingEvidence ? '上传中' : '上传凭证'}}</text>
+      </view>
+    </view>
+    <text class="evidence-tip">最多上传 3 张图片，建议拍摄商品外观、包装和称重信息。</text>
+  </view>
+
+  <button class="primary-button submit" disabled="{{submitting}}" bindtap="handleSubmit">
+    {{submitting ? '提交中' : '提交申请'}}
+  </button>
+
+  <view wx:if="{{reasonSheetVisible}}" class="sheet-mask" catchtap="closeReasonSheet">
+    <view class="reason-sheet" catchtap="noop">
+      <view class="sheet-header">
+        <text class="sheet-title">选择退款原因</text>
+        <text class="sheet-close" catchtap="closeReasonSheet">关闭</text>
+      </view>
+      <scroll-view class="sheet-list" scroll-y>
+        <view
+          wx:for="{{reasons}}"
+          wx:key="value"
+          class="sheet-option {{activeReason === item.value ? 'active' : ''}}"
+          data-reason="{{item.value}}"
+          bindtap="selectReason"
+        >
+          <view class="option-copy">
+            <text class="option-title">{{item.value}}</text>
+            <text class="option-desc">{{item.desc}}</text>
+          </view>
+          <view class="option-check {{activeReason === item.value ? 'active' : ''}}">{{activeReason === item.value ? '✓' : ''}}</view>
+        </view>
+      </scroll-view>
+    </view>
+  </view>
+</view>

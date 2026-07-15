@@ -1,0 +1,94 @@
+<view class="profile-page {{glassMode ? 'glass-mode' : ''}}">
+  <skeleton wx:if="{{loading}}" type="profile" has-tabbar="{{true}}" />
+  <view class="profile-hero">
+    <image class="hero-bg" src="{{heroBg}}" mode="aspectFill" />
+    <view class="hero-shade"></view>
+    <view class="profile-content hero-content" bindtap="handleProfileAction">
+      <image class="avatar" src="{{avatarUrl}}" mode="aspectFill" />
+      <view class="profile-main">
+        <text class="display-name">{{displayName}}</text>
+        <text wx:if="{{isLoggedIn && accountId}}" class="account-id">账号 ID：{{accountId}}</text>
+        <text class="profile-tip">{{profileTip}}</text>
+      </view>
+    </view>
+  </view>
+
+  <view class="profile-content">
+    <view class="panel orders-panel">
+      <view class="panel-head">
+        <text class="panel-title">我的订单</text>
+        <view class="panel-more" bindtap="goOrders">
+          <text>全部订单</text>
+          <image class="more-icon" src="/assets/icons/chevron-right-gray.svg" mode="aspectFit" />
+        </view>
+      </view>
+
+      <view class="order-grid">
+        <view
+          wx:for="{{orderActions}}"
+          wx:key="label"
+          class="order-entry"
+          data-url="{{item.url}}"
+          bindtap="handleOrder"
+        >
+          <view class="order-icon-wrap">
+            <image class="order-icon" src="{{item.icon}}" mode="aspectFit" />
+            <text wx:if="{{item.count > 0}}" class="order-badge">{{item.count}}</text>
+          </view>
+          <text class="order-label">{{item.label}}</text>
+        </view>
+      </view>
+    </view>
+
+    <view class="panel menu-panel">
+      <view
+        wx:for="{{menus}}"
+        wx:key="label"
+        class="menu-item"
+        data-url="{{item.url}}"
+        data-label="{{item.label}}"
+        bindtap="handleMenu"
+      >
+        <view class="menu-left">
+          <image class="menu-icon" src="{{item.icon}}" mode="aspectFit" />
+          <text>{{item.label}}</text>
+        </view>
+        <image class="arrow" src="/assets/icons/chevron-right-gray.svg" mode="aspectFit" />
+      </view>
+    </view>
+  </view>
+
+  <view wx:if="{{editVisible}}" class="edit-mask" catchtap="closeEdit">
+    <view class="edit-panel" catchtap="noop">
+      <view class="edit-head">
+        <text>编辑资料</text>
+        <text class="edit-close" catchtap="closeEdit">关闭</text>
+      </view>
+      <button
+        class="edit-avatar-button"
+        open-type="chooseAvatar"
+        disabled="{{avatarChoosing || savingProfile}}"
+        bindtap="handleAvatarTap"
+        bindchooseavatar="handleChooseAvatar"
+      >
+        <image class="edit-avatar" src="{{editAvatarUrl}}" mode="aspectFill" />
+        <text>更换头像</text>
+      </button>
+      <view class="edit-field">
+        <text class="edit-label">昵称</text>
+        <input
+          class="edit-input"
+          type="nickname"
+          value="{{editNickName}}"
+          placeholder="请输入昵称"
+          bindinput="handleNameInput"
+        />
+      </view>
+      <button class="save-button" loading="{{savingProfile}}" bindtap="saveProfile">
+        {{savingProfile ? '保存中' : '保存资料'}}
+      </button>
+    </view>
+  </view>
+
+  <app-tabbar active="profile" cart-count="{{cartCount}}" />
+</view>

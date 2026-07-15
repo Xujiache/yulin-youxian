@@ -1,0 +1,11 @@
+
+.theme-change {
+  * {
+    transition: 0s !important;
+  }
+
+  .el-switch__core,
+  .el-switch__action {
+    transition: all 0.3s !important;
+  }
+}

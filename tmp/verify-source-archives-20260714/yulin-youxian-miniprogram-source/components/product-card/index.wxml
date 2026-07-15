@@ -1,0 +1,20 @@
+<view class="product-card {{glassMode ? 'glass-mode' : ''}}" bindtap="handleTap">
+  <view class="image-wrap">
+    <image class="product-image" src="{{product.image}}" mode="aspectFill" lazy-load="{{true}}" />
+    <text wx:if="{{product.badge}}" class="badge">{{product.badge}}</text>
+  </view>
+  <view class="body">
+    <text class="name">{{product.name}}</text>
+    <text class="subtitle">{{product.subtitle}}</text>
+    <view class="footer">
+      <view class="price">
+        <text class="currency">¥</text>
+        <text class="value">{{priceText}}</text>
+        <text class="unit">/{{product.saleUnit}}</text>
+      </view>
+      <button class="add-button" catchtap="handleAdd">
+        <image class="add-icon" src="/assets/icons/add-white.svg" mode="aspectFit" />
+      </button>
+    </view>
+  </view>
+</view>

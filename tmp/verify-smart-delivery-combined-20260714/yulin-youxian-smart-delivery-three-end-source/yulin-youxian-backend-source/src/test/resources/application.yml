@@ -1,0 +1,26 @@
+spring:
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration
+      - org.springframework.boot.jdbc.autoconfigure.JdbcTemplateAutoConfiguration
+      - org.springframework.boot.jdbc.autoconfigure.DataSourceTransactionManagerAutoConfiguration
+      - org.springframework.boot.flyway.autoconfigure.FlywayAutoConfiguration
+
+persistence:
+  mode: file
+
+wechat:
+  miniapp:
+    development-mode: true
+  pay:
+    development-mode: true
+
+auth:
+  admin:
+    username: admin
+    password: Admin@123456
+  profile-storage-path: ${java.io.tmpdir}/fresh-delivery-tests/user-profiles.json
+
+storefront:
+  storage-path: ${java.io.tmpdir}/fresh-delivery-tests/storefront-state.json
+  seed-demo-data: false

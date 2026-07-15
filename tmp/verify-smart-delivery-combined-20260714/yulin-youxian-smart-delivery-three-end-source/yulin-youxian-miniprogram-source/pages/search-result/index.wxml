@@ -1,0 +1,141 @@
+<view class="result-page {{glassMode ? 'glass-mode' : ''}}">
+  <skeleton wx:if="{{loading}}" type="grid" />
+  <view class="page-header">
+    <image class="back-icon" src="/assets/icons/back-green.svg" mode="aspectFit" bindtap="goBack" />
+    <text class="page-title">搜索结果</text>
+    <text class="filter-link" bindtap="openFilter">筛选</text>
+  </view>
+
+  <view class="search-row">
+    <view class="search-card">
+      <image class="search-icon" src="/assets/icons/search.svg" mode="aspectFit" />
+      <input
+        class="search-input"
+        value="{{searchText}}"
+        confirm-type="search"
+        placeholder="继续搜索商品"
+        bindinput="handleSearchInput"
+        bindconfirm="handleSearchConfirm"
+      />
+      <button class="search-button" bindtap="handleSearchConfirm">搜索</button>
+    </view>
+  </view>
+
+  <view class="summary-row">
+    <text>找到 {{products.length}} 件商品</text>
+    <text>{{activeFilterText}}</text>
+  </view>
+
+  <view class="filter-toolbar">
+    <text class="toolbar-result">找到 {{products.length}} 件商品</text>
+    <view class="toolbar-actions">
+      <view class="toolbar-item {{sortMode === 'default' ? 'active' : ''}}" data-value="default" bindtap="chooseQuickSort">
+        <text>综合</text>
+      </view>
+      <view class="toolbar-item {{sortMode === 'priceAsc' || sortMode === 'priceDesc' ? 'active' : ''}}" bindtap="togglePriceSort">
+        <text>价格</text>
+        <text class="toolbar-arrow">{{sortMode === 'priceDesc' ? '↓' : '↑'}}</text>
+      </view>
+      <view class="toolbar-item toolbar-filter {{filterCount ? 'has-filter' : ''}}" bindtap="openFilter">
+        <text>筛选</text>
+        <text wx:if="{{filterCount}}" class="filter-count-badge">{{filterCount}}</text>
+      </view>
+    </view>
+  </view>
+
+  <view wx:if="{{products.length}}" class="product-grid">
+    <product-card
+      wx:for="{{products}}"
+      wx:key="id"
+      product="{{item}}"
+      bind:add="handleAdd"
+    />
+  </view>
+
+  <view wx:else class="empty-state">
+    <image class="empty-icon" src="/assets/icons/search.svg" mode="aspectFit" />
+    <text class="empty-title">没有找到相关商品</text>
+    <text class="empty-subtitle">换个关键词，或调整筛选条件再试试</text>
+  </view>
+
+  <view wx:if="{{filterVisible}}" class="filter-mask" catchtap="closeFilter">
+    <view class="filter-panel" catchtap="noop">
+      <view class="filter-head">
+        <text>筛选商品</text>
+        <text class="filter-close" catchtap="closeFilter">关闭</text>
+      </view>
+
+      <view class="filter-section">
+        <text class="filter-title">商品分类</text>
+        <view class="chip-grid">
+          <view
+            class="filter-chip {{draftCategoryId === 0 ? 'active' : ''}}"
+            data-id="0"
+            catchtap="chooseCategory"
+          >
+            全部
+          </view>
+          <view
+            wx:for="{{categories}}"
+            wx:key="id"
+            class="filter-chip {{draftCategoryId === item.id ? 'active' : ''}}"
+            data-id="{{item.id}}"
+            catchtap="chooseCategory"
+          >
+            {{item.name}}
+          </view>
+        </view>
+      </view>
+
+      <view class="filter-section">
+        <text class="filter-title">排序方式</text>
+        <view class="chip-grid">
+          <view
+            wx:for="{{sortOptions}}"
+            wx:key="value"
+            class="filter-chip {{draftSortMode === item.value ? 'active' : ''}}"
+            data-value="{{item.value}}"
+            catchtap="chooseSort"
+          >
+            {{item.label}}
+          </view>
+        </view>
+      </view>
+
+      <view class="filter-section">
+        <text class="filter-title">价格区间</text>
+        <view class="chip-grid">
+          <view
+            wx:for="{{priceOptions}}"
+            wx:key="value"
+            class="filter-chip {{draftPriceRange === item.value ? 'active' : ''}}"
+            data-value="{{item.value}}"
+            catchtap="choosePrice"
+          >
+            {{item.label}}
+          </view>
+        </view>
+      </view>
+
+      <view class="stock-row">
+        <view>
+          <text class="filter-title">只看有货</text>
+          <text class="stock-tip">库存为 0 的商品将隐藏</text>
+        </view>
+        <switch checked="{{draftOnlyStock}}" color="#008a45" bindchange="handleStockChange" />
+      </view>
+
+      <view class="filter-actions">
+        <button class="reset-button" catchtap="resetFilter">重置</button>
+        <button class="done-button" catchtap="applyFilterAndClose">完成</button>
+      </view>
+    </view>
+  </view>
+
+  <cart-add-sheet
+    visible="{{sheetVisible}}"
+    product="{{selectedProduct}}"
+    bind:close="handleCloseSheet"
+    bind:confirm="handleConfirmAdd"
+  />
+</view>

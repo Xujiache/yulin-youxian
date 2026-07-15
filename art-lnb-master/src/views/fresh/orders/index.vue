@@ -3,26 +3,91 @@
     <div class="fresh-page__head">
       <div>
         <h1 class="fresh-page__title">订单管理</h1>
-        <p class="fresh-page__desc">处理门店自配送订单状态流转。</p>
+        <p class="fresh-page__desc">按配送日期、区域和楼栋智能归组，减少往返配送。</p>
       </div>
       <ElButton type="primary" :loading="loading" @click="loadOrders">刷新订单</ElButton>
     </div>
 
     <ElCard class="fresh-card" shadow="never">
-      <div class="fresh-toolbar">
-        <div class="fresh-toolbar__left">
+      <div class="delivery-toolbar">
+        <div class="delivery-toolbar__filters">
           <ElSegmented v-model="status" :options="statuses" @change="loadOrders" />
+          <ElDatePicker
+            v-model="deliveryDate"
+            type="date"
+            value-format="YYYY-MM-DD"
+            placeholder="全部配送日期"
+            clearable
+            @change="loadOrders"
+          />
+        </div>
+        <div class="delivery-toolbar__summary">
+          <span class="delivery-toolbar__signal"></span>
+          <div>
+            <strong>智能配送顺序已开启</strong>
+            <span>共 {{ orders.length }} 单 · {{ groupCount }} 个配送分组</span>
+          </div>
         </div>
       </div>
 
-      <ElTable v-loading="loading" :data="orders" border empty-text="暂无订单">
-        <ElTableColumn prop="orderNo" label="订单号" min-width="190" />
+      <ElTable
+        v-loading="loading"
+        :data="orders"
+        row-key="id"
+        :span-method="spanMethod"
+        :row-class-name="rowClassName"
+        empty-text="暂无订单"
+      >
+        <ElTableColumn label="顺序" width="76" align="center">
+          <template #default="{ row }">
+            <span class="delivery-sequence">{{ row.deliverySequence }}</span>
+          </template>
+        </ElTableColumn>
+        <ElTableColumn label="配送分组" min-width="210">
+          <template #default="{ row }">
+            <div class="delivery-group">
+              <ElTag type="success" effect="light" size="small">{{ row.deliveryDate }}</ElTag>
+              <strong>{{ row.deliveryArea }}</strong>
+              <div class="delivery-group__building">
+                <span>{{ row.deliveryBuilding }}</span>
+                <b>{{ row.buildingOrderCount }} 单</b>
+              </div>
+              <small>同组订单已连续排列</small>
+            </div>
+          </template>
+        </ElTableColumn>
+        <ElTableColumn label="收货地址" min-width="290">
+          <template #default="{ row }">
+            <div class="address-cell">
+              <strong>{{ fullAddress(row) }}</strong>
+              <span
+                >{{ row.address?.name || '未填写收货人' }} ·
+                {{ row.address?.phone || '未填写电话' }}</span
+              >
+              <ElTag
+                v-if="row.sameAddressOrderCount > 1"
+                type="warning"
+                size="small"
+                effect="light"
+              >
+                同一门牌共 {{ row.sameAddressOrderCount }} 单
+              </ElTag>
+            </div>
+          </template>
+        </ElTableColumn>
         <ElTableColumn label="状态" width="140">
           <template #default="{ row }">
             <ElTag :type="statusTag(row.status)">{{ row.status }}</ElTag>
           </template>
         </ElTableColumn>
-        <ElTableColumn prop="summary" label="商品摘要" min-width="150" />
+        <ElTableColumn label="订单信息" min-width="210">
+          <template #default="{ row }">
+            <div class="order-summary">
+              <strong>{{ row.orderNo }}</strong>
+              <span>{{ row.summary }}</span>
+            </div>
+          </template>
+        </ElTableColumn>
         <ElTableColumn prop="deliverySlot" label="预约配送" min-width="160" />
         <ElTableColumn label="金额" width="120">
           <template #default="{ row }">
@@ -32,16 +97,32 @@
         <ElTableColumn label="操作" width="340" fixed="right">
           <template #default="{ row }">
             <ElButton size="small" @click="openDetail(row.id)">详情</ElButton>
-            <ElButton v-if="canAccept(row)" size="small" type="primary" @click="runAction(row.id, 'accept')">
+            <ElButton
+              v-if="canAccept(row)"
+              size="small"
+              type="primary"
+              @click="runAction(row.id, 'accept')"
+            >
               接单
             </ElButton>
             <ElButton v-if="canDeliver(row)" size="small" @click="runAction(row.id, 'deliver')">
               配送
             </ElButton>
-            <ElButton v-if="canComplete(row)" size="small" type="success" @click="runAction(row.id, 'complete')">
+            <ElButton
+              v-if="canComplete(row)"
+              size="small"
+              type="success"
+              @click="runAction(row.id, 'complete')"
+            >
               完成
             </ElButton>
-            <ElButton v-if="canCancel(row)" size="small" type="danger" plain @click="runAction(row.id, 'cancel')">
+            <ElButton
+              v-if="canCancel(row)"
+              size="small"
+              type="danger"
+              plain
+              @click="runAction(row.id, 'cancel')"
+            >
               取消
             </ElButton>
           </template>
@@ -73,7 +154,9 @@
               <div v-else class="image-thumb empty-thumb">无图</div>
               <div>
                 <strong>{{ row.productName }}</strong>
-                <div class="muted">{{ row.quantity }}{{ row.saleUnit }} x {{ money(row.unitPrice) }}</div>
+                <div class="muted"
+                  >{{ row.quantity }}{{ row.saleUnit }} x {{ money(row.unitPrice) }}</div
+                >
               </div>
             </div>
           </template>
@@ -86,11 +169,24 @@
       </ElTable>
 
       <div v-if="detail" class="amount-list">
-        <div><span>商品总额</span><strong>{{ money(detail.productAmount) }}</strong></div>
-        <div><span>配送费</span><strong>{{ money(detail.deliveryFee) }}</strong></div>
-        <div><span>包装费</span><strong>{{ money(detail.packageFee) }}</strong></div>
-        <div><span>实付金额</span><strong class="money">{{ money(detail.paidAmount || detail.payableAmount) }}</strong></div>
-        <div><span>已退款</span><strong>{{ money(detail.refundedAmount) }}</strong></div>
+        <div
+          ><span>商品总额</span><strong>{{ money(detail.productAmount) }}</strong></div
+        >
+        <div
+          ><span>配送费</span><strong>{{ money(detail.deliveryFee) }}</strong></div
+        >
+        <div
+          ><span>包装费</span><strong>{{ money(detail.packageFee) }}</strong></div
+        >
+        <div
+          ><span>实付金额</span
+          ><strong class="money">{{
+            money(detail.paidAmount || detail.payableAmount)
+          }}</strong></div
+        >
+        <div
+          ><span>已退款</span><strong>{{ money(detail.refundedAmount) }}</strong></div
+        >
       </div>
     </ElDialog>
   </div>
@@ -113,10 +209,14 @@
 
   const statuses = ['全部', '待支付', '待接单', '备货中', '配送中', '已完成', '售后']
   const status = ref('全部')
+  const deliveryDate = ref('')
   const loading = ref(false)
   const detailVisible = ref(false)
   const orders = ref<OrderSummary[]>([])
   const detail = ref<OrderDetail | null>(null)
+  const groupCount = computed(
+    () => new Set(orders.value.map((order) => order.deliveryGroupKey)).size
+  )
 
   const money = (value: number) => `￥${(Number(value || 0) / 100).toFixed(2)}`
 
@@ -130,12 +230,24 @@
   const canAccept = (row: OrderSummary) => row.status === '已支付/待接单'
   const canDeliver = (row: OrderSummary) => ['已支付/待接单', '备货中'].includes(row.status)
   const canComplete = (row: OrderSummary) => row.status === '配送中'
-  const canCancel = (row: OrderSummary) => ['待支付', '已支付/待接单', '备货中'].includes(row.status)
+  const canCancel = (row: OrderSummary) =>
+    ['待支付', '已支付/待接单', '备货中'].includes(row.status)
+
+  const fullAddress = (row: OrderSummary) =>
+    [row.address?.locationName, row.address?.detail].filter(Boolean).join(' ') || '地址待完善'
+
+  const spanMethod = ({ row, columnIndex }: { row: OrderSummary; columnIndex: number }) => {
+    if (columnIndex !== 1) return [1, 1]
+    return row.buildingOrderPosition === 1 ? [row.buildingOrderCount, 1] : [0, 0]
+  }
+
+  const rowClassName = ({ row }: { row: OrderSummary }) =>
+    row.buildingOrderPosition === 1 ? 'delivery-group-start' : 'delivery-group-row'
 
   const loadOrders = async () => {
     loading.value = true
     try {
-      const result = await getOrders(status.value)
+      const result = await getOrders(status.value, deliveryDate.value || undefined)
       orders.value = result.items || []
     } catch (error) {
       ElMessage.error(error instanceof Error ? error.message : '订单加载失败')
@@ -186,6 +298,131 @@
     display: flex;
     align-items: center;
     gap: 10px;
+  }
+
+  .delivery-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+    margin-bottom: 18px;
+
+    &__filters {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 12px;
+    }
+
+    &__summary {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 230px;
+      padding: 10px 14px;
+      border: 1px solid #ccebd9;
+      border-radius: 12px;
+      background: #f3fbf6;
+
+      div {
+        display: grid;
+        gap: 2px;
+      }
+
+      strong {
+        color: #087f45;
+        font-size: 13px;
+      }
+
+      span {
+        color: #6c7d73;
+        font-size: 12px;
+      }
+    }
+
+    &__signal {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #16a05d;
+      box-shadow: 0 0 0 5px rgb(22 160 93 / 12%);
+    }
+  }
+
+  .delivery-sequence {
+    display: inline-grid;
+    width: 34px;
+    height: 34px;
+    place-items: center;
+    border-radius: 11px;
+    color: #087f45;
+    font-weight: 700;
+    background: #eaf8f0;
+  }
+
+  .delivery-group {
+    display: grid;
+    gap: 7px;
+    padding: 6px 2px;
+
+    > strong {
+      color: #16251c;
+      font-size: 15px;
+    }
+
+    &__building {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      color: #087f45;
+
+      b {
+        padding: 3px 8px;
+        border-radius: 999px;
+        font-size: 12px;
+        background: #def4e7;
+      }
+    }
+
+    small {
+      color: #8b9991;
+    }
+  }
+
+  .address-cell,
+  .order-summary {
+    display: grid;
+    justify-items: start;
+    gap: 6px;
+
+    strong {
+      color: #18241d;
+    }
+
+    span {
+      color: #6f7c74;
+      font-size: 13px;
+    }
+  }
+
+  :deep(.delivery-group-start td) {
+    border-top: 2px solid #c8ead6;
+  }
+
+  :deep(.delivery-group-row td) {
+    background: #fbfefc;
+  }
+
+  @media (max-width: 1100px) {
+    .delivery-toolbar {
+      align-items: stretch;
+      flex-direction: column;
+
+      &__summary {
+        min-width: 0;
+      }
+    }
   }
 
   .amount-list {

@@ -1,0 +1,42 @@
+<view wx:if="{{visible}}" class="sheet-root">
+  <view class="mask" bindtap="handleClose"></view>
+  <view class="sheet {{glassMode ? 'glass-mode' : ''}}">
+    <view class="sheet-header">
+      <image class="sheet-image" src="{{product.image}}" mode="aspectFill" />
+      <view class="sheet-info">
+        <text class="sheet-name">{{product.name}}</text>
+        <text class="sheet-subtitle">{{product.subtitle}}</text>
+        <text class="sheet-price">￥{{unitPriceText}}/{{product.saleUnit}}</text>
+      </view>
+      <button class="close" bindtap="handleClose">
+        <image class="close-icon" src="/assets/icons/close-gray.svg" mode="aspectFit" />
+      </button>
+    </view>
+
+    <view class="field-row">
+      <view>
+        <text class="field-title">购买数量</text>
+        <text class="field-tip">最低 {{product.minPurchaseQty}}{{product.saleUnit}} 起购，每次增加 {{product.stepQty}}{{product.saleUnit}}</text>
+      </view>
+      <view class="sheet-stepper-row">
+        <view class="sheet-stepper-control">
+          <quantity-stepper
+            value="{{quantity}}"
+            min="{{product.minPurchaseQty || 1}}"
+            max="{{product.stockQty || 9999}}"
+            step="{{product.stepQty || 1}}"
+            unit="{{product.saleUnit || ''}}"
+            bind:change="handleQuantityChange"
+          />
+        </view>
+      </view>
+    </view>
+
+    <view class="summary">
+      <text class="summary-label">小计</text>
+      <text class="summary-price">￥{{amountText}}</text>
+    </view>
+
+    <button class="confirm" bindtap="handleConfirm">加入购物车</button>
+  </view>
+</view>

@@ -50,6 +50,18 @@ export interface OrderSummary {
   deliverySlot: string
   summary: string
   images: string[]
+  createdAt?: string
+  latestRefundStatus?: string
+  latestRefundReason?: string
+  address: Address
+  deliveryDate: string
+  deliveryArea: string
+  deliveryBuilding: string
+  deliveryGroupKey: string
+  deliverySequence: number
+  buildingOrderCount: number
+  buildingOrderPosition: number
+  sameAddressOrderCount: number
 }
 
 export interface Address {
@@ -166,12 +178,14 @@ export interface Banner {
 }
 
 const productPayload = (data: Product) => {
-  const { id: _id, ...payload } = data
+  const payload = { ...data }
+  delete payload.id
   return payload
 }
 
 const deliverySlotPayload = (data: DeliverySlot) => {
-  const { id: _id, ...payload } = data
+  const payload = { ...data }
+  delete payload.id
   return payload
 }
 
@@ -277,10 +291,13 @@ export function uploadProductImage(file: File) {
   })
 }
 
-export function getOrders(status?: string) {
+export function getOrders(status?: string, deliveryDate?: string) {
+  const params: Record<string, string> = {}
+  if (status && status !== '全部') params.status = status
+  if (deliveryDate) params.deliveryDate = deliveryDate
   return request.get<PageResult<OrderSummary>>({
     url: '/api/admin/orders',
-    params: status && status !== '全部' ? { status } : undefined
+    params: Object.keys(params).length ? params : undefined
   })
 }
 

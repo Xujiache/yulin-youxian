@@ -1,0 +1,36 @@
+<view class="login-page {{glassMode ? 'glass-mode' : ''}}">
+  <skeleton wx:if="{{loading}}" type="form" />
+  <view class="login-hero">
+    <image class="hero-image" src="{{brandImage}}" mode="aspectFill" />
+    <view class="login-nav">
+      <image class="back-icon" src="/assets/icons/back-green.svg" mode="aspectFit" bindtap="goBack" />
+      <text class="skip-text" bindtap="goBack">暂时跳过</text>
+    </view>
+  </view>
+
+  <view class="login-sheet">
+    <view class="login-copy">
+      <text class="login-title">微信快捷登录</text>
+      <text class="login-desc">登录后可同步订单、地址、购物车和售后进度</text>
+    </view>
+
+    <view class="login-button-wrap">
+      <button class="login-button" loading="{{submitting}}" bindtap="handleLogin">
+        {{submitting ? '登录中' : '微信一键登录'}}
+      </button>
+      <text class="recommend-badge">推荐使用</text>
+    </view>
+
+    <view class="agreement-row">
+      <view class="agree-circle {{agreed ? 'checked' : ''}}" bindtap="toggleAgreement">
+        <text wx:if="{{agreed}}" class="agree-check">✓</text>
+      </view>
+      <view class="agreement-copy">
+        <text>我已阅读并同意</text>
+        <text class="agreement-link" data-type="agreement" bindtap="showAgreement">《用户协议》</text>
+        <text>和</text>
+        <text class="agreement-link" data-type="privacy" bindtap="showAgreement">《隐私政策》</text>
+      </view>
+    </view>
+  </view>
+</view>
