@@ -100,6 +100,16 @@ export const freshRoutes: AppRouteRecord = {
         icon: 'ri:settings-3-line',
         keepAlive: true
       }
+    },
+    {
+      path: 'printing',
+      name: 'FreshPrinting',
+      component: '/fresh/printing',
+      meta: {
+        title: '小票打印',
+        icon: 'ri:printer-line',
+        keepAlive: true
+      }
     }
   ]
 }

@@ -177,6 +177,61 @@ export interface Banner {
   enabled: boolean
 }
 
+export interface PrinterConfig {
+  enabled: boolean
+  autoPrintOnPaid: boolean
+  retryLimit: number
+  printerModel: string
+  accessKeyConfigured: boolean
+  agentOnline: boolean
+  agentName: string
+  agentConnection: string
+  agentVersion: string
+  agentLastSeen: string
+  pendingJobCount: number
+  failedJobCount: number
+}
+
+export interface PrintReceiptItem {
+  name: string
+  quantity: string
+  unitPrice: string
+  amount: string
+}
+
+export interface PrintReceipt {
+  storeName: string
+  title: string
+  orderNo: string
+  createdAt: string
+  deliverySlot: string
+  customerName: string
+  customerPhone: string
+  address: string
+  items: PrintReceiptItem[]
+  productAmount: string
+  deliveryFee: string
+  packageFee: string
+  payableAmount: string
+  remark: string
+}
+
+export interface PrintJob {
+  id: number
+  orderId?: number | null
+  type: string
+  orderNo: string
+  status: string
+  attemptCount: number
+  retryLimit: number
+  createdAt: string
+  nextAttemptAt?: string | null
+  printedAt?: string | null
+  lastError?: string | null
+  leaseToken?: string | null
+  receipt: PrintReceipt
+}
+
 const productPayload = (data: Product) => {
   const payload = { ...data }
   delete payload.id
@@ -476,5 +531,42 @@ export function uploadLogoImage(file: File) {
 export function seedDemoData() {
   return request.post<Record<string, number>>({
     url: '/api/admin/settings/demo-data/seed'
+  })
+}
+
+export function getPrinterConfig() {
+  return request.get<PrinterConfig>({
+    url: '/api/admin/printing/config'
+  })
+}
+
+export function updatePrinterConfig(data: Pick<PrinterConfig, 'enabled' | 'autoPrintOnPaid' | 'retryLimit' | 'printerModel'>) {
+  return request.put<PrinterConfig>({
+    url: '/api/admin/printing/config',
+    data
+  })
+}
+
+export function regeneratePrinterAccessKey() {
+  return request.post<{ accessKey: string }>({
+    url: '/api/admin/printing/access-key'
+  })
+}
+
+export function createPrinterTest() {
+  return request.post<PrintJob>({
+    url: '/api/admin/printing/test'
+  })
+}
+
+export function getPrintJobs() {
+  return request.get<PrintJob[]>({
+    url: '/api/admin/printing/jobs'
+  })
+}
+
+export function retryPrintJob(id: number) {
+  return request.post<PrintJob>({
+    url: `/api/admin/printing/jobs/${id}/retry`
   })
 }

@@ -8,6 +8,7 @@ import com.xianda.freshdelivery.dto.RefundDto;
 import com.xianda.freshdelivery.dto.RefundNotifyRequest;
 import com.xianda.freshdelivery.service.StorefrontService;
 import com.xianda.freshdelivery.service.WechatPayClient;
+import com.xianda.freshdelivery.service.WechatPaymentService;
 import java.util.Map;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -21,11 +22,13 @@ public class WxPaymentController {
     private final WechatPayProperties wechatPayProperties;
     private final StorefrontService storefrontService;
     private final WechatPayClient wechatPayClient;
+    private final WechatPaymentService wechatPaymentService;
 
-    public WxPaymentController(WechatPayProperties wechatPayProperties, StorefrontService storefrontService, WechatPayClient wechatPayClient) {
+    public WxPaymentController(WechatPayProperties wechatPayProperties, StorefrontService storefrontService, WechatPayClient wechatPayClient, WechatPaymentService wechatPaymentService) {
         this.wechatPayProperties = wechatPayProperties;
         this.storefrontService = storefrontService;
         this.wechatPayClient = wechatPayClient;
+        this.wechatPaymentService = wechatPaymentService;
     }
 
     @PostMapping("/payments/wechat/notify")
@@ -35,7 +38,7 @@ public class WxPaymentController {
             @RequestHeader(value = "Wechatpay-Nonce", required = false) String nonce,
             @RequestHeader(value = "Wechatpay-Signature", required = false) String signature) {
         PaymentNotifyRequest request = wechatPayClient.parsePaymentNotify(body, timestamp, nonce, signature);
-        storefrontService.confirmPayment(request);
+        wechatPaymentService.confirmPayment(request);
         return Map.of("code", "SUCCESS", "message", "成功");
     }
 

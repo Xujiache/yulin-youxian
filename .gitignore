@@ -16,3 +16,11 @@ server/data/
 
 # WeChat developer tool local config
 project.private.config.json
+print-agent/agent.config.json
+print-agent/*.log
+third_party/xprinter-xp58/windows-sdk-2.3.1/
+tmp/extract_xprinter_pdf.py
+tmp/xprinter-esc-sdk-manual.txt
+tmp/xprinter-xp58-manual.txt
+tmp/xprinter_snippets.py
+tmp/芯烨58系列中文编程手册.clean.txt
