@@ -62,6 +62,8 @@ export interface OrderSummary {
   buildingOrderCount: number
   buildingOrderPosition: number
   sameAddressOrderCount: number
+  printStatus?: 'NONE' | 'PENDING' | 'SUCCESS' | 'FAILED'
+  printJobId?: number | null
 }
 
 export interface Address {
@@ -232,6 +234,22 @@ export interface PrintJob {
   receipt: PrintReceipt
 }
 
+export interface BatchPrintRequest {
+  orderIds: number[]
+}
+
+export interface BatchPrintResult {
+  success: number
+  failed: number
+  jobs: PrintJob[]
+  errors: BatchPrintError[]
+}
+
+export interface BatchPrintError {
+  orderId: number
+  reason: string
+}
+
 const productPayload = (data: Product) => {
   const payload = { ...data }
   delete payload.id
@@ -346,10 +364,11 @@ export function uploadProductImage(file: File) {
   })
 }
 
-export function getOrders(status?: string, deliveryDate?: string) {
+export function getOrders(status?: string, deliveryDate?: string, printStatus?: string) {
   const params: Record<string, string> = {}
   if (status && status !== '全部') params.status = status
   if (deliveryDate) params.deliveryDate = deliveryDate
+  if (printStatus && printStatus !== '全部') params.printStatus = printStatus
   return request.get<PageResult<OrderSummary>>({
     url: '/api/admin/orders',
     params: Object.keys(params).length ? params : undefined
@@ -568,5 +587,12 @@ export function getPrintJobs() {
 export function retryPrintJob(id: number) {
   return request.post<PrintJob>({
     url: `/api/admin/printing/jobs/${id}/retry`
+  })
+}
+
+export function batchPrintOrders(orderIds: number[]) {
+  return request.post<BatchPrintResult>({
+    url: '/api/admin/printing/orders/batch',
+    data: { orderIds }
   })
 }

@@ -92,4 +92,29 @@ public final class PrintModels {
             String version
     ) {
     }
+
+    public record BatchPrintRequest(
+            @NotNull List<@NotNull Long> orderIds
+    ) {
+    }
+
+    public record BatchPrintResultDto(
+            int success,
+            int failed,
+            List<PrintJobDto> jobs,
+            List<BatchPrintErrorDto> errors
+    ) {
+    }
+
+    public record BatchPrintErrorDto(
+            Long orderId,
+            String reason
+    ) {
+    }
+
+    public record OrderPrintStatus(
+            String status,
+            Long jobId
+    ) {
+    }
 }

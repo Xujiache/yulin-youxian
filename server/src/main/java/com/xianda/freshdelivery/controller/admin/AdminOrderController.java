@@ -26,9 +26,10 @@ public class AdminOrderController {
     @GetMapping
     public ApiResponse<PageResult<AdminOrderDto>> orders(
             @RequestParam(required = false) String status,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate deliveryDate
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate deliveryDate,
+            @RequestParam(required = false) String printStatus
     ) {
-        return ApiResponse.ok(PageResult.of(storefrontService.adminOrders(status, deliveryDate)));
+        return ApiResponse.ok(PageResult.of(storefrontService.adminOrders(status, deliveryDate, printStatus)));
     }
 
     @GetMapping("/{id}")

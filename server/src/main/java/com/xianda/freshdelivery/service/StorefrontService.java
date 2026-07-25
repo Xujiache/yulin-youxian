@@ -24,6 +24,7 @@ import com.xianda.freshdelivery.dto.OrderPreviewDto;
 import com.xianda.freshdelivery.dto.OrderPreviewRequest;
 import com.xianda.freshdelivery.dto.OrderStatusCountDto;
 import com.xianda.freshdelivery.dto.PaymentNotifyRequest;
+import com.xianda.freshdelivery.dto.PrintModels;
 import com.xianda.freshdelivery.dto.ProductDto;
 import com.xianda.freshdelivery.dto.ProductSaveRequest;
 import com.xianda.freshdelivery.dto.RefundDto;
@@ -61,6 +62,7 @@ public class StorefrontService {
     private final ObjectMapper objectMapper = new ObjectMapper().enable(SerializationFeature.INDENT_OUTPUT);
     private final Path storagePath;
     private final StateStore stateStore;
+    private final PrintJobService printJobService;
 
     private final AtomicLong cartId = new AtomicLong(10);
     private final AtomicLong addressId = new AtomicLong(10);
@@ -86,11 +88,13 @@ public class StorefrontService {
     public StorefrontService(
             @Value("${storefront.storage-path:data/storefront-state.json}") String storagePath,
             @Value("${storefront.seed-demo-data:false}") boolean seedDemoData,
-            StateStore stateStore
+            StateStore stateStore,
+            PrintJobService printJobService
     ) {
         Path configuredPath = Path.of(storagePath);
         this.storagePath = configuredPath.isAbsolute() ? configuredPath : Path.of(System.getProperty("user.dir")).resolve(configuredPath);
         this.stateStore = stateStore;
+        this.printJobService = printJobService;
         if (!loadState()) {
             if (seedDemoData) {
                 seedDemoDataInternal();
@@ -108,7 +112,7 @@ public class StorefrontService {
     }
 
     public StorefrontService(String storagePath, boolean seedDemoData) {
-        this(storagePath, seedDemoData, new FileStateStore());
+        this(storagePath, seedDemoData, new FileStateStore(), null);
     }
 
     public synchronized HomeDto home() {
@@ -549,10 +553,14 @@ public class StorefrontService {
     }
 
     public synchronized List<AdminOrderDto> adminOrders(String status) {
-        return adminOrders(status, null);
+        return adminOrders(status, null, null);
     }
 
     public synchronized List<AdminOrderDto> adminOrders(String status, LocalDate requestedDeliveryDate) {
+        return adminOrders(status, requestedDeliveryDate, null);
+    }
+
+    public synchronized List<AdminOrderDto> adminOrders(String status, LocalDate requestedDeliveryDate, String printStatus) {
         List<AdminOrderCandidate> candidates = orders.values().stream()
                 .filter(order -> matchesOrderStatus(order, status))
                 .filter(order -> requestedDeliveryDate == null || deliveryDate(order).equals(requestedDeliveryDate))
@@ -572,6 +580,10 @@ public class StorefrontService {
                         .thenComparing(candidate -> DeliveryAddressIntelligence.deliverySlotSortKey(candidate.order().deliverySlot()))
                         .thenComparing(candidate -> candidate.order().id()))
                 .toList();
+
+        List<Long> orderIds = candidates.stream().map(c -> c.order().id()).toList();
+        Map<Long, PrintModels.OrderPrintStatus> printStatuses = printJobService.getOrderPrintStatuses(orderIds);
+
         Map<String, Integer> buildingCounts = new LinkedHashMap<>();
         Map<String, Integer> addressCounts = new LinkedHashMap<>();
         for (AdminOrderCandidate candidate : candidates) {
@@ -583,14 +595,24 @@ public class StorefrontService {
         for (int index = 0; index < candidates.size(); index++) {
             AdminOrderCandidate candidate = candidates.get(index);
             int position = buildingPositions.merge(candidate.deliveryGroupKey(), 1, Integer::sum);
+            PrintModels.OrderPrintStatus ps = printStatuses.get(candidate.order().id());
             result.add(toAdminOrderDto(
                     candidate,
                     index + 1,
                     buildingCounts.get(candidate.deliveryGroupKey()),
                     position,
-                    addressCounts.get(candidate.deliveryDate() + "|" + candidate.profile().exactAddressKey())
+                    addressCounts.get(candidate.deliveryDate() + "|" + candidate.profile().exactAddressKey()),
+                    ps != null ? ps.status() : "NONE",
+                    ps != null ? ps.jobId() : null
             ));
         }
+
+        if (printStatus != null && !printStatus.isBlank()) {
+            return result.stream()
+                    .filter(order -> printStatus.equals(order.printStatus()))
+                    .toList();
+        }
+
         return result;
     }
 
@@ -600,6 +622,24 @@ public class StorefrontService {
 
     public synchronized OrderDetailDto adminOrder(Long id) {
         return toOrderDetailDto(adminOrderState(id));
+    }
+
+    public synchronized PrintModels.BatchPrintResultDto batchPrintOrders(List<Long> orderIds) {
+        if (orderIds == null || orderIds.isEmpty()) {
+            return new PrintModels.BatchPrintResultDto(0, 0, List.of(), List.of());
+        }
+
+        List<OrderDetailDto> orderDetails = new ArrayList<>();
+        for (Long orderId : orderIds) {
+            try {
+                OrderDetailDto order = adminOrder(orderId);
+                orderDetails.add(order);
+            } catch (Exception e) {
+                // 订单不存在，跳过
+            }
+        }
+
+        return printJobService.batchEnqueueOrders(orderDetails);
     }
 
     public synchronized OrderDetailDto cancelOrder(Long id) {
@@ -1360,7 +1400,9 @@ public class StorefrontService {
             int deliverySequence,
             int buildingOrderCount,
             int buildingOrderPosition,
-            int sameAddressOrderCount
+            int sameAddressOrderCount,
+            String printStatus,
+            Long printJobId
     ) {
         OrderState order = candidate.order();
         OrderDto summary = toOrderDto(order);
@@ -1383,7 +1425,9 @@ public class StorefrontService {
                 deliverySequence,
                 buildingOrderCount,
                 buildingOrderPosition,
-                sameAddressOrderCount
+                sameAddressOrderCount,
+                printStatus,
+                printJobId
         );
     }
 

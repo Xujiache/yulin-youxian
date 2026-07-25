@@ -1,6 +1,7 @@
 package com.xianda.freshdelivery.controller.admin;
 
 import com.xianda.freshdelivery.common.ApiResponse;
+import com.xianda.freshdelivery.dto.PrintModels;
 import com.xianda.freshdelivery.dto.PrintModels.PrintJobDto;
 import com.xianda.freshdelivery.dto.PrintModels.PrinterAccessKeyDto;
 import com.xianda.freshdelivery.dto.PrintModels.PrinterConfigDto;
@@ -56,5 +57,10 @@ public class AdminPrintController {
     @PostMapping("/jobs/{id}/retry")
     public ApiResponse<PrintJobDto> retry(@PathVariable Long id) {
         return ApiResponse.ok(printJobService.retry(id));
+    }
+
+    @PostMapping("/orders/batch")
+    public ApiResponse<PrintModels.BatchPrintResultDto> batchPrint(@Valid @RequestBody PrintModels.BatchPrintRequest request) {
+        return ApiResponse.ok(storefrontService.batchPrintOrders(request.orderIds()));
     }
 }

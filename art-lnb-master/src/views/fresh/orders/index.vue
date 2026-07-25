@@ -20,6 +20,7 @@
             clearable
             @change="loadOrders"
           />
+          <ElSegmented v-model="printStatus" :options="printStatuses" @change="loadOrders" />
         </div>
         <div class="delivery-toolbar__summary">
           <span class="delivery-toolbar__signal"></span>
@@ -30,6 +31,25 @@
         </div>
       </div>
 
+      <div v-if="selectableOrders.length > 0" class="batch-toolbar">
+        <ElCheckbox
+          :model-value="isAllSelected"
+          :indeterminate="selectedOrderIds.length > 0 && !isAllSelected"
+          @change="toggleSelectAll"
+        >
+          全选
+        </ElCheckbox>
+        <span class="batch-toolbar__count">已选 {{ selectedOrderIds.length }} 个订单</span>
+        <ElButton
+          type="primary"
+          :disabled="selectedOrderIds.length === 0"
+          :loading="batchPrinting"
+          @click="handleBatchPrint"
+        >
+          批量打印
+        </ElButton>
+      </div>
+
       <ElTable
         v-loading="loading"
         :data="orders"
@@ -38,6 +58,15 @@
         :row-class-name="rowClassName"
         empty-text="暂无订单"
       >
+        <ElTableColumn v-if="selectableOrders.length > 0" width="50" align="center">
+          <template #default="{ row }">
+            <ElCheckbox
+              v-if="isSelectable(row)"
+              :model-value="selectedOrderIds.includes(row.id)"
+              @change="toggleSelect(row.id)"
+            />
+          </template>
+        </ElTableColumn>
         <ElTableColumn label="顺序" width="76" align="center">
           <template #default="{ row }">
             <span class="delivery-sequence">{{ row.deliverySequence }}</span>
@@ -78,6 +107,13 @@
         <ElTableColumn label="状态" width="140">
           <template #default="{ row }">
             <ElTag :type="statusTag(row.status)">{{ row.status }}</ElTag>
+          </template>
+        </ElTableColumn>
+        <ElTableColumn label="打印状态" width="110">
+          <template #default="{ row }">
+            <ElTag :type="printStatusTag(row.printStatus)">
+              {{ printStatusLabel(row.printStatus) }}
+            </ElTag>
           </template>
         </ElTableColumn>
         <ElTableColumn label="订单信息" min-width="210">
@@ -196,6 +232,7 @@
   import { ElMessage, ElMessageBox } from 'element-plus'
   import {
     acceptOrder,
+    batchPrintOrders,
     cancelOrder,
     completeOrder,
     deliverOrder,
@@ -208,12 +245,16 @@
   defineOptions({ name: 'FreshOrders' })
 
   const statuses = ['全部', '待支付', '待接单', '备货中', '配送中', '已完成', '售后']
+  const printStatuses = ['全部', '未打印', '已打印', '打印失败']
   const status = ref('全部')
+  const printStatus = ref('全部')
   const deliveryDate = ref('')
   const loading = ref(false)
+  const batchPrinting = ref(false)
   const detailVisible = ref(false)
   const orders = ref<OrderSummary[]>([])
   const detail = ref<OrderDetail | null>(null)
+  const selectedOrderIds = ref<number[]>([])
   const groupCount = computed(
     () => new Set(orders.value.map((order) => order.deliveryGroupKey)).size
   )
@@ -226,6 +267,59 @@
     if (value === '已取消') return 'info'
     return 'primary'
   }
+
+  const printStatusLabel = (status?: string) => ({
+    NONE: '未打印',
+    PENDING: '打印中',
+    SUCCESS: '已打印',
+    FAILED: '打印失败'
+  })[status || 'NONE']
+
+  const printStatusTag = (status?: string) => ({
+    NONE: 'info',
+    PENDING: 'warning',
+    SUCCESS: 'success',
+    FAILED: 'danger'
+  })[status || 'NONE'] as 'success' | 'warning' | 'info' | 'danger' | undefined
+
+  const printStatusMap: Record<string, string> = {
+    '全部': '',
+    '未打印': 'NONE',
+    '已打印': 'SUCCESS',
+    '打印失败': 'FAILED'
+  }
+
+  const selectableOrders = computed(() =>
+    orders.value.filter(
+      (order) => order.status === '已支付/待接单' || order.status.includes('已支付')
+    )
+  )
+
+  const isAllSelected = computed(
+    () =>
+      selectableOrders.value.length > 0 &&
+      selectedOrderIds.value.length === selectableOrders.value.length
+  )
+
+  const toggleSelectAll = () => {
+    if (isAllSelected.value) {
+      selectedOrderIds.value = []
+    } else {
+      selectedOrderIds.value = selectableOrders.value.map((o) => o.id)
+    }
+  }
+
+  const toggleSelect = (orderId: number) => {
+    const index = selectedOrderIds.value.indexOf(orderId)
+    if (index > -1) {
+      selectedOrderIds.value.splice(index, 1)
+    } else {
+      selectedOrderIds.value.push(orderId)
+    }
+  }
+
+  const isSelectable = (order: OrderSummary) =>
+    order.status === '已支付/待接单' || order.status.includes('已支付')
 
   const canAccept = (row: OrderSummary) => row.status === '已支付/待接单'
   const canDeliver = (row: OrderSummary) => ['已支付/待接单', '备货中'].includes(row.status)
@@ -247,12 +341,51 @@
   const loadOrders = async () => {
     loading.value = true
     try {
-      const result = await getOrders(status.value, deliveryDate.value || undefined)
+      const mappedPrintStatus = printStatusMap[printStatus.value]
+      const result = await getOrders(
+        status.value,
+        deliveryDate.value || undefined,
+        mappedPrintStatus || undefined
+      )
       orders.value = result.items || []
+      selectedOrderIds.value = []
     } catch (error) {
       ElMessage.error(error instanceof Error ? error.message : '订单加载失败')
     } finally {
       loading.value = false
+    }
+  }
+
+  const handleBatchPrint = async () => {
+    if (selectedOrderIds.value.length === 0) {
+      ElMessage.warning('请先选择要打印的订单')
+      return
+    }
+
+    try {
+      await ElMessageBox.confirm(
+        `确认批量打印 ${selectedOrderIds.value.length} 个订单？`,
+        '批量打印',
+        { type: 'warning' }
+      )
+
+      batchPrinting.value = true
+      const result = await batchPrintOrders(selectedOrderIds.value)
+
+      ElMessage.success(`批量打印完成：成功 ${result.success} 个，失败 ${result.failed} 个`)
+
+      selectedOrderIds.value = []
+      await loadOrders()
+
+      if (result.errors.length > 0) {
+        console.warn('批量打印错误：', result.errors)
+      }
+    } catch (error) {
+      if (error !== 'cancel' && error !== 'close') {
+        ElMessage.error(error instanceof Error ? error.message : '批量打印失败')
+      }
+    } finally {
+      batchPrinting.value = false
     }
   }
 
@@ -346,6 +479,22 @@
       border-radius: 50%;
       background: #16a05d;
       box-shadow: 0 0 0 5px rgb(22 160 93 / 12%);
+    }
+  }
+
+  .batch-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 12px 16px;
+    margin-bottom: 16px;
+    border-radius: 8px;
+    background: #f5f7fa;
+    border: 1px solid #e4e7ed;
+
+    &__count {
+      color: #606266;
+      font-size: 14px;
     }
   }
 

@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.SerializationFeature;
 import com.xianda.freshdelivery.common.BusinessException;
 import com.xianda.freshdelivery.dto.OrderDetailDto;
 import com.xianda.freshdelivery.dto.OrderItemDto;
+import com.xianda.freshdelivery.dto.PrintModels;
 import com.xianda.freshdelivery.dto.PrintModels.PrintAgentHeartbeatRequest;
 import com.xianda.freshdelivery.dto.PrintModels.PrintJobDto;
 import com.xianda.freshdelivery.dto.PrintModels.PrintJobResultRequest;
@@ -273,6 +274,101 @@ public class PrintJobService {
         jobs.put(id, next);
         persist();
         return toDto(next);
+    }
+
+    public synchronized Map<Long, PrintModels.OrderPrintStatus> getOrderPrintStatuses(List<Long> orderIds) {
+        Map<Long, PrintModels.OrderPrintStatus> result = new LinkedHashMap<>();
+
+        if (orderIds == null || orderIds.isEmpty()) {
+            return result;
+        }
+
+        for (Long orderId : orderIds) {
+            String sourceKey = "ORDER:" + orderId;
+            List<PrintJobState> orderJobs = jobs.values().stream()
+                    .filter(job -> sourceKey.equals(job.sourceKey()))
+                    .toList();
+
+            if (orderJobs.isEmpty()) {
+                result.put(orderId, new PrintModels.OrderPrintStatus("NONE", null));
+            } else {
+                boolean hasSuccess = orderJobs.stream().anyMatch(j -> SUCCESS.equals(j.status()));
+                if (hasSuccess) {
+                    PrintJobState successJob = orderJobs.stream()
+                            .filter(j -> SUCCESS.equals(j.status()))
+                            .findFirst()
+                            .orElse(null);
+                    result.put(orderId, new PrintModels.OrderPrintStatus("SUCCESS", successJob != null ? successJob.id() : null));
+                } else {
+                    boolean hasPending = orderJobs.stream()
+                            .anyMatch(j -> PENDING.equals(j.status()) ||
+                                          PRINTING.equals(j.status()) ||
+                                          RETRYING.equals(j.status()));
+                    if (hasPending) {
+                        PrintJobState pendingJob = orderJobs.stream()
+                                .filter(j -> PENDING.equals(j.status()) ||
+                                            PRINTING.equals(j.status()) ||
+                                            RETRYING.equals(j.status()))
+                                .findFirst()
+                                .orElse(null);
+                        result.put(orderId, new PrintModels.OrderPrintStatus("PENDING", pendingJob != null ? pendingJob.id() : null));
+                    } else {
+                        PrintJobState failedJob = orderJobs.get(0);
+                        result.put(orderId, new PrintModels.OrderPrintStatus("FAILED", failedJob.id()));
+                    }
+                }
+            }
+        }
+
+        return result;
+    }
+
+    public synchronized PrintModels.BatchPrintResultDto batchEnqueueOrders(List<OrderDetailDto> orderDetails) {
+        List<PrintJobDto> jobs = new ArrayList<>();
+        List<PrintModels.BatchPrintErrorDto> errors = new ArrayList<>();
+        int successCount = 0;
+
+        if (orderDetails == null || orderDetails.isEmpty()) {
+            return new PrintModels.BatchPrintResultDto(0, 0, jobs, errors);
+        }
+
+        for (OrderDetailDto order : orderDetails) {
+            try {
+                if (order == null) {
+                    continue;
+                }
+
+                if (!"PAID".equals(order.status()) && !order.status().contains("已支付")) {
+                    errors.add(new PrintModels.BatchPrintErrorDto(order.id(), "订单未支付"));
+                    continue;
+                }
+
+                String sourceKey = "ORDER:" + order.id();
+                boolean hasSuccess = this.jobs.values().stream()
+                        .filter(job -> sourceKey.equals(job.sourceKey()))
+                        .anyMatch(job -> SUCCESS.equals(job.status()));
+
+                if (hasSuccess) {
+                    errors.add(new PrintModels.BatchPrintErrorDto(order.id(), "订单已有成功的打印任务"));
+                    continue;
+                }
+
+                PrintJobDto job = enqueuePaidOrder(order);
+                if (job != null) {
+                    jobs.add(job);
+                    successCount++;
+                } else {
+                    errors.add(new PrintModels.BatchPrintErrorDto(order.id(), "创建打印任务失败"));
+                }
+
+            } catch (BusinessException e) {
+                errors.add(new PrintModels.BatchPrintErrorDto(order.id(), e.getMessage()));
+            } catch (Exception e) {
+                errors.add(new PrintModels.BatchPrintErrorDto(order.id(), "系统错误：" + e.getMessage()));
+            }
+        }
+
+        return new PrintModels.BatchPrintResultDto(successCount, errors.size(), jobs, errors);
     }
 
     private boolean loadState() {

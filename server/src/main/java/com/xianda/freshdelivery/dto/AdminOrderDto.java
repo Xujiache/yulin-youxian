@@ -21,6 +21,8 @@ public record AdminOrderDto(
         Integer deliverySequence,
         Integer buildingOrderCount,
         Integer buildingOrderPosition,
-        Integer sameAddressOrderCount
+        Integer sameAddressOrderCount,
+        String printStatus,
+        Long printJobId
 ) {
 }
