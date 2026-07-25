@@ -11,7 +11,7 @@ using System.Web.Script.Serialization;
 
 internal static class Program
 {
-    private const string Version = "1.0.0";
+    private const string Version = "1.1.0";
     private static readonly JavaScriptSerializer Json = new JavaScriptSerializer { MaxJsonLength = Int32.MaxValue };
     private static readonly string BaseDirectory = AppDomain.CurrentDomain.BaseDirectory;
     private static readonly string ConfigPath = Path.Combine(BaseDirectory, "agent.config.json");
@@ -48,46 +48,228 @@ internal static class Program
         catch (Exception exception)
         {
             AgentLog.Write("启动失败: " + exception.Message);
-            Console.Error.WriteLine("启动失败: " + exception.Message);
+            Console.WriteLine();
+            Console.WriteLine("========================================");
+            Console.WriteLine("出错了：" + exception.Message);
+            Console.WriteLine("========================================");
+            Console.WriteLine("请把上面这行红字截图发给管理员。");
+            WaitForKey();
             return 1;
+        }
+    }
+
+    private static void WaitForKey()
+    {
+        try
+        {
+            if (Console.IsInputRedirected)
+            {
+                return;
+            }
+            Console.WriteLine("按回车键关闭窗口……");
+            Console.ReadLine();
+        }
+        catch
+        {
         }
     }
 
     private static void Setup()
     {
-        Console.WriteLine("禹邻优鲜芯烨小票打印代理 " + Version);
-        AgentConfig previous = File.Exists(ConfigPath) ? LoadConfig() : new AgentConfig();
+        Console.WriteLine("========================================");
+        Console.WriteLine(" 禹邻优鲜 小票打印代理  配置向导 " + Version);
+        Console.WriteLine("========================================");
+        Console.WriteLine();
+        AgentConfig previous = File.Exists(ConfigPath) ? TryLoadConfig() : new AgentConfig();
         AgentConfig config = new AgentConfig();
-        config.ApiBaseUrl = ReadValue("后端 API 地址", ValueOr(previous.ApiBaseUrl, "https://hqhjxt.vip/api"));
-        config.AccessKey = ReadValue("后台生成的打印代理密钥", previous.AccessKey);
-        config.ConnectionMode = ReadValue("连接方式（net 或 usb）", ValueOr(previous.ConnectionMode, "net")).ToLowerInvariant();
-        if (config.ConnectionMode == "usb")
-        {
-            Console.WriteLine("可先执行 YulinPrintAgent.exe scan 查找 USB 设备路径。");
-            config.UsbPath = ReadValue("USB 设备路径", previous.UsbPath);
-            config.NetworkHost = "";
-            config.NetworkPort = 9100;
-        }
-        else
-        {
-            config.ConnectionMode = "net";
-            config.NetworkHost = ReadValue("打印机局域网 IP", previous.NetworkHost);
-            config.NetworkPort = ReadInt("打印机端口", previous.NetworkPort <= 0 ? 9100 : previous.NetworkPort);
-            config.UsbPath = "";
-        }
-        config.CutPaper = ReadBoolean("每单执行切纸", previous.CutPaper);
-        config.PollSeconds = Math.Max(2, ReadInt("轮询秒数", previous.PollSeconds <= 0 ? 3 : previous.PollSeconds));
+
+        // step 1: API URL
+        Console.WriteLine("第 1 步：填写后端 API 地址");
+        Console.WriteLine("（本地开发：http://localhost:8080/api）");
+        Console.WriteLine("（生产环境：https://你的域名/api，注意末尾必须带 /api）");
+        string defaultApiUrl = ValueOr(previous.ApiBaseUrl, "http://localhost:8080/api");
+        config.ApiBaseUrl = ReadRequired("API 地址", defaultApiUrl).TrimEnd('/');
+        Console.WriteLine();
+
+        // step 2: access key
+        Console.WriteLine("第 2 步：填写打印密钥");
+        Console.WriteLine("（在管理后台小票打印页面点击生成代理密钥，复制粘贴到这里）");
+        config.AccessKey = ReadRequired("打印密钥", previous.AccessKey);
+        Console.WriteLine();
+
+        // step 3: printer connection
+        Console.WriteLine("第 3 步：连接打印机（正在自动查找 USB 打印机…）");
+        DetectConnection(config, previous);
+        Console.WriteLine();
+
+        config.CutPaper = true;
+        config.PollSeconds = Math.Max(2, previous.PollSeconds <= 0 ? 3 : previous.PollSeconds);
+
         ValidateConfig(config);
         File.WriteAllText(ConfigPath, Json.Serialize(config), new UTF8Encoding(false));
-        Console.WriteLine("配置已保存：" + ConfigPath);
-        Console.WriteLine("执行 YulinPrintAgent.exe self-test 可测试硬件；直接执行 YulinPrintAgent.exe 可启动自动打印。");
+        Console.WriteLine("配置已保存到 " + ConfigPath);
+        Console.WriteLine();
+
+        // step 4: local test print (hardware verification)
+        Console.WriteLine("第 4 步：打印测试小票（确认打印机正常）");
+        try
+        {
+            using (XprinterClient printer = new XprinterClient(config))
+            {
+                printer.Connect();
+                printer.Print(BuildSelfTestReceipt());
+            }
+            Console.WriteLine();
+            Console.WriteLine(">>> 测试小票已发出！请查看打印机是否吐出一张小票。 <<<");
+        }
+        catch (Exception exception)
+        {
+            Console.WriteLine();
+            Console.WriteLine("!!! 测试打印失败：" + exception.Message);
+            Console.WriteLine("!!! 配置已保存，但打印机可能没连好。请检查电源/数据线/纸张，再重新运行本向导。");
+            Console.WriteLine();
+            WaitForKey();
+            return;
+        }
+        Console.WriteLine();
+
+        // step 5: backend connectivity test
+        Console.WriteLine("第 5 步：验证后端连通性（" + config.ApiBaseUrl + "）");
+        try
+        {
+            ApiClient.Heartbeat(config);
+            Console.WriteLine(">>> 后端连接成功！代理已注册到服务器。 <<<");
+            Console.WriteLine(">>> 请前往管理后台小票打印页面，确认门店打印代理显示为绿色在线。 <<<");
+            Console.WriteLine(">>> 然后点击管理后台的测试打印按钮，验证整条链路是否通畅。 <<<");
+        }
+        catch (Exception exception)
+        {
+            Console.WriteLine("!!! 后端连接失败：" + exception.Message);
+            Console.WriteLine("!!! 配置已保存，但无法连接后端。");
+            Console.WriteLine("!!! 请检查：");
+            Console.WriteLine("!!!   1. API 地址是否正确（当前：" + config.ApiBaseUrl + "）");
+            Console.WriteLine("!!!   2. 打印密钥是否已关联到当前后端");
+            Console.WriteLine("!!!   3. 后端服务是否已启动");
+            Console.WriteLine("!!!   4. 防火墙是否放行了端口");
+            Console.WriteLine("!!!");
+            Console.WriteLine("!!! 可以稍后修改 agent.config.json 中的 ApiBaseUrl 后重新运行 setup。");
+            Console.WriteLine();
+            WaitForKey();
+            return;
+        }
+        Console.WriteLine();
+
+        // auto-start polling loop
+        Console.WriteLine("========================================");
+        Console.WriteLine(" 配置完成！正在启动自动接单打印……");
+        Console.WriteLine(" 保持此窗口运行，不要关闭。");
+        Console.WriteLine(" 如需开机自动启动，请双击 install-autostart.cmd。");
+        Console.WriteLine("========================================");
+        Console.WriteLine();
+        Run(config);
+    }
+
+    private static void DetectConnection(AgentConfig config, AgentConfig previous)
+    {
+        List<string> devices;
+        try
+        {
+            devices = FindUsbDevices();
+        }
+        catch (Exception exception)
+        {
+            Console.WriteLine("USB 扫描出错：" + exception.Message);
+            devices = new List<string>();
+        }
+
+        if (devices.Count == 1)
+        {
+            config.ConnectionMode = "usb";
+            config.UsbPath = devices[0];
+            config.NetworkHost = "";
+            config.NetworkPort = 9100;
+            Console.WriteLine("已找到 USB 打印机，自动选用。");
+            return;
+        }
+
+        if (devices.Count > 1)
+        {
+            Console.WriteLine("找到多台 USB 打印机，请输入序号选择：");
+            for (int i = 0; i < devices.Count; i++)
+            {
+                Console.WriteLine("  " + (i + 1) + "、" + devices[i]);
+            }
+            int choice = ReadInt("选择第几台", 1);
+            if (choice < 1 || choice > devices.Count)
+            {
+                choice = 1;
+            }
+            config.ConnectionMode = "usb";
+            config.UsbPath = devices[choice - 1];
+            config.NetworkHost = "";
+            config.NetworkPort = 9100;
+            Console.WriteLine("已选用第 " + choice + " 台 USB 打印机。");
+            return;
+        }
+
+        Console.WriteLine("没有找到 USB 打印机。");
+        Console.WriteLine("如果打印机是网口/WiFi 连接（有自己的 IP），请填写 IP；");
+        Console.WriteLine("如果是 USB 连接却没找到，请检查电源、数据线、并安装芯烨 58 系列驱动，然后重新运行本向导。");
+        string ip = ReadValue("打印机 IP（USB 打印机可直接留空回车重试）", ValueOr(previous.NetworkHost, ""));
+        if (String.IsNullOrWhiteSpace(ip))
+        {
+            throw new InvalidOperationException("没有找到 USB 打印机，也没有填写网口 IP。请接好打印机后重新运行配置向导。");
+        }
+        config.ConnectionMode = "net";
+        config.NetworkHost = ip.Trim();
+        config.NetworkPort = ReadInt("打印机端口", previous.NetworkPort <= 0 ? 9100 : previous.NetworkPort);
+        config.UsbPath = "";
+    }
+
+    private static AgentConfig TryLoadConfig()
+    {
+        try
+        {
+            AgentConfig config = Json.Deserialize<AgentConfig>(File.ReadAllText(ConfigPath, Encoding.UTF8));
+            return config ?? new AgentConfig();
+        }
+        catch
+        {
+            return new AgentConfig();
+        }
     }
 
     private static void Run(AgentConfig config)
     {
         ValidateConfig(config);
-        Console.WriteLine("打印代理已启动：" + ConnectionDescription(config));
-        AgentLog.Write("代理启动，连接=" + ConnectionDescription(config));
+        Console.WriteLine("打印代理已启动");
+        Console.WriteLine("  后端：" + config.ApiBaseUrl);
+        Console.WriteLine("  打印机：" + ConnectionDescription(config));
+        Console.WriteLine("  轮询间隔：" + config.PollSeconds + " 秒");
+        AgentLog.Write("代理启动，后端=" + config.ApiBaseUrl + "，连接=" + ConnectionDescription(config));
+
+        Console.WriteLine();
+        Console.Write("正在连接后端……");
+        try
+        {
+            ApiClient.Heartbeat(config);
+            Console.WriteLine(" 连接成功！代理已上线。");
+            Console.WriteLine("等待管理后台推送打印任务……");
+            Console.WriteLine();
+        }
+        catch (Exception exception)
+        {
+            Console.WriteLine();
+            Console.WriteLine("!!! 后端连接失败：" + exception.Message);
+            Console.WriteLine("!!! 代理将继续尝试连接，但当前无法接收打印任务。");
+            Console.WriteLine("!!! 请检查：");
+            Console.WriteLine("!!!   1. API 地址是否正确（当前：" + config.ApiBaseUrl + "）");
+            Console.WriteLine("!!!   2. 打印密钥是否正确（重新运行 setup 可更新配置）");
+            Console.WriteLine("!!!   3. 后端服务是否已启动");
+            Console.WriteLine("!!!   4. 防火墙是否放行了端口");
+            Console.WriteLine();
+        }
+
         while (true)
         {
             try
@@ -137,6 +319,20 @@ internal static class Program
 
     private static void ScanUsb()
     {
+        List<string> devices = FindUsbDevices();
+        if (devices.Count == 0)
+        {
+            Console.WriteLine("未发现 USB 打印机。请确认电源、数据线，并在此电脑安装芯烨 58 系列 USB 驱动。");
+            return;
+        }
+        foreach (string device in devices)
+        {
+            Console.WriteLine("USB," + device);
+        }
+    }
+
+    private static List<string> FindUsbDevices()
+    {
         List<string> devices = new List<string>();
         Native.DeviceCallback callback = delegate(IntPtr pointer)
         {
@@ -152,15 +348,7 @@ internal static class Program
         {
             throw new InvalidOperationException("USB 扫描失败，错误码：" + code);
         }
-        if (devices.Count == 0)
-        {
-            Console.WriteLine("未发现 USB 打印机。请确认电源、数据线，并在此电脑安装芯烨 58 系列 USB 驱动。");
-            return;
-        }
-        foreach (string device in devices)
-        {
-            Console.WriteLine("USB," + device);
-        }
+        return devices;
     }
 
     private static AgentConfig LoadConfig()
@@ -229,17 +417,25 @@ internal static class Program
         return String.IsNullOrWhiteSpace(value) ? defaultValue : value.Trim();
     }
 
+    private static string ReadRequired(string label, string defaultValue)
+    {
+        while (true)
+        {
+            string value = ReadValue(label, defaultValue);
+            if (!String.IsNullOrWhiteSpace(value))
+            {
+                return value;
+            }
+            Console.WriteLine("* " + label + "不能为空，请重新输入。");
+        }
+    }
+
+
     private static int ReadInt(string label, int defaultValue)
     {
         string value = ReadValue(label, defaultValue.ToString());
         int result;
         return Int32.TryParse(value, out result) ? result : defaultValue;
-    }
-
-    private static bool ReadBoolean(string label, bool defaultValue)
-    {
-        string value = ReadValue(label + "（y/n）", defaultValue ? "y" : "n");
-        return String.Equals(value, "y", StringComparison.OrdinalIgnoreCase) || String.Equals(value, "yes", StringComparison.OrdinalIgnoreCase) || value == "1" || value == "是";
     }
 
     private static string ConnectionDescription(AgentConfig config)
@@ -364,7 +560,7 @@ internal static class Program
                         continue;
                     }
                     WriteWrapped(ReadString(item, "name"), 32);
-                    WritePair(ReadString(item, "quantity") + " × " + ReadString(item, "unitPrice"), ReadString(item, "amount"));
+                    WritePair(ReadString(item, "quantity") + " x " + ReadString(item, "unitPrice"), ReadString(item, "amount"));
                 }
             }
             Line();
@@ -544,6 +740,15 @@ internal static class Program
             payload["success"] = success;
             payload["message"] = message;
             Send(config, "POST", "/printing/agent/jobs/" + id + "/result", payload);
+        }
+
+        public static void Heartbeat(AgentConfig config)
+        {
+            Dictionary<string, object> payload = new Dictionary<string, object>();
+            payload["agentName"] = Environment.MachineName;
+            payload["connection"] = ConnectionDescription(config);
+            payload["version"] = Version;
+            Send(config, "POST", "/printing/agent/heartbeat", payload);
         }
 
         private static Dictionary<string, object> Send(AgentConfig config, string method, string relativePath, object payload)

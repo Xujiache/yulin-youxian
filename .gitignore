@@ -18,6 +18,7 @@ server/data/
 project.private.config.json
 print-agent/agent.config.json
 print-agent/*.log
+*.zip
 third_party/xprinter-xp58/windows-sdk-2.3.1/
 tmp/extract_xprinter_pdf.py
 tmp/xprinter-esc-sdk-manual.txt

@@ -452,7 +452,7 @@ public class PrintJobService {
     }
 
     private static PrintConfigState defaultConfig() {
-        return new PrintConfigState(false, true, 3, "XP-58III NT", "", "", "", "", "");
+        return new PrintConfigState(true, true, 3, "XP-58III NT", "", "", "", "", "");
     }
 
     private String normalizeModel(String value) {
