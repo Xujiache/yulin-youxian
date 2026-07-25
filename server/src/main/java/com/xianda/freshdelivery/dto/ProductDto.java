@@ -15,6 +15,7 @@ public record ProductDto(
         BigDecimal stockQty,
         String badge,
         Integer status,
-        Boolean recommended
+        Boolean recommended,
+        Integer sortOrder
 ) {
 }

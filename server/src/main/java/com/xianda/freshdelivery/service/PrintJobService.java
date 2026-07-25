@@ -444,7 +444,7 @@ public class PrintJobService {
                 clean(order.createdAt(), now()),
                 clean(order.deliverySlot(), "尽快送达"),
                 order.address() == null ? "收货人" : clean(order.address().name(), "收货人"),
-                order.address() == null ? "" : clean(order.address().phone(), ""),
+                order.address() == null ? "" : maskPhone(clean(order.address().phone(), "")),
                 address,
                 items,
                 yuan(order.productAmount()),
@@ -580,6 +580,18 @@ public class PrintJobService {
     private String yuan(Integer amount) {
         int value = amount == null ? 0 : amount;
         return "¥ " + BigDecimal.valueOf(value, 2).setScale(2, RoundingMode.HALF_UP).toPlainString();
+    }
+
+    private String maskPhone(String phone) {
+        if (phone == null || phone.length() < 7) {
+            return phone;
+        }
+        // 手机号脱敏：保留前3位和后4位，中间用****代替
+        if (phone.length() == 11) {
+            return phone.substring(0, 3) + "****" + phone.substring(7);
+        }
+        // 其他号码：保留前3位和后2位
+        return phone.substring(0, 3) + "****" + phone.substring(phone.length() - 2);
     }
 
     private String now() {

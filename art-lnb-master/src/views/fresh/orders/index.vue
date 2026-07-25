@@ -58,7 +58,7 @@
         :row-class-name="rowClassName"
         empty-text="暂无订单"
       >
-        <ElTableColumn v-if="selectableOrders.length > 0" width="50" align="center">
+        <ElTableColumn v-if="selectableOrders.length > 0" width="55" align="center" fixed="left">
           <template #default="{ row }">
             <ElCheckbox
               v-if="isSelectable(row)"
@@ -67,12 +67,12 @@
             />
           </template>
         </ElTableColumn>
-        <ElTableColumn label="顺序" width="76" align="center">
+        <ElTableColumn label="顺序" width="80" align="center" fixed="left">
           <template #default="{ row }">
             <span class="delivery-sequence">{{ row.deliverySequence }}</span>
           </template>
         </ElTableColumn>
-        <ElTableColumn label="配送分组" min-width="210">
+        <ElTableColumn label="配送分组" min-width="200">
           <template #default="{ row }">
             <div class="delivery-group">
               <ElTag type="success" effect="light" size="small">{{ row.deliveryDate }}</ElTag>
@@ -85,7 +85,7 @@
             </div>
           </template>
         </ElTableColumn>
-        <ElTableColumn label="收货地址" min-width="290">
+        <ElTableColumn label="收货地址" min-width="280">
           <template #default="{ row }">
             <div class="address-cell">
               <strong>{{ fullAddress(row) }}</strong>
@@ -104,19 +104,19 @@
             </div>
           </template>
         </ElTableColumn>
-        <ElTableColumn label="状态" width="140">
+        <ElTableColumn label="状态" width="130">
           <template #default="{ row }">
             <ElTag :type="statusTag(row.status)">{{ row.status }}</ElTag>
           </template>
         </ElTableColumn>
-        <ElTableColumn label="打印状态" width="110">
+        <ElTableColumn label="打印状态" width="105">
           <template #default="{ row }">
             <ElTag :type="printStatusTag(row.printStatus)">
               {{ printStatusLabel(row.printStatus) }}
             </ElTag>
           </template>
         </ElTableColumn>
-        <ElTableColumn label="订单信息" min-width="210">
+        <ElTableColumn label="订单信息" min-width="200">
           <template #default="{ row }">
             <div class="order-summary">
               <strong>{{ row.orderNo }}</strong>

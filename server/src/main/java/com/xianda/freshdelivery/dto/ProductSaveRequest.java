@@ -18,6 +18,7 @@ public record ProductSaveRequest(
         @NotNull @DecimalMin("0") BigDecimal stockQty,
         String badge,
         @NotNull Integer status,
-        Boolean recommended
+        Boolean recommended,
+        Integer sortOrder
 ) {
 }
