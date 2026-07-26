@@ -21,11 +21,13 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.KeyFactory;
 import java.security.PrivateKey;
+import java.security.PublicKey;
 import java.security.SecureRandom;
 import java.security.Signature;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
 import java.security.spec.PKCS8EncodedKeySpec;
+import java.security.spec.X509EncodedKeySpec;
 import java.time.Instant;
 import java.util.Base64;
 import java.util.HexFormat;
@@ -41,6 +43,7 @@ import org.springframework.stereotype.Service;
 public class WechatPayClient {
     private static final String SIGN_TYPE = "RSA";
     private static final String AUTH_SCHEMA = "WECHATPAY2-SHA256-RSA2048";
+    private static final long CALLBACK_MAX_AGE_SECONDS = 300;
 
     private final WechatPayProperties properties;
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -71,7 +74,7 @@ public class WechatPayClient {
     }
 
     public boolean isCallbackVerificationConfigured() {
-        return hasText(properties.getApiV3Key()) && hasText(properties.getPlatformCertificatePath());
+        return hasText(properties.getApiV3Key()) && hasVerificationMaterial();
     }
 
     public PaymentDto createJsapiPayment(OrderDetailDto order, String openId) {
@@ -101,6 +104,28 @@ public class WechatPayClient {
         String packageValue = "prepay_id=" + prepayId;
         String paySign = signMiniAppPayment(timeStamp, nonceStr, packageValue);
         return new PaymentDto(order.id(), order.orderNo(), order.status(), timeStamp, nonceStr, packageValue, SIGN_TYPE, paySign, false);
+    }
+
+    public PaymentNotifyRequest queryPayment(OrderDetailDto order) {
+        if (properties.isDevelopmentMode()) {
+            return new PaymentNotifyRequest(order.orderNo(), "", order.status());
+        }
+        ensurePaymentConfigured();
+        String path = "/v3/pay/transactions/out-trade-no/" + order.orderNo() + "?mchid=" + properties.getMchId();
+        JsonNode response = getJson(path);
+        String tradeState = text(response, "trade_state");
+        String transactionId = response.path("transaction_id").asText("");
+        Integer totalAmount = response.path("amount").path("total").isInt()
+                ? response.path("amount").path("total").asInt()
+                : null;
+        return new PaymentNotifyRequest(
+                order.orderNo(),
+                transactionId,
+                tradeState,
+                response.path("appid").asText(properties.getAppId()),
+                response.path("mchid").asText(properties.getMchId()),
+                totalAmount
+        );
     }
 
     public void requestRefund(RefundDto refund, OrderDetailDto order) {
@@ -195,7 +220,7 @@ public class WechatPayClient {
     }
 
     private void verifyCallbackSignature(String body, String timestamp, String nonce, String serial, String wechatSignature) {
-        if (properties.isDevelopmentMode() && !hasText(properties.getPlatformCertificatePath())) {
+        if (properties.isDevelopmentMode() && !hasVerificationMaterial()) {
             return;
         }
         if (!isCallbackVerificationConfigured()
@@ -206,12 +231,9 @@ public class WechatPayClient {
             throw new BusinessException(401, "微信支付回调验签配置不完整");
         }
         try {
-            X509Certificate certificate = loadPlatformCertificate();
-            if (!serialMatches(serial, certificate)) {
-                throw new BusinessException(401, "微信支付回调证书序列号不匹配");
-            }
+            verifyCallbackTimestamp(timestamp);
             Signature verifier = Signature.getInstance("SHA256withRSA");
-            verifier.initVerify(certificate.getPublicKey());
+            verifier.initVerify(loadVerificationKey(serial, 401));
             verifier.update((timestamp + "\n" + nonce + "\n" + body + "\n").getBytes(StandardCharsets.UTF_8));
             boolean valid = verifier.verify(Base64.getDecoder().decode(wechatSignature));
             if (!valid) {
@@ -224,9 +246,15 @@ public class WechatPayClient {
         }
     }
 
-    private boolean serialMatches(String serial, X509Certificate certificate) {
-        String configured = certificate.getSerialNumber().toString(16).toUpperCase(Locale.ROOT);
-        return configured.equals(serial.trim().toUpperCase(Locale.ROOT));
+    private void verifyCallbackTimestamp(String timestamp) {
+        try {
+            long callbackTimestamp = Long.parseLong(timestamp);
+            if (Math.abs(Instant.now().getEpochSecond() - callbackTimestamp) > CALLBACK_MAX_AGE_SECONDS) {
+                throw new BusinessException(401, "微信支付回调时间戳已过期");
+            }
+        } catch (NumberFormatException exception) {
+            throw new BusinessException(401, "微信支付回调时间戳无效");
+        }
     }
 
     private JsonNode decryptResource(JsonNode resource) {
@@ -257,13 +285,28 @@ public class WechatPayClient {
 
     private JsonNode postJson(String path, Map<String, Object> body) {
         try {
-            String json = objectMapper.writeValueAsString(body);
-            HttpRequest request = HttpRequest.newBuilder(URI.create(normalizedBaseUrl() + path))
-                    .header("Authorization", authorization("POST", path, json))
+            return requestJson("POST", path, objectMapper.writeValueAsString(body));
+        } catch (JsonProcessingException exception) {
+            throw new BusinessException(500, "微信支付请求数据序列化失败");
+        }
+    }
+
+    private JsonNode getJson(String path) {
+        return requestJson("GET", path, "");
+    }
+
+    private JsonNode requestJson(String method, String path, String body) {
+        try {
+            HttpRequest.Builder builder = HttpRequest.newBuilder(URI.create(normalizedBaseUrl() + path))
+                    .header("Authorization", authorization(method, path, body))
                     .header("Accept", "application/json")
-                    .header("Content-Type", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString(json, StandardCharsets.UTF_8))
-                    .build();
+                    .header("Content-Type", "application/json");
+            if (hasPublicKeyConfig()) {
+                builder.header("Wechatpay-Serial", properties.getPublicKeyId());
+            }
+            HttpRequest request = "GET".equals(method)
+                    ? builder.GET().build()
+                    : builder.POST(HttpRequest.BodyPublishers.ofString(body, StandardCharsets.UTF_8)).build();
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
             if (response.statusCode() < 200 || response.statusCode() >= 300) {
                 throw new BusinessException(502, "微信支付接口调用失败: " + response.body());
@@ -294,12 +337,8 @@ public class WechatPayClient {
             throw new BusinessException(502, "微信支付接口应答验签配置或响应头不完整");
         }
         try {
-            X509Certificate certificate = loadPlatformCertificate();
-            if (!serialMatches(serial, certificate)) {
-                throw new BusinessException(502, "微信支付接口应答证书序列号不匹配");
-            }
             Signature verifier = Signature.getInstance("SHA256withRSA");
-            verifier.initVerify(certificate.getPublicKey());
+            verifier.initVerify(loadVerificationKey(serial, 502));
             verifier.update((timestamp + "\n" + nonce + "\n" + body + "\n").getBytes(StandardCharsets.UTF_8));
             if (!verifier.verify(Base64.getDecoder().decode(signature))) {
                 throw new BusinessException(502, "微信支付接口应答签名无效");
@@ -309,6 +348,21 @@ public class WechatPayClient {
         } catch (Exception exception) {
             throw new BusinessException(502, "微信支付接口应答验签失败");
         }
+    }
+
+    private PublicKey loadVerificationKey(String serial, int errorCode) {
+        if (hasPublicKeyConfig()) {
+            if (!properties.getPublicKeyId().trim().equalsIgnoreCase(serial.trim())) {
+                throw new BusinessException(errorCode, "微信支付公钥 ID 不匹配");
+            }
+            return loadWechatPayPublicKey();
+        }
+        X509Certificate certificate = loadPlatformCertificate();
+        String certificateSerial = certificate.getSerialNumber().toString(16).toUpperCase(Locale.ROOT);
+        if (!certificateSerial.equals(serial.trim().toUpperCase(Locale.ROOT))) {
+            throw new BusinessException(errorCode, "微信支付平台证书序列号不匹配");
+        }
+        return certificate.getPublicKey();
     }
 
     private String authorization(String method, String canonicalUrl, String body) {
@@ -373,6 +427,20 @@ public class WechatPayClient {
         }
     }
 
+    private PublicKey loadWechatPayPublicKey() {
+        try {
+            String pem = Files.readString(Path.of(properties.getPublicKeyPath()), StandardCharsets.UTF_8);
+            String normalized = pem
+                    .replace("-----BEGIN PUBLIC KEY-----", "")
+                    .replace("-----END PUBLIC KEY-----", "")
+                    .replaceAll("\\s", "");
+            byte[] decoded = Base64.getDecoder().decode(normalized);
+            return KeyFactory.getInstance("RSA").generatePublic(new X509EncodedKeySpec(decoded));
+        } catch (Exception exception) {
+            throw new BusinessException(500, "微信支付公钥读取失败");
+        }
+    }
+
     private void ensurePaymentConfigured() {
         if (!isPaymentConfigured() || !hasText(properties.getNotifyUrl())) {
             throw new BusinessException(500, "微信支付配置不完整");
@@ -388,6 +456,14 @@ public class WechatPayClient {
 
     private boolean hasPrivateKey() {
         return hasText(properties.getPrivateKey()) || hasText(properties.getPrivateKeyPath());
+    }
+
+    private boolean hasVerificationMaterial() {
+        return hasPublicKeyConfig() || hasText(properties.getPlatformCertificatePath());
+    }
+
+    private boolean hasPublicKeyConfig() {
+        return hasText(properties.getPublicKeyId()) && hasText(properties.getPublicKeyPath());
     }
 
     private String normalizedBaseUrl() {

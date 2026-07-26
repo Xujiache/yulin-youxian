@@ -48,6 +48,18 @@ public class WechatPaymentService {
         return order;
     }
 
+    public OrderDetailDto refreshPaymentStatus(Long orderId) {
+        OrderDetailDto order = storefrontService.order(orderId);
+        if (!"待支付".equals(order.status()) || wechatPayClient.isDevelopmentMode()) {
+            return order;
+        }
+        PaymentNotifyRequest payment = wechatPayClient.queryPayment(order);
+        if (!"SUCCESS".equalsIgnoreCase(payment.tradeState())) {
+            return order;
+        }
+        return confirmPayment(payment);
+    }
+
     private void validatePaymentNotificationIdentity(PaymentNotifyRequest request) {
         if (!wechatPayClient.isDevelopmentMode()
                 && (!hasText(request.appId()) || !hasText(request.mchId()) || request.totalAmount() == null)) {

@@ -40,6 +40,7 @@ export interface Product {
   badge: string
   status: number
   recommended: boolean
+  sortOrder: number | null
 }
 
 export interface OrderSummary {
@@ -352,6 +353,13 @@ export function updateProductStock(id: number, stockQty: number) {
   return request.put<Product>({
     url: `/api/admin/products/${id}/stock`,
     data: { stockQty }
+  })
+}
+
+export function updateProductSortOrder(id: number, sortOrder: number) {
+  return request.put<Product>({
+    url: `/api/admin/products/${id}/sort-order`,
+    data: { sortOrder }
   })
 }
 

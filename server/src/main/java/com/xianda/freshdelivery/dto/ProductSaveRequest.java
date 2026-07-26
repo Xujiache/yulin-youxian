@@ -19,6 +19,6 @@ public record ProductSaveRequest(
         String badge,
         @NotNull Integer status,
         Boolean recommended,
-        Integer sortOrder
+        @Min(0) Integer sortOrder
 ) {
 }

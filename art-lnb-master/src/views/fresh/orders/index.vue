@@ -58,7 +58,7 @@
         :row-class-name="rowClassName"
         empty-text="暂无订单"
       >
-        <ElTableColumn v-if="selectableOrders.length > 0" width="55" align="center" fixed="left">
+        <ElTableColumn v-if="orders.length > 0" width="48" align="center" fixed="left">
           <template #default="{ row }">
             <ElCheckbox
               v-if="isSelectable(row)"
@@ -67,12 +67,12 @@
             />
           </template>
         </ElTableColumn>
-        <ElTableColumn label="顺序" width="80" align="center" fixed="left">
+        <ElTableColumn label="顺序" width="64" align="center" fixed="left">
           <template #default="{ row }">
             <span class="delivery-sequence">{{ row.deliverySequence }}</span>
           </template>
         </ElTableColumn>
-        <ElTableColumn label="配送分组" min-width="200">
+        <ElTableColumn label="配送分组" width="210">
           <template #default="{ row }">
             <div class="delivery-group">
               <ElTag type="success" effect="light" size="small">{{ row.deliveryDate }}</ElTag>
@@ -85,7 +85,7 @@
             </div>
           </template>
         </ElTableColumn>
-        <ElTableColumn label="收货地址" min-width="280">
+        <ElTableColumn label="收货地址" min-width="300">
           <template #default="{ row }">
             <div class="address-cell">
               <strong>{{ fullAddress(row) }}</strong>
@@ -104,19 +104,19 @@
             </div>
           </template>
         </ElTableColumn>
-        <ElTableColumn label="状态" width="130">
+        <ElTableColumn label="状态" width="110">
           <template #default="{ row }">
             <ElTag :type="statusTag(row.status)">{{ row.status }}</ElTag>
           </template>
         </ElTableColumn>
-        <ElTableColumn label="打印状态" width="105">
+        <ElTableColumn label="打印状态" width="96">
           <template #default="{ row }">
             <ElTag :type="printStatusTag(row.printStatus)">
               {{ printStatusLabel(row.printStatus) }}
             </ElTag>
           </template>
         </ElTableColumn>
-        <ElTableColumn label="订单信息" min-width="200">
+        <ElTableColumn label="订单信息" min-width="190">
           <template #default="{ row }">
             <div class="order-summary">
               <strong>{{ row.orderNo }}</strong>
@@ -124,43 +124,66 @@
             </div>
           </template>
         </ElTableColumn>
-        <ElTableColumn prop="deliverySlot" label="预约配送" min-width="160" />
-        <ElTableColumn label="金额" width="120">
+        <ElTableColumn prop="deliverySlot" label="预约配送" width="150" />
+        <ElTableColumn label="金额" width="100">
           <template #default="{ row }">
             <span class="money">{{ money(row.totalAmount) }}</span>
           </template>
         </ElTableColumn>
-        <ElTableColumn label="操作" width="340" fixed="right">
+        <ElTableColumn label="操作" width="240" fixed="right">
           <template #default="{ row }">
-            <ElButton size="small" @click="openDetail(row.id)">详情</ElButton>
-            <ElButton
-              v-if="canAccept(row)"
-              size="small"
-              type="primary"
-              @click="runAction(row.id, 'accept')"
-            >
-              接单
-            </ElButton>
-            <ElButton v-if="canDeliver(row)" size="small" @click="runAction(row.id, 'deliver')">
-              配送
-            </ElButton>
-            <ElButton
-              v-if="canComplete(row)"
-              size="small"
-              type="success"
-              @click="runAction(row.id, 'complete')"
-            >
-              完成
-            </ElButton>
-            <ElButton
-              v-if="canCancel(row)"
-              size="small"
-              type="danger"
-              plain
-              @click="runAction(row.id, 'cancel')"
-            >
-              取消
-            </ElButton>
+            <div class="order-actions">
+              <ElButton size="small" @click="openDetail(row.id)">详情</ElButton>
+              <ElButton
+                v-if="isSelectable(row)"
+                size="small"
+                type="success"
+                plain
+                :disabled="row.printStatus === 'PENDING'"
+                :loading="printingOrderId === row.id"
+                @click="handlePrintOne(row)"
+              >
+                {{
+                  row.printStatus === 'PENDING'
+                    ? '打印中'
+                    : row.printStatus === 'SUCCESS'
+                      ? '补打'
+                      : '打印'
+                }}
+              </ElButton>
+              <ElButton
+                v-if="canAccept(row)"
+                size="small"
+                type="primary"
+                @click="runAction(row.id, 'accept')"
+              >
+                接单
+              </ElButton>
+              <ElButton
+                v-if="canDeliver(row)"
+                size="small"
+                @click="runAction(row.id, 'deliver')"
+              >
+                配送
+              </ElButton>
+              <ElButton
+                v-if="canComplete(row)"
+                size="small"
+                type="success"
+                @click="runAction(row.id, 'complete')"
+              >
+                完成
+              </ElButton>
+              <ElButton
+                v-if="canCancel(row)"
+                size="small"
+                type="danger"
+                plain
+                @click="runAction(row.id, 'cancel')"
+              >
+                取消
+              </ElButton>
+            </div>
           </template>
         </ElTableColumn>
       </ElTable>
@@ -251,6 +274,7 @@
   const deliveryDate = ref('')
   const loading = ref(false)
   const batchPrinting = ref(false)
+  const printingOrderId = ref<number | null>(null)
   const detailVisible = ref(false)
   const orders = ref<OrderSummary[]>([])
   const detail = ref<OrderDetail | null>(null)
@@ -289,11 +313,10 @@
     '打印失败': 'FAILED'
   }
 
-  const selectableOrders = computed(() =>
-    orders.value.filter(
-      (order) => order.status === '已支付/待接单' || order.status.includes('已支付')
-    )
-  )
+  const isPrintableOrder = (order: OrderSummary) =>
+    !['待支付', '已取消', '退款中', '已退款'].includes(order.status)
+
+  const selectableOrders = computed(() => orders.value.filter(isPrintableOrder))
 
   const isAllSelected = computed(
     () =>
@@ -318,11 +341,10 @@
     }
   }
 
-  const isSelectable = (order: OrderSummary) =>
-    order.status === '已支付/待接单' || order.status.includes('已支付')
+  const isSelectable = isPrintableOrder
 
   const canAccept = (row: OrderSummary) => row.status === '已支付/待接单'
-  const canDeliver = (row: OrderSummary) => ['已支付/待接单', '备货中'].includes(row.status)
+  const canDeliver = (row: OrderSummary) => row.status === '备货中'
   const canComplete = (row: OrderSummary) => row.status === '配送中'
   const canCancel = (row: OrderSummary) =>
     ['待支付', '已支付/待接单', '备货中'].includes(row.status)
@@ -330,8 +352,14 @@
   const fullAddress = (row: OrderSummary) =>
     [row.address?.locationName, row.address?.detail].filter(Boolean).join(' ') || '地址待完善'
 
-  const spanMethod = ({ row, columnIndex }: { row: OrderSummary; columnIndex: number }) => {
-    if (columnIndex !== 1) return [1, 1]
+  const spanMethod = ({
+    row,
+    column
+  }: {
+    row: OrderSummary
+    column: { label?: string }
+  }) => {
+    if (column.label !== '配送分组') return [1, 1]
     return row.buildingOrderPosition === 1 ? [row.buildingOrderCount, 1] : [0, 0]
   }
 
@@ -372,20 +400,55 @@
       batchPrinting.value = true
       const result = await batchPrintOrders(selectedOrderIds.value)
 
-      ElMessage.success(`批量打印完成：成功 ${result.success} 个，失败 ${result.failed} 个`)
+      if (result.failed > 0) {
+        const details = result.errors
+          .slice(0, 3)
+          .map((item) => `订单 ${item.orderId}：${item.reason}`)
+          .join('；')
+        ElMessage.warning(
+          `批量打印已提交：成功 ${result.success} 个，失败 ${result.failed} 个${details ? `；${details}` : ''}`
+        )
+      } else {
+        ElMessage.success(`批量打印任务已提交，共 ${result.success} 个`)
+      }
 
       selectedOrderIds.value = []
       await loadOrders()
-
-      if (result.errors.length > 0) {
-        console.warn('批量打印错误：', result.errors)
-      }
     } catch (error) {
       if (error !== 'cancel' && error !== 'close') {
         ElMessage.error(error instanceof Error ? error.message : '批量打印失败')
       }
     } finally {
       batchPrinting.value = false
+    }
+  }
+
+  const handlePrintOne = async (row: OrderSummary) => {
+    try {
+      const isReprint = row.printStatus === 'SUCCESS'
+      await ElMessageBox.confirm(
+        `确认${isReprint ? '补打' : '打印'}订单 ${row.orderNo}？`,
+        isReprint ? '补打订单' : '打印订单',
+        {
+        type: 'warning',
+        confirmButtonText: isReprint ? '确认补打' : '确认打印',
+        cancelButtonText: '取消'
+        }
+      )
+      printingOrderId.value = row.id
+      const result = await batchPrintOrders([row.id])
+      if (result.success > 0) {
+        ElMessage.success(isReprint ? '补打任务已提交' : '打印任务已提交')
+      } else {
+        ElMessage.error(result.errors[0]?.reason || '打印任务提交失败')
+      }
+      await loadOrders()
+    } catch (error) {
+      if (error !== 'cancel' && error !== 'close') {
+        ElMessage.error(error instanceof Error ? error.message : '打印任务提交失败')
+      }
+    } finally {
+      printingOrderId.value = null
     }
   }
 
@@ -511,12 +574,14 @@
 
   .delivery-group {
     display: grid;
+    min-width: 0;
     gap: 7px;
     padding: 6px 2px;
 
     > strong {
       color: #16251c;
       font-size: 15px;
+      overflow-wrap: anywhere;
     }
 
     &__building {
@@ -527,6 +592,7 @@
       color: #087f45;
 
       b {
+        flex: none;
         padding: 3px 8px;
         border-radius: 999px;
         font-size: 12px;
@@ -542,17 +608,47 @@
   .address-cell,
   .order-summary {
     display: grid;
+    min-width: 0;
     justify-items: start;
     gap: 6px;
 
     strong {
       color: #18241d;
+      overflow-wrap: anywhere;
     }
 
     span {
       color: #6f7c74;
       font-size: 13px;
+      overflow-wrap: anywhere;
     }
+  }
+
+  .order-actions {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    white-space: nowrap;
+
+    :deep(.el-button + .el-button) {
+      margin-left: 0;
+    }
+
+    :deep(.el-button) {
+      min-width: 0;
+      padding-right: 8px;
+      padding-left: 8px;
+    }
+  }
+
+  :deep(.el-table__cell) {
+    vertical-align: middle;
+  }
+
+  :deep(.el-table__body .cell) {
+    overflow: visible;
   }
 
   :deep(.delivery-group-start td) {

@@ -1,4 +1,4 @@
-const { getOrder } = require("../api/orders");
+const { refreshPaymentStatus } = require("../api/orders");
 
 const PAID_STATUS = "\u5df2\u652f\u4ed8";
 const PENDING_PAYMENT_STATUS = "\u5f85\u652f\u4ed8";
@@ -20,17 +20,36 @@ function isPaymentCancelled(error) {
   return message.includes("cancel") || message.includes("\u53d6\u6d88");
 }
 
+function paymentErrorMessage(error, fallback = "支付失败，请稍后重试") {
+  const rawMessage = String((error && (error.errMsg || error.message)) || "").trim();
+  if (!rawMessage) {
+    return fallback;
+  }
+  return rawMessage
+    .replace(/^requestPayment:fail\s*/i, "")
+    .replace(/^requestPayment\s*:\s*/i, "")
+    .trim() || fallback;
+}
+
 function requestWechatPayment(payment) {
   if (!payment || payment.developmentMode) {
     return Promise.resolve({ developmentMode: true });
   }
+  const timeStamp = String(payment.timeStamp || "");
+  const nonceStr = String(payment.nonceStr || "");
+  const packageValue = String(payment.packageValue || payment.package || "");
+  const signType = String(payment.signType || "RSA");
+  const paySign = String(payment.paySign || "");
+  if (!timeStamp || !nonceStr || !packageValue || !paySign) {
+    return Promise.reject(new Error("微信支付参数不完整，请刷新订单后重试"));
+  }
   return new Promise((resolve, reject) => {
     wx.requestPayment({
-      timeStamp: payment.timeStamp,
-      nonceStr: payment.nonceStr,
-      package: payment.packageValue,
-      signType: payment.signType,
-      paySign: payment.paySign,
+      timeStamp,
+      nonceStr,
+      package: packageValue,
+      signType,
+      paySign,
       success: resolve,
       fail: reject
     });
@@ -45,7 +64,7 @@ async function waitForPaymentResult(orderId, options = {}) {
 
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     try {
-      latestOrder = await getOrder(orderId);
+      latestOrder = await refreshPaymentStatus(orderId);
       lastError = null;
       if (isPaidOrder(latestOrder) || !isPendingPaymentOrder(latestOrder)) {
         return latestOrder;
@@ -68,6 +87,7 @@ module.exports = {
   isPaidOrder,
   isPendingPaymentOrder,
   isPaymentCancelled,
+  paymentErrorMessage,
   requestWechatPayment,
   waitForPaymentResult
 };

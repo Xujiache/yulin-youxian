@@ -129,6 +129,11 @@ public class AdminProductController {
         return ApiResponse.ok(storefrontService.updateProductStock(id, request.get("stockQty")));
     }
 
+    @PutMapping("/products/{id}/sort-order")
+    public ApiResponse<ProductDto> updateSortOrder(@PathVariable Long id, @RequestBody Map<String, Integer> request) {
+        return ApiResponse.ok(storefrontService.updateProductSortOrder(id, request.get("sortOrder")));
+    }
+
     private String extension(String filename) {
         if (filename == null || filename.isBlank()) {
             return "";

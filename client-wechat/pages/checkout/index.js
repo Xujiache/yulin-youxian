@@ -8,6 +8,7 @@ const { syncTheme } = require("../../utils/theme");
 const {
   isPaidOrder,
   isPaymentCancelled,
+  paymentErrorMessage,
   requestWechatPayment,
   waitForPaymentResult
 } = require("../../utils/wechat-payment");
@@ -302,7 +303,11 @@ Page({
         showPaymentCancelled(this, orderId);
         return;
       }
-      wx.showToast({ title: error.message || "支付失败，请重试", icon: "none" });
+      wx.showModal({
+        title: "支付失败",
+        content: paymentErrorMessage(error, "支付失败，请重试"),
+        showCancel: false
+      });
     } finally {
       this.setData({ paying: false, payDisabled: false });
     }

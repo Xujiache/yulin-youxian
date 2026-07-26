@@ -37,6 +37,8 @@
 - `WECHAT_PAY_MERCHANT_SERIAL_NO`
 - `WECHAT_PAY_PRIVATE_KEY`
 - `WECHAT_PAY_PRIVATE_KEY_PATH`
+- `WECHAT_PAY_PUBLIC_KEY_ID`
+- `WECHAT_PAY_PUBLIC_KEY_PATH`
 - `WECHAT_PAY_PLATFORM_CERTIFICATE_PATH`
 - `WECHAT_PAY_BASE_URL`
 - `WECHAT_PAY_NOTIFY_URL`
@@ -44,7 +46,7 @@
 
 `WECHAT_MINIAPP_DEVELOPMENT_MODE` 默认为 `true`，用于本地开发时按 `clientId` 生成稳定 openId。生产部署设置为 `false` 后，后端会使用 `WECHAT_MINIAPP_APP_ID` 和 `WECHAT_MINIAPP_APP_SECRET` 调用微信 `jscode2session`。
 
-`WECHAT_PAY_DEVELOPMENT_MODE` 默认为 `true`，支付接口会返回 development 支付参数，小程序会调用 `/api/wx/orders/{id}/pay/development-success` 完成本地流程联调。生产部署设置为 `false` 后，必须配置商户号、商户私钥、商户证书序列号、API v3 密钥、平台证书和公网 HTTPS 回调地址。
+`WECHAT_PAY_DEVELOPMENT_MODE` 默认为 `true`，支付接口会返回 development 支付参数，小程序会调用 `/api/wx/orders/{id}/pay/development-success` 完成本地流程联调。生产部署设置为 `false` 后，必须配置商户号、商户私钥、商户证书序列号、API v3 密钥、微信支付公钥（推荐，含公钥 ID）或平台证书，以及公网 HTTPS 回调地址。
 
 ## 启动
 

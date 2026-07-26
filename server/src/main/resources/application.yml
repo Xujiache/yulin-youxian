@@ -43,6 +43,8 @@ wechat:
     merchant-serial-no: ${WECHAT_PAY_MERCHANT_SERIAL_NO:}
     private-key: ${WECHAT_PAY_PRIVATE_KEY:}
     private-key-path: ${WECHAT_PAY_PRIVATE_KEY_PATH:}
+    public-key-id: ${WECHAT_PAY_PUBLIC_KEY_ID:}
+    public-key-path: ${WECHAT_PAY_PUBLIC_KEY_PATH:}
     platform-certificate-path: ${WECHAT_PAY_PLATFORM_CERTIFICATE_PATH:}
     base-url: ${WECHAT_PAY_BASE_URL:https://api.mch.weixin.qq.com}
     notify-url: ${WECHAT_PAY_NOTIFY_URL:}

@@ -63,6 +63,19 @@ class StorefrontServiceTests {
     }
 
     @Test
+    void productSortOrderControlsStorefrontAndRecommendedProductOrder() {
+        StorefrontService service = newService();
+
+        service.updateProductSortOrder(104L, 0);
+        service.updateProductSortOrder(101L, 20);
+
+        List<ProductDto> products = service.products(null, null);
+        assertEquals(104L, products.get(0).id());
+        assertTrue(products.indexOf(service.product(101L)) > products.indexOf(service.product(104L)));
+        assertEquals(104L, service.home().recommendedProducts().get(0).id());
+    }
+
+    @Test
     void payDoesNotMarkPaidUntilPaymentConfirmed() {
         StorefrontService service = newService();
         CurrentUserContext.setUserId(1000L);

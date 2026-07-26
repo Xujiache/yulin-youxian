@@ -13,6 +13,8 @@ public class WechatPayProperties {
     private String merchantSerialNo = "";
     private String privateKey = "";
     private String privateKeyPath = "";
+    private String publicKeyId = "";
+    private String publicKeyPath = "";
     private String platformCertificatePath = "";
     private String baseUrl = "https://api.mch.weixin.qq.com";
     private String notifyUrl = "";
@@ -80,6 +82,22 @@ public class WechatPayProperties {
 
     public void setPlatformCertificatePath(String platformCertificatePath) {
         this.platformCertificatePath = platformCertificatePath;
+    }
+
+    public String getPublicKeyId() {
+        return publicKeyId;
+    }
+
+    public void setPublicKeyId(String publicKeyId) {
+        this.publicKeyId = publicKeyId;
+    }
+
+    public String getPublicKeyPath() {
+        return publicKeyPath;
+    }
+
+    public void setPublicKeyPath(String publicKeyPath) {
+        this.publicKeyPath = publicKeyPath;
     }
 
     public String getBaseUrl() {

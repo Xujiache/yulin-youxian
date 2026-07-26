@@ -113,6 +113,10 @@ public class PrintJobService {
         if (order == null || !config.enabled() || !config.autoPrintOnPaid()) {
             return null;
         }
+        return enqueueOrder(order);
+    }
+
+    private PrintJobDto enqueueOrder(OrderDetailDto order) {
         String sourceKey = "ORDER:" + order.id();
         PrintJobState existing = jobs.values().stream()
                 .filter(job -> sourceKey.equals(job.sourceKey()))
@@ -140,6 +144,26 @@ public class PrintJobService {
         jobs.put(created.id(), created);
         persist();
         return toDto(created);
+    }
+
+    private PrintJobDto enqueueManualOrder(OrderDetailDto order) {
+        String sourceKey = "ORDER:" + order.id();
+        PrintJobState existing = jobs.values().stream()
+                .filter(job -> sourceKey.equals(job.sourceKey()))
+                .findFirst()
+                .orElse(null);
+        if (existing == null) {
+            return enqueueOrder(order);
+        }
+        if (PENDING.equals(existing.status())
+                || PRINTING.equals(existing.status())
+                || RETRYING.equals(existing.status())) {
+            return toDto(existing);
+        }
+        PrintJobState requeued = existing.withRetry(now());
+        jobs.put(requeued.id(), requeued);
+        persist();
+        return toDto(requeued);
     }
 
     public synchronized PrintJobDto enqueueTest(String storeName) {
@@ -338,22 +362,16 @@ public class PrintJobService {
                     continue;
                 }
 
-                if (!"PAID".equals(order.status()) && !order.status().contains("已支付")) {
+                if (order.status() == null
+                        || order.status().contains("待支付")
+                        || order.status().contains("已取消")
+                        || "退款中".equals(order.status())
+                        || "已退款".equals(order.status())) {
                     errors.add(new PrintModels.BatchPrintErrorDto(order.id(), "订单未支付"));
                     continue;
                 }
 
-                String sourceKey = "ORDER:" + order.id();
-                boolean hasSuccess = this.jobs.values().stream()
-                        .filter(job -> sourceKey.equals(job.sourceKey()))
-                        .anyMatch(job -> SUCCESS.equals(job.status()));
-
-                if (hasSuccess) {
-                    errors.add(new PrintModels.BatchPrintErrorDto(order.id(), "订单已有成功的打印任务"));
-                    continue;
-                }
-
-                PrintJobDto job = enqueuePaidOrder(order);
+                PrintJobDto job = enqueueManualOrder(order);
                 if (job != null) {
                     jobs.add(job);
                     successCount++;

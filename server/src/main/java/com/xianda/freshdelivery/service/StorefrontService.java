@@ -102,8 +102,12 @@ public class StorefrontService {
                 seedBanners();
             }
             persist();
-        } else if (ensureBrandingDefaults()) {
-            persist();
+        } else {
+            boolean stateUpdated = ensureBrandingDefaults();
+            stateUpdated |= ensureProductSortOrders();
+            if (stateUpdated) {
+                persist();
+            }
         }
     }
 
@@ -213,6 +217,7 @@ public class StorefrontService {
         return products.values().stream()
                 .filter(product -> categoryId == null || product.categoryId().equals(categoryId))
                 .filter(product -> keyword == null || keyword.isBlank() || product.name().contains(keyword))
+                .sorted(productOrder())
                 .toList();
     }
 
@@ -227,16 +232,16 @@ public class StorefrontService {
     public synchronized ProductDto createProduct(ProductSaveRequest request) {
         ensureCategory(request.categoryId());
         long id = productId.incrementAndGet();
-        ProductDto product = toProductDto(id, request);
+        ProductDto product = toProductDto(id, request, nextProductSortOrder());
         products.put(id, product);
         persist();
         return product;
     }
 
     public synchronized ProductDto updateProduct(Long id, ProductSaveRequest request) {
-        product(id);
+        ProductDto current = product(id);
         ensureCategory(request.categoryId());
-        ProductDto product = toProductDto(id, request);
+        ProductDto product = toProductDto(id, request, current.sortOrder());
         products.put(id, product);
         persist();
         return product;
@@ -256,6 +261,17 @@ public class StorefrontService {
             throw new BusinessException(400, "库存不能小于 0");
         }
         ProductDto next = copyProduct(current, stockQty, current.status());
+        products.put(id, next);
+        persist();
+        return next;
+    }
+
+    public synchronized ProductDto updateProductSortOrder(Long id, Integer sortOrder) {
+        if (sortOrder == null || sortOrder < 0) {
+            throw new BusinessException(400, "商品排序必须是大于等于 0 的整数");
+        }
+        ProductDto current = product(id);
+        ProductDto next = copyProduct(current, current.stockQty(), current.status(), sortOrder);
         products.put(id, next);
         persist();
         return next;
@@ -1083,7 +1099,7 @@ public class StorefrontService {
         return max;
     }
 
-    private ProductDto toProductDto(Long id, ProductSaveRequest request) {
+    private ProductDto toProductDto(Long id, ProductSaveRequest request, Integer fallbackSortOrder) {
         return new ProductDto(
                 id,
                 request.categoryId(),
@@ -1098,11 +1114,15 @@ public class StorefrontService {
                 request.badge(),
                 request.status(),
                 Boolean.TRUE.equals(request.recommended()),
-                request.sortOrder() != null ? request.sortOrder() : 0
+                request.sortOrder() != null ? request.sortOrder() : fallbackSortOrder
         );
     }
 
     private ProductDto copyProduct(ProductDto product, BigDecimal stockQty, Integer status) {
+        return copyProduct(product, stockQty, status, product.sortOrder());
+    }
+
+    private ProductDto copyProduct(ProductDto product, BigDecimal stockQty, Integer status, Integer sortOrder) {
         return new ProductDto(
                 product.id(),
                 product.categoryId(),
@@ -1117,8 +1137,23 @@ public class StorefrontService {
                 product.badge(),
                 status,
                 Boolean.TRUE.equals(product.recommended()),
-                product.sortOrder()
+                sortOrder
         );
+    }
+
+    private Comparator<ProductDto> productOrder() {
+        return Comparator
+                .comparingInt((ProductDto product) -> product.sortOrder() == null ? Integer.MAX_VALUE : product.sortOrder())
+                .thenComparing(ProductDto::id);
+    }
+
+    private int nextProductSortOrder() {
+        return products.values().stream()
+                .map(ProductDto::sortOrder)
+                .filter(sortOrder -> sortOrder != null)
+                .mapToInt(Integer::intValue)
+                .max()
+                .orElse(0) + 10;
     }
 
     private void ensureCategory(Long id) {
@@ -1473,6 +1508,7 @@ public class StorefrontService {
         return products.values().stream()
                 .filter(product -> product.status() == 1)
                 .filter(product -> Boolean.TRUE.equals(product.recommended()))
+                .sorted(productOrder())
                 .toList();
     }
 
@@ -1727,6 +1763,25 @@ public class StorefrontService {
                 categories.set(index, normalized);
                 changed = true;
             }
+        }
+        return changed;
+    }
+
+    private boolean ensureProductSortOrders() {
+        int nextSortOrder = products.values().stream()
+                .map(ProductDto::sortOrder)
+                .filter(sortOrder -> sortOrder != null)
+                .mapToInt(Integer::intValue)
+                .max()
+                .orElse(0);
+        boolean changed = false;
+        for (ProductDto current : new ArrayList<>(products.values())) {
+            if (current.sortOrder() != null) {
+                continue;
+            }
+            nextSortOrder += 10;
+            products.put(current.id(), copyProduct(current, current.stockQty(), current.status(), nextSortOrder));
+            changed = true;
         }
         return changed;
     }

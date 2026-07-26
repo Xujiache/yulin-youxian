@@ -6,6 +6,7 @@ const {
   isPaidOrder,
   isPaymentCancelled,
   isPendingPaymentOrder,
+  paymentErrorMessage,
   requestWechatPayment,
   waitForPaymentResult
 } = require("../../utils/wechat-payment");
@@ -142,7 +143,11 @@ Page({
         this.setData({ paymentNotice: "支付已取消，订单仍可继续支付。" });
         return;
       }
-      wx.showToast({ title: error.message || "支付失败，请稍后重试", icon: "none" });
+      wx.showModal({
+        title: "支付失败",
+        content: paymentErrorMessage(error, "支付失败，请稍后重试"),
+        showCancel: false
+      });
     } finally {
       this.setData({ paying: false });
     }

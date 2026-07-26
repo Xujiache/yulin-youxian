@@ -74,6 +74,19 @@
             起购 {{ row.minPurchaseQty }}{{ row.saleUnit }}，每次 {{ row.stepQty }}{{ row.saleUnit }}
           </template>
         </ElTableColumn>
+        <ElTableColumn label="小程序排序" width="150">
+          <template #default="{ row }">
+            <ElInputNumber
+              :model-value="Number(row.sortOrder ?? 0)"
+              :min="0"
+              :precision="0"
+              :step="1"
+              size="small"
+              style="width: 118px"
+              @change="(value) => changeSortOrder(row, Number(value ?? 0))"
+            />
+          </template>
+        </ElTableColumn>
         <ElTableColumn label="库存" width="170">
           <template #default="{ row }">
             <ElInputNumber
@@ -166,6 +179,16 @@
         <ElFormItem label="商品标签">
           <ElInput v-model.trim="form.badge" placeholder="热销、新鲜、今日到店等" />
         </ElFormItem>
+        <ElFormItem label="小程序排序">
+          <ElInputNumber
+            v-model="form.sortOrder"
+            :min="0"
+            :precision="0"
+            :step="1"
+            placeholder="不填则排在末尾"
+            class="form-full"
+          />
+        </ElFormItem>
         <ElFormItem label="首页今日推荐">
           <ElSwitch v-model="form.recommended" active-text="展示" inactive-text="不展示" />
         </ElFormItem>
@@ -189,6 +212,7 @@
     getCategories,
     getProducts,
     updateProduct,
+    updateProductSortOrder,
     updateProductStatus,
     updateProductStock,
     uploadProductImage,
@@ -223,7 +247,8 @@
       stockQty: 0,
       badge: '',
       status: 1,
-      recommended: false
+      recommended: false,
+      sortOrder: null
     }
   }
 
@@ -323,6 +348,18 @@
     await updateProductStock(row.id, stockQty)
     await loadProducts()
     ElMessage.success('库存已更新')
+  }
+
+  const changeSortOrder = async (row: Product, sortOrder: number) => {
+    if (!row.id) return
+    try {
+      await updateProductSortOrder(row.id, sortOrder)
+      await loadProducts()
+      ElMessage.success('小程序排序已更新')
+    } catch (error) {
+      ElMessage.error(error instanceof Error ? error.message : '商品排序更新失败')
+      await loadProducts()
+    }
   }
 
   const toggleStatus = async (row: Product) => {

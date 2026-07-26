@@ -29,26 +29,7 @@ class PrintJobServiceTests {
         service.updateConfig(new PrinterConfigUpdateRequest(true, true, 3, "XP-58III NT"));
         String accessKey = service.regenerateAccessKey().accessKey();
 
-        OrderDetailDto order = new OrderDetailDto(
-                1001L,
-                "XD202607230001",
-                "已支付/待接单",
-                new AddressDto(10L, "测试顾客", "13800000000", "1号楼 201室", "禹邻社区", 43.8256, 87.6168, true),
-                "明日 09:00-11:00",
-                List.of(new OrderItemDto(1L, 101L, "有机水培西红柿", "", "斤", 399, new BigDecimal("0.5"), 200)),
-                200,
-                0,
-                100,
-                300,
-                300,
-                0,
-                "请电话联系",
-                "2026-07-23T10:00:00",
-                "",
-                "",
-                10001L,
-                List.of()
-        );
+        OrderDetailDto order = paidOrder();
 
         PrintJobDto queued = service.enqueuePaidOrder(order);
         assertNotNull(queued);
@@ -70,5 +51,53 @@ class PrintJobServiceTests {
         assertEquals("SUCCESS", completed.status());
         assertNotNull(completed.printedAt());
         assertNull(completed.leaseToken());
+    }
+
+    @Test
+    void manualBatchPrintRequeuesAnAlreadyPrintedOrder() {
+        PrintJobService service = new PrintJobService(tempDir.resolve("printing-state.json").toString());
+        service.updateConfig(new PrinterConfigUpdateRequest(true, true, 3, "XP-58III NT"));
+        OrderDetailDto order = paidOrder();
+
+        PrintJobDto queued = service.batchEnqueueOrders(List.of(order)).jobs().get(0);
+        PrintJobDto claimed = service.claimNext("TEST-PC", "USB,USB001", "1.1.0");
+        PrintJobDto completed = service.complete(
+                claimed.id(),
+                new PrintJobResultRequest(claimed.leaseToken(), true, "打印完成")
+        );
+        assertEquals("SUCCESS", completed.status());
+
+        var result = service.batchEnqueueOrders(List.of(order));
+
+        assertEquals(1, result.success());
+        assertEquals(0, result.failed());
+        assertEquals(queued.id(), result.jobs().get(0).id());
+        assertEquals("PENDING", result.jobs().get(0).status());
+        assertEquals(0, result.jobs().get(0).attemptCount());
+        assertNull(result.jobs().get(0).printedAt());
+        assertEquals(1, service.jobs().size());
+    }
+
+    private OrderDetailDto paidOrder() {
+        return new OrderDetailDto(
+                1001L,
+                "XD202607230001",
+                "已支付/待接单",
+                new AddressDto(10L, "测试顾客", "13800000000", "1号楼 201室", "禹邻社区", 43.8256, 87.6168, true),
+                "明日 09:00-11:00",
+                List.of(new OrderItemDto(1L, 101L, "有机水培西红柿", "", "斤", 399, new BigDecimal("0.5"), 200)),
+                200,
+                0,
+                100,
+                300,
+                300,
+                0,
+                "请电话联系",
+                "2026-07-23T10:00:00",
+                "",
+                "",
+                10001L,
+                List.of()
+        );
     }
 }
