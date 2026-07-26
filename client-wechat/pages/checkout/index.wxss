@@ -365,6 +365,13 @@
   font-size: 24rpx;
 }
 
+.pay-processing {
+  flex: 1;
+  color: #007a3d;
+  font-size: 24rpx;
+  font-weight: 700;
+}
+
 .pay-price {
   color: #007a3d;
   font-size: 48rpx;

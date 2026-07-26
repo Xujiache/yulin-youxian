@@ -1,8 +1,10 @@
 package com.xianda.freshdelivery;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.xianda.freshdelivery.common.BusinessException;
 import com.xianda.freshdelivery.config.WechatPayProperties;
 import com.xianda.freshdelivery.dto.OrderDetailDto;
 import com.xianda.freshdelivery.dto.PaymentDto;
@@ -29,7 +31,7 @@ class WechatPayClientTests {
     void directPaymentNotifyPayloadCanBeParsedInDevelopmentMode() {
         WechatPayClient client = newClient();
 
-        PaymentNotifyRequest request = client.parsePaymentNotify("{\"orderNo\":\"XD1\",\"transactionId\":\"TX1\",\"tradeState\":\"SUCCESS\"}", null, null, null);
+        PaymentNotifyRequest request = client.parsePaymentNotify("{\"orderNo\":\"XD1\",\"transactionId\":\"TX1\",\"tradeState\":\"SUCCESS\"}", null, null, null, null);
 
         assertEquals("XD1", request.orderNo());
         assertEquals("TX1", request.transactionId());
@@ -40,10 +42,25 @@ class WechatPayClientTests {
     void directRefundNotifyPayloadCanBeParsedInDevelopmentMode() {
         WechatPayClient client = newClient();
 
-        RefundNotifyRequest request = client.parseRefundNotify("{\"refundNo\":\"RF1\",\"refundStatus\":\"SUCCESS\"}", null, null, null);
+        RefundNotifyRequest request = client.parseRefundNotify("{\"refundNo\":\"RF1\",\"refundStatus\":\"SUCCESS\"}", null, null, null, null);
 
         assertEquals("RF1", request.refundNo());
         assertEquals("SUCCESS", request.refundStatus());
+    }
+
+    @Test
+    void productionModeRejectsUnsignedDirectPaymentNotifyPayload() {
+        WechatPayProperties properties = new WechatPayProperties();
+        properties.setDevelopmentMode(false);
+        WechatPayClient client = new WechatPayClient(properties);
+
+        assertThrows(BusinessException.class, () -> client.parsePaymentNotify(
+                "{\"orderNo\":\"XD1\",\"transactionId\":\"TX1\",\"tradeState\":\"SUCCESS\"}",
+                null,
+                null,
+                null,
+                null
+        ));
     }
 
     private WechatPayClient newClient() {

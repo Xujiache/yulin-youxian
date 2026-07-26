@@ -36,8 +36,9 @@ public class WxPaymentController {
             @RequestBody String body,
             @RequestHeader(value = "Wechatpay-Timestamp", required = false) String timestamp,
             @RequestHeader(value = "Wechatpay-Nonce", required = false) String nonce,
+            @RequestHeader(value = "Wechatpay-Serial", required = false) String serial,
             @RequestHeader(value = "Wechatpay-Signature", required = false) String signature) {
-        PaymentNotifyRequest request = wechatPayClient.parsePaymentNotify(body, timestamp, nonce, signature);
+        PaymentNotifyRequest request = wechatPayClient.parsePaymentNotify(body, timestamp, nonce, serial, signature);
         wechatPaymentService.confirmPayment(request);
         return Map.of("code", "SUCCESS", "message", "成功");
     }
@@ -47,8 +48,9 @@ public class WxPaymentController {
             @RequestBody String body,
             @RequestHeader(value = "Wechatpay-Timestamp", required = false) String timestamp,
             @RequestHeader(value = "Wechatpay-Nonce", required = false) String nonce,
+            @RequestHeader(value = "Wechatpay-Serial", required = false) String serial,
             @RequestHeader(value = "Wechatpay-Signature", required = false) String signature) {
-        RefundNotifyRequest request = wechatPayClient.parseRefundNotify(body, timestamp, nonce, signature);
+        RefundNotifyRequest request = wechatPayClient.parseRefundNotify(body, timestamp, nonce, serial, signature);
         storefrontService.confirmRefund(request);
         return Map.of("code", "SUCCESS", "message", "成功");
     }

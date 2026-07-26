@@ -42,9 +42,27 @@ public class WechatPaymentService {
     }
 
     public OrderDetailDto confirmPayment(PaymentNotifyRequest request) {
+        validatePaymentNotificationIdentity(request);
         OrderDetailDto order = storefrontService.confirmPayment(request);
         enqueuePrint(order);
         return order;
+    }
+
+    private void validatePaymentNotificationIdentity(PaymentNotifyRequest request) {
+        if (!wechatPayClient.isDevelopmentMode()
+                && (!hasText(request.appId()) || !hasText(request.mchId()) || request.totalAmount() == null)) {
+            throw new BusinessException(401, "微信支付生产回调缺少商户身份或金额信息");
+        }
+        if (hasText(request.appId()) && !request.appId().equals(wechatPayClient.appId())) {
+            throw new BusinessException(401, "微信支付回调 AppID 不匹配");
+        }
+        if (hasText(request.mchId()) && !request.mchId().equals(wechatPayClient.mchId())) {
+            throw new BusinessException(401, "微信支付回调商户号不匹配");
+        }
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
     }
 
     private void enqueuePrint(OrderDetailDto order) {

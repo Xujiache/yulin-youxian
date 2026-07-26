@@ -1,7 +1,14 @@
 const { yuan } = require("../../utils/format");
 const { getHome } = require("../../api/catalog");
-const { getOrder } = require("../../api/orders");
+const { confirmDevelopmentPayment, getOrder, payOrder } = require("../../api/orders");
 const { syncTheme } = require("../../utils/theme");
+const {
+  isPaidOrder,
+  isPaymentCancelled,
+  isPendingPaymentOrder,
+  requestWechatPayment,
+  waitForPaymentResult
+} = require("../../utils/wechat-payment");
 
 const DEFAULT_CONTACT_PHONE = "400-800-1234";
 
@@ -31,7 +38,10 @@ Page({
     hasRefundedAmount: false,
     refundNotice: "",
     refundRecords: [],
-    contactPhone: DEFAULT_CONTACT_PHONE
+    contactPhone: DEFAULT_CONTACT_PHONE,
+    isPendingPayment: false,
+    paying: false,
+    paymentNotice: ""
   },
 
   async onLoad(options) {
@@ -50,6 +60,7 @@ Page({
         orderId: order.id,
         orderNo: order.orderNo,
         statusText: order.status,
+        isPendingPayment: isPendingPaymentOrder(order),
         address: order.address || {},
         deliverySlotText: order.deliverySlot || "",
         items: (order.items || []).map((item) => ({
@@ -75,6 +86,65 @@ Page({
       wx.showToast({ title: "订单详情加载失败", icon: "none" });
     } finally {
       this.setData({ loading: false });
+    }
+  },
+
+  onShow() {
+    syncTheme(this);
+    if (this.data.orderId && !this.data.loading && !this.data.paying) {
+      this.refreshOrder();
+    }
+  },
+
+  async refreshOrder() {
+    try {
+      const order = await getOrder(this.data.orderId);
+      this.setData({
+        order,
+        statusText: order.status,
+        isPendingPayment: isPendingPaymentOrder(order),
+        paymentNotice: ""
+      });
+    } catch {}
+  },
+
+  async handlePay() {
+    if (!this.data.orderId || this.data.paying || !this.data.isPendingPayment) {
+      return;
+    }
+    this.setData({ paying: true, paymentNotice: "" });
+    try {
+      const payment = await payOrder(this.data.orderId);
+      const paymentResult = await requestWechatPayment(payment);
+      if (paymentResult && paymentResult.developmentMode) {
+        await confirmDevelopmentPayment(this.data.orderId);
+      } else {
+        const order = await waitForPaymentResult(this.data.orderId);
+        if (!isPaidOrder(order)) {
+          this.setData({ paymentNotice: "支付结果还在确认中，请稍后刷新订单状态。" });
+          return;
+        }
+      }
+      await this.refreshOrder();
+      wx.showToast({ title: "支付成功", icon: "success" });
+    } catch (error) {
+      if (this.data.orderId && !isPaymentCancelled(error)) {
+        try {
+          const order = await waitForPaymentResult(this.data.orderId, { attempts: 3, interval: 700 });
+          if (isPaidOrder(order)) {
+            await this.refreshOrder();
+            wx.showToast({ title: "支付成功", icon: "success" });
+            return;
+          }
+        } catch {}
+      }
+      if (isPaymentCancelled(error)) {
+        this.setData({ paymentNotice: "支付已取消，订单仍可继续支付。" });
+        return;
+      }
+      wx.showToast({ title: error.message || "支付失败，请稍后重试", icon: "none" });
+    } finally {
+      this.setData({ paying: false });
     }
   },
 

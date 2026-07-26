@@ -582,7 +582,9 @@ public class StorefrontService {
                 .toList();
 
         List<Long> orderIds = candidates.stream().map(c -> c.order().id()).toList();
-        Map<Long, PrintModels.OrderPrintStatus> printStatuses = printJobService.getOrderPrintStatuses(orderIds);
+        Map<Long, PrintModels.OrderPrintStatus> printStatuses = printJobService == null
+                ? Map.of()
+                : printJobService.getOrderPrintStatuses(orderIds);
 
         Map<String, Integer> buildingCounts = new LinkedHashMap<>();
         Map<String, Integer> addressCounts = new LinkedHashMap<>();
@@ -669,6 +671,9 @@ public class StorefrontService {
             throw new BusinessException(400, "支付状态不是成功");
         }
         OrderState order = orderByNo(request.orderNo());
+        if (request.totalAmount() != null && !request.totalAmount().equals(order.payableAmount())) {
+            throw new BusinessException(409, "微信支付回调金额与订单金额不一致");
+        }
         if (!"待支付".equals(order.status())) {
             return toOrderDetailDto(order);
         }

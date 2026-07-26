@@ -13,6 +13,7 @@ import com.xianda.freshdelivery.dto.CategoryDto;
 import com.xianda.freshdelivery.dto.CreateAddressRequest;
 import com.xianda.freshdelivery.dto.CreateOrderRequest;
 import com.xianda.freshdelivery.dto.OrderDetailDto;
+import com.xianda.freshdelivery.dto.PaymentNotifyRequest;
 import com.xianda.freshdelivery.dto.ProductDto;
 import com.xianda.freshdelivery.dto.RefundDto;
 import com.xianda.freshdelivery.service.StorefrontService;
@@ -77,6 +78,26 @@ class StorefrontServiceTests {
         OrderDetailDto paid = service.confirmDevelopmentPayment(order.id());
         assertEquals("已支付/待接单", paid.status());
         assertEquals(paid.payableAmount(), paid.paidAmount());
+    }
+
+    @Test
+    void paymentAmountMismatchDoesNotMarkOrderPaid() {
+        StorefrontService service = newService();
+        CurrentUserContext.setUserId(1000L);
+        Long addressId = service.createAddress(addressRequest()).id();
+        service.addCartItem(106L, BigDecimal.ONE);
+        CartDto cart = service.cart();
+        OrderDetailDto order = service.createOrder(new CreateOrderRequest(addressId, 1L, "", cart.items().stream().map(item -> item.id()).toList()));
+
+        assertThrows(BusinessException.class, () -> service.confirmPayment(new PaymentNotifyRequest(
+                order.orderNo(),
+                "TX-MISMATCH",
+                "SUCCESS",
+                "",
+                "",
+                order.payableAmount() + 1
+        )));
+        assertEquals("待支付", service.order(order.id()).status());
     }
 
     @Test

@@ -5,6 +5,42 @@ const { getDeliverySlots } = require("../../api/delivery");
 const { confirmDevelopmentPayment, createOrder, payOrder, previewOrder } = require("../../api/orders");
 const { requireCompleteProfile } = require("../../utils/auth-guard");
 const { syncTheme } = require("../../utils/theme");
+const {
+  isPaidOrder,
+  isPaymentCancelled,
+  requestWechatPayment,
+  waitForPaymentResult
+} = require("../../utils/wechat-payment");
+
+function showPaymentPending(page, orderId) {
+  page.setData({ paying: false, payDisabled: false });
+  wx.showModal({
+    title: "\u652f\u4ed8\u5904\u7406\u4e2d",
+    content: "\u5fae\u4fe1\u5df2\u8fd4\u56de\u652f\u4ed8\u7ed3\u679c\uff0c\u8ba2\u5355\u72b6\u6001\u8fd8\u5728\u786e\u8ba4\u4e2d\uff0c\u8bf7\u5230\u8ba2\u5355\u67e5\u770b\u6700\u65b0\u72b6\u6001\u3002",
+    confirmText: "\u67e5\u770b\u8ba2\u5355",
+    cancelText: "\u7559\u5728\u5f53\u524d",
+    success(result) {
+      if (result.confirm && orderId) {
+        wx.redirectTo({ url: `/pages/order-detail/index?id=${orderId}` });
+      }
+    }
+  });
+}
+
+function showPaymentCancelled(page, orderId) {
+  page.setData({ paying: false, payDisabled: false });
+  wx.showModal({
+    title: "\u652f\u4ed8\u5df2\u53d6\u6d88",
+    content: "\u8ba2\u5355\u5df2\u4fdd\u7559\uff0c\u4f60\u53ef\u4ee5\u5728\u8ba2\u5355\u8be6\u60c5\u4e2d\u7ee7\u7eed\u652f\u4ed8\u3002",
+    confirmText: "\u67e5\u770b\u8ba2\u5355",
+    cancelText: "\u7ee7\u7eed\u8d2d\u7269",
+    success(result) {
+      if (result.confirm && orderId) {
+        wx.redirectTo({ url: `/pages/order-detail/index?id=${orderId}` });
+      }
+    }
+  });
+}
 
 const EMPTY_AMOUNT = {
   productAmountText: "0.00",
@@ -13,23 +49,6 @@ const EMPTY_AMOUNT = {
   totalText: "0.00",
   deliveryFeeNotice: ""
 };
-
-function requestWechatPayment(payment) {
-  if (!payment || payment.developmentMode) {
-    return Promise.resolve({ developmentMode: true });
-  }
-  return new Promise((resolve, reject) => {
-    wx.requestPayment({
-      timeStamp: payment.timeStamp,
-      nonceStr: payment.nonceStr,
-      "package": payment.packageValue,
-      signType: payment.signType,
-      paySign: payment.paySign,
-      success: resolve,
-      fail: reject
-    });
-  });
-}
 
 Page({
   data: {
@@ -46,7 +65,9 @@ Page({
     deliveryFeeNotice: "",
     cartItemIds: [],
     loadError: "",
-    payDisabled: true
+    payDisabled: true,
+    paying: false,
+    remark: ""
   },
 
   onLoad() {
@@ -81,6 +102,8 @@ Page({
       slots: [],
       activeSlotId: 0,
       cartItemIds: [],
+      remark: "",
+      paying: false,
       ...EMPTY_AMOUNT
     });
     try {
@@ -211,6 +234,10 @@ Page({
     this.loadCheckout();
   },
 
+  handleRemarkInput(event) {
+    this.setData({ remark: event.detail.value || "" });
+  },
+
   goCart() {
     wx.redirectTo({ url: "/pages/cart/index" });
   },
@@ -228,7 +255,14 @@ Page({
     if (!requireCompleteProfile("/pages/checkout/index")) {
       return;
     }
-    if (this.data.payDisabled || !this.data.address || !this.data.activeSlotId || !this.data.cartItemIds.length) {
+    if (this.data.paying) {
+      return;
+    }
+    const canPay = !this.data.payDisabled && this.data.address && this.data.activeSlotId && this.data.cartItemIds.length;
+    this.setData({ paying: true, payDisabled: true });
+    let orderId = null;
+    if (!canPay) {
+      this.setData({ paying: false, payDisabled: true });
       wx.showToast({ title: "订单信息不完整", icon: "none" });
       return;
     }
@@ -237,17 +271,40 @@ Page({
         addressId: this.data.address.id,
         deliverySlotId: this.data.activeSlotId,
         cartItemIds: this.data.cartItemIds,
-        remark: ""
+        remark: (this.data.remark || "").trim()
       });
+      orderId = order.id;
       const payment = await payOrder(order.id);
       const paymentResult = await requestWechatPayment(payment);
       if (paymentResult && paymentResult.developmentMode) {
         await confirmDevelopmentPayment(order.id);
+      } else {
+        const latestOrder = await waitForPaymentResult(order.id);
+        if (!isPaidOrder(latestOrder)) {
+          showPaymentPending(this, order.id);
+          return;
+        }
       }
       wx.showToast({ title: "支付成功", icon: "success" });
       wx.redirectTo({ url: `/pages/order-detail/index?id=${order.id}` });
     } catch (error) {
+      if (orderId && !isPaymentCancelled(error)) {
+        try {
+          const latestOrder = await waitForPaymentResult(orderId, { attempts: 3, interval: 700 });
+          if (isPaidOrder(latestOrder)) {
+            wx.showToast({ title: "支付成功", icon: "success" });
+            wx.redirectTo({ url: `/pages/order-detail/index?id=${orderId}` });
+            return;
+          }
+        } catch {}
+      }
+      if (isPaymentCancelled(error)) {
+        showPaymentCancelled(this, orderId);
+        return;
+      }
       wx.showToast({ title: error.message || "支付失败，请重试", icon: "none" });
+    } finally {
+      this.setData({ paying: false, payDisabled: false });
     }
   }
 });

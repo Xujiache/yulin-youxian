@@ -30,6 +30,7 @@ import java.time.Instant;
 import java.util.Base64;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
+import java.util.Locale;
 import java.util.Map;
 import javax.crypto.Cipher;
 import javax.crypto.spec.GCMParameterSpec;
@@ -52,6 +53,14 @@ public class WechatPayClient {
 
     public boolean isDevelopmentMode() {
         return properties.isDevelopmentMode();
+    }
+
+    public String appId() {
+        return properties.getAppId();
+    }
+
+    public String mchId() {
+        return properties.getMchId();
     }
 
     public boolean isPaymentConfigured() {
@@ -114,15 +123,23 @@ public class WechatPayClient {
         postJson("/v3/refund/domestic/refunds", body);
     }
 
-    public PaymentNotifyRequest parsePaymentNotify(String body, String timestamp, String nonce, String signature) {
-        JsonNode payload = callbackPayload(body, timestamp, nonce, signature);
+    public PaymentNotifyRequest parsePaymentNotify(String body, String timestamp, String nonce, String serial, String signature) {
+        JsonNode payload = callbackPayload(body, timestamp, nonce, serial, signature);
         if (payload.has("resource")) {
             JsonNode decrypted = decryptResource(payload.path("resource"));
             return new PaymentNotifyRequest(
                     text(decrypted, "out_trade_no"),
                     text(decrypted, "transaction_id"),
-                    text(decrypted, "trade_state")
+                    text(decrypted, "trade_state"),
+                    text(decrypted, "appid"),
+                    text(decrypted, "mchid"),
+                    decrypted.path("amount").path("total").isInt()
+                            ? decrypted.path("amount").path("total").asInt()
+                            : null
             );
+        }
+        if (!properties.isDevelopmentMode()) {
+            throw new BusinessException(401, "生产模式只接受已验签的微信支付回调");
         }
         try {
             return objectMapper.readValue(body, PaymentNotifyRequest.class);
@@ -131,14 +148,17 @@ public class WechatPayClient {
         }
     }
 
-    public RefundNotifyRequest parseRefundNotify(String body, String timestamp, String nonce, String signature) {
-        JsonNode payload = callbackPayload(body, timestamp, nonce, signature);
+    public RefundNotifyRequest parseRefundNotify(String body, String timestamp, String nonce, String serial, String signature) {
+        JsonNode payload = callbackPayload(body, timestamp, nonce, serial, signature);
         if (payload.has("resource")) {
             JsonNode decrypted = decryptResource(payload.path("resource"));
             return new RefundNotifyRequest(
                     text(decrypted, "out_refund_no"),
                     text(decrypted, "refund_status")
             );
+        }
+        if (!properties.isDevelopmentMode()) {
+            throw new BusinessException(401, "生产模式只接受已验签的微信退款回调");
         }
         try {
             return objectMapper.readValue(body, RefundNotifyRequest.class);
@@ -162,11 +182,11 @@ public class WechatPayClient {
         );
     }
 
-    private JsonNode callbackPayload(String body, String timestamp, String nonce, String signature) {
+    private JsonNode callbackPayload(String body, String timestamp, String nonce, String serial, String signature) {
         try {
             JsonNode payload = objectMapper.readTree(body);
             if (payload.has("resource")) {
-                verifyCallbackSignature(body, timestamp, nonce, signature);
+                verifyCallbackSignature(body, timestamp, nonce, serial, signature);
             }
             return payload;
         } catch (JsonProcessingException exception) {
@@ -174,15 +194,22 @@ public class WechatPayClient {
         }
     }
 
-    private void verifyCallbackSignature(String body, String timestamp, String nonce, String wechatSignature) {
+    private void verifyCallbackSignature(String body, String timestamp, String nonce, String serial, String wechatSignature) {
         if (properties.isDevelopmentMode() && !hasText(properties.getPlatformCertificatePath())) {
             return;
         }
-        if (!isCallbackVerificationConfigured() || !hasText(timestamp) || !hasText(nonce) || !hasText(wechatSignature)) {
+        if (!isCallbackVerificationConfigured()
+                || !hasText(timestamp)
+                || !hasText(nonce)
+                || !hasText(serial)
+                || !hasText(wechatSignature)) {
             throw new BusinessException(401, "微信支付回调验签配置不完整");
         }
         try {
             X509Certificate certificate = loadPlatformCertificate();
+            if (!serialMatches(serial, certificate)) {
+                throw new BusinessException(401, "微信支付回调证书序列号不匹配");
+            }
             Signature verifier = Signature.getInstance("SHA256withRSA");
             verifier.initVerify(certificate.getPublicKey());
             verifier.update((timestamp + "\n" + nonce + "\n" + body + "\n").getBytes(StandardCharsets.UTF_8));
@@ -195,6 +222,11 @@ public class WechatPayClient {
         } catch (Exception exception) {
             throw new BusinessException(401, "微信支付回调验签失败");
         }
+    }
+
+    private boolean serialMatches(String serial, X509Certificate certificate) {
+        String configured = certificate.getSerialNumber().toString(16).toUpperCase(Locale.ROOT);
+        return configured.equals(serial.trim().toUpperCase(Locale.ROOT));
     }
 
     private JsonNode decryptResource(JsonNode resource) {
@@ -236,6 +268,7 @@ public class WechatPayClient {
             if (response.statusCode() < 200 || response.statusCode() >= 300) {
                 throw new BusinessException(502, "微信支付接口调用失败: " + response.body());
             }
+            verifyResponseSignature(response);
             return response.body().isBlank() ? objectMapper.createObjectNode() : objectMapper.readTree(response.body());
         } catch (BusinessException exception) {
             throw exception;
@@ -244,6 +277,37 @@ public class WechatPayClient {
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
             throw new BusinessException(502, "微信支付接口调用被中断");
+        }
+    }
+
+    private void verifyResponseSignature(HttpResponse<String> response) {
+        String body = response.body() == null ? "" : response.body();
+        String timestamp = response.headers().firstValue("Wechatpay-Timestamp").orElse("");
+        String nonce = response.headers().firstValue("Wechatpay-Nonce").orElse("");
+        String serial = response.headers().firstValue("Wechatpay-Serial").orElse("");
+        String signature = response.headers().firstValue("Wechatpay-Signature").orElse("");
+        if (!isCallbackVerificationConfigured()
+                || !hasText(timestamp)
+                || !hasText(nonce)
+                || !hasText(serial)
+                || !hasText(signature)) {
+            throw new BusinessException(502, "微信支付接口应答验签配置或响应头不完整");
+        }
+        try {
+            X509Certificate certificate = loadPlatformCertificate();
+            if (!serialMatches(serial, certificate)) {
+                throw new BusinessException(502, "微信支付接口应答证书序列号不匹配");
+            }
+            Signature verifier = Signature.getInstance("SHA256withRSA");
+            verifier.initVerify(certificate.getPublicKey());
+            verifier.update((timestamp + "\n" + nonce + "\n" + body + "\n").getBytes(StandardCharsets.UTF_8));
+            if (!verifier.verify(Base64.getDecoder().decode(signature))) {
+                throw new BusinessException(502, "微信支付接口应答签名无效");
+            }
+        } catch (BusinessException exception) {
+            throw exception;
+        } catch (Exception exception) {
+            throw new BusinessException(502, "微信支付接口应答验签失败");
         }
     }
 
