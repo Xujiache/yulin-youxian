@@ -23,6 +23,7 @@ import com.xianda.freshdelivery.dto.OrderItemDto;
 import com.xianda.freshdelivery.dto.OrderPreviewDto;
 import com.xianda.freshdelivery.dto.OrderPreviewRequest;
 import com.xianda.freshdelivery.dto.OrderStatusCountDto;
+import com.xianda.freshdelivery.dto.PaymentConfirmationResult;
 import com.xianda.freshdelivery.dto.PaymentNotifyRequest;
 import com.xianda.freshdelivery.dto.PrintModels;
 import com.xianda.freshdelivery.dto.ProductDto;
@@ -666,7 +667,7 @@ public class StorefrontService {
         return toOrderDetailDto(order);
     }
 
-    public synchronized OrderDetailDto confirmPayment(PaymentNotifyRequest request) {
+    public synchronized PaymentConfirmationResult confirmPayment(PaymentNotifyRequest request) {
         if (!"SUCCESS".equalsIgnoreCase(request.tradeState())) {
             throw new BusinessException(400, "支付状态不是成功");
         }
@@ -675,17 +676,12 @@ public class StorefrontService {
             throw new BusinessException(409, "微信支付回调金额与订单金额不一致");
         }
         if (!"待支付".equals(order.status())) {
-            return toOrderDetailDto(order);
+            return new PaymentConfirmationResult(toOrderDetailDto(order), false);
         }
         OrderState paid = order.withStatus("已支付/待接单").withPaidAmount(order.payableAmount());
         orders.put(order.id(), paid);
         persist();
-        return toOrderDetailDto(paid);
-    }
-
-    public synchronized OrderDetailDto confirmDevelopmentPayment(Long id) {
-        OrderState order = orderState(id);
-        return confirmPayment(new PaymentNotifyRequest(order.orderNo(), "development_" + order.orderNo(), "SUCCESS"));
+        return new PaymentConfirmationResult(toOrderDetailDto(paid), true);
     }
 
     public synchronized RefundDto createRefund(RefundRequest request) {

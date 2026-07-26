@@ -62,7 +62,6 @@ public class WxPaymentController {
                 && !wechatPayProperties.getApiV3Key().isBlank()
                 && wechatPayClient.isPaymentConfigured();
         return ApiResponse.ok(Map.of(
-                "developmentMode", wechatPayProperties.isDevelopmentMode(),
                 "configured", configured,
                 "callbackVerificationConfigured", wechatPayClient.isCallbackVerificationConfigured(),
                 "notifyUrl", wechatPayProperties.getNotifyUrl(),

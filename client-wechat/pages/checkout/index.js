@@ -2,7 +2,7 @@ const { yuan, lineAmount } = require("../../utils/format");
 const { getAddresses } = require("../../api/addresses");
 const { getCart } = require("../../api/cart");
 const { getDeliverySlots } = require("../../api/delivery");
-const { confirmDevelopmentPayment, createOrder, payOrder, previewOrder } = require("../../api/orders");
+const { createOrder, payOrder, previewOrder } = require("../../api/orders");
 const { requireCompleteProfile } = require("../../utils/auth-guard");
 const { syncTheme } = require("../../utils/theme");
 const {
@@ -87,6 +87,7 @@ Page({
     wx.removeStorageSync("checkoutSelectedAddress");
     if (!this.data.cartItemIds.length || !this.data.activeSlotId) {
       this.setData({ address: selectedAddress });
+      this.loadCheckout();
       return;
     }
     this.refreshPreview(selectedAddress, this.data.activeSlotId);
@@ -137,8 +138,16 @@ Page({
         return;
       }
       if (!address) {
+        this.setData({
+          address: null,
+          slots: availableSlots,
+          activeSlotId: slot ? slot.id : 0,
+          cartItemIds,
+          payDisabled: true,
+          loadError: ""
+        });
         wx.showToast({ title: "请先添加收货地址", icon: "none" });
-        wx.navigateTo({ url: "/pages/address/index" });
+        wx.navigateTo({ url: "/pages/address/index?select=1" });
         return;
       }
       if (!slot) {
@@ -275,15 +284,11 @@ Page({
       });
       orderId = order.id;
       const payment = await payOrder(order.id);
-      const paymentResult = await requestWechatPayment(payment);
-      if (paymentResult && paymentResult.developmentMode) {
-        await confirmDevelopmentPayment(order.id);
-      } else {
-        const latestOrder = await waitForPaymentResult(order.id);
-        if (!isPaidOrder(latestOrder)) {
-          showPaymentPending(this, order.id);
-          return;
-        }
+      await requestWechatPayment(payment);
+      const latestOrder = await waitForPaymentResult(order.id);
+      if (!isPaidOrder(latestOrder)) {
+        showPaymentPending(this, order.id);
+        return;
       }
       wx.showToast({ title: "支付成功", icon: "success" });
       wx.redirectTo({ url: `/pages/order-detail/index?id=${order.id}` });

@@ -24,13 +24,12 @@
 ```json
 {
   "code": "wx.login 返回的 code",
-  "clientId": "本地 development 模式使用的设备标识",
   "nickName": "微信昵称",
   "avatarUrl": "微信头像"
 }
 ```
 
-正式模式下后端使用 `code` 调用微信 `jscode2session` 获取 openId；development 模式下使用 `clientId` 生成稳定开发 openId。
+后端使用 `code` 调用微信 `jscode2session` 获取真实 openId。
 
 登录响应：
 
@@ -138,7 +137,6 @@
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
 | POST | `/api/wx/orders/{id}/pay` | 创建微信支付参数 |
-| POST | `/api/wx/orders/{id}/pay/development-success` | development 模式确认支付成功 |
 | POST | `/api/wx/payments/wechat/notify` | 微信支付回调 |
 
 支付接口返回小程序调起支付所需参数：
@@ -152,8 +150,7 @@
   "nonceStr": "nonce",
   "packageValue": "prepay_id=xxx",
   "signType": "RSA",
-  "paySign": "sign",
-  "developmentMode": false
+  "paySign": "sign"
 }
 ```
 

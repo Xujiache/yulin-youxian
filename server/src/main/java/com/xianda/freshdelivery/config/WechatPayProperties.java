@@ -6,7 +6,6 @@ import org.springframework.stereotype.Component;
 @Component
 @ConfigurationProperties(prefix = "wechat.pay")
 public class WechatPayProperties {
-    private boolean developmentMode = false;
     private String appId = "";
     private String mchId = "";
     private String apiV3Key = "";
@@ -17,14 +16,6 @@ public class WechatPayProperties {
     private String baseUrl = "https://api.mch.weixin.qq.com";
     private String notifyUrl = "";
     private String refundNotifyUrl = "";
-
-    public boolean isDevelopmentMode() {
-        return developmentMode;
-    }
-
-    public void setDevelopmentMode(boolean developmentMode) {
-        this.developmentMode = developmentMode;
-    }
 
     public String getAppId() {
         return appId;

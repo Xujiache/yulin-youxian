@@ -25,9 +25,6 @@ public class WechatMiniAppClient {
     }
 
     public String resolveOpenId(WxLoginRequest request) {
-        if (properties.isDevelopmentMode()) {
-            return developmentOpenId(request);
-        }
         ensureConfigured();
         if (!hasText(request.code())) {
             throw new BusinessException(400, "微信登录 code 不能为空");
@@ -47,10 +44,6 @@ public class WechatMiniAppClient {
 
     public boolean isConfigured() {
         return hasText(properties.getAppId()) && hasText(properties.getAppSecret());
-    }
-
-    public boolean isDevelopmentMode() {
-        return properties.isDevelopmentMode();
     }
 
     private JsonNode code2Session(String code) {
@@ -83,13 +76,6 @@ public class WechatMiniAppClient {
         if (!isConfigured()) {
             throw new BusinessException(500, "微信小程序登录配置不完整");
         }
-    }
-
-    private String developmentOpenId(WxLoginRequest request) {
-        if (hasText(request.clientId())) {
-            return "dev_" + request.clientId().trim();
-        }
-        return "dev_code_" + request.code().trim();
     }
 
     private String encode(String value) {

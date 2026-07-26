@@ -21,8 +21,9 @@ function isPaymentCancelled(error) {
 }
 
 function requestWechatPayment(payment) {
-  if (!payment || payment.developmentMode) {
-    return Promise.resolve({ developmentMode: true });
+  const requiredFields = ["timeStamp", "nonceStr", "packageValue", "signType", "paySign"];
+  if (!payment || requiredFields.some((field) => !payment[field])) {
+    return Promise.reject(new Error("支付参数不完整，请稍后重试"));
   }
   return new Promise((resolve, reject) => {
     wx.requestPayment({

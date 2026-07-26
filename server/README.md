@@ -26,11 +26,9 @@
 
 - `SERVER_PORT`
 - `STOREFRONT_STORAGE_PATH`
-- `WECHAT_MINIAPP_DEVELOPMENT_MODE`
 - `WECHAT_MINIAPP_APP_ID`
 - `WECHAT_MINIAPP_APP_SECRET`
 - `WECHAT_MINIAPP_CODE2_SESSION_URL`
-- `WECHAT_PAY_DEVELOPMENT_MODE`
 - `WECHAT_PAY_APP_ID`
 - `WECHAT_PAY_MCH_ID`
 - `WECHAT_PAY_API_V3_KEY`
@@ -42,9 +40,9 @@
 - `WECHAT_PAY_NOTIFY_URL`
 - `WECHAT_PAY_REFUND_NOTIFY_URL`
 
-`WECHAT_MINIAPP_DEVELOPMENT_MODE` 默认为 `true`，用于本地开发时按 `clientId` 生成稳定 openId。生产部署设置为 `false` 后，后端会使用 `WECHAT_MINIAPP_APP_ID` 和 `WECHAT_MINIAPP_APP_SECRET` 调用微信 `jscode2session`。
+小程序登录始终使用 `WECHAT_MINIAPP_APP_ID` 和 `WECHAT_MINIAPP_APP_SECRET` 调用微信 `jscode2session` 获取真实 openId。
 
-`WECHAT_PAY_DEVELOPMENT_MODE` 默认为 `true`，支付接口会返回 development 支付参数，小程序会调用 `/api/wx/orders/{id}/pay/development-success` 完成本地流程联调。生产部署设置为 `false` 后，必须配置商户号、商户私钥、商户证书序列号、API v3 密钥、平台证书和公网 HTTPS 回调地址。
+微信支付始终调用真实 API v3 接口；必须配置商户号、商户私钥、商户证书序列号、API v3 密钥、平台证书和公网 HTTPS 回调地址。
 
 ## 启动
 
@@ -70,7 +68,6 @@ mvn spring-boot:run
 - `GET /api/wx/orders`
 - `POST /api/wx/orders`
 - `POST /api/wx/orders/{id}/pay`
-- `POST /api/wx/orders/{id}/pay/development-success`
 - `POST /api/wx/refunds`
 - `POST /api/wx/payments/wechat/notify`
 - `POST /api/wx/refunds/wechat/notify`

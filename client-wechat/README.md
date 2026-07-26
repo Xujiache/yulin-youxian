@@ -31,12 +31,12 @@
 - 我的页面会调用 `/api/wx/profile` 读取用户资料和订单统计。
 - 当前图片为 `assets/products` 下的默认商品图，后续也可通过后台商品图片字段替换。
 - 商品数量选择已支持每个商品独立配置最小购买量和步进值。
-- 支付页已接入后端返回的微信支付参数；后端 development 模式下会自动走本地支付确认接口，正式模式下调用 `wx.requestPayment`。
-- 登录页启动流程已调用 `wx.login`，后端正式模式会通过微信 `jscode2session` 换取真实 openId。
+- 支付页仅使用后端返回的真实微信支付参数，并调用 `wx.requestPayment`。
+- 登录页启动流程已调用 `wx.login`，后端会通过微信 `jscode2session` 换取真实 openId。
 
 ## 生产配置
 
 1. 把 `app.js` 里的 `apiBaseUrl` 改为线上 HTTPS 域名。
-2. 后端设置 `WECHAT_MINIAPP_DEVELOPMENT_MODE=false`，并配置正式小程序 AppID 和 AppSecret。
-3. 后端设置 `WECHAT_PAY_DEVELOPMENT_MODE=false`，并配置微信支付商户证书、API v3 密钥和公网 HTTPS 回调地址。
+2. 后端配置正式小程序 AppID 和 AppSecret，用于通过 `jscode2session` 获取真实 openId。
+3. 后端配置微信支付商户证书、API v3 密钥、平台证书和公网 HTTPS 回调地址。
 4. 使用客户正式小程序 AppID 提交体验版并完成支付、退款、回调验签联调。
