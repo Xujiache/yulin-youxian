@@ -4,6 +4,7 @@ import com.xianda.freshdelivery.common.BusinessException;
 import com.xianda.freshdelivery.common.CurrentUserContext;
 import com.xianda.freshdelivery.dto.OrderDetailDto;
 import com.xianda.freshdelivery.dto.AdminRefundCreateRequest;
+import com.xianda.freshdelivery.dto.PaymentConfirmationResult;
 import com.xianda.freshdelivery.dto.PaymentDto;
 import com.xianda.freshdelivery.dto.PaymentNotifyRequest;
 import com.xianda.freshdelivery.dto.RefundDto;
@@ -32,25 +33,18 @@ public class WechatPaymentService {
         return wechatPayClient.createJsapiPayment(order, openId);
     }
 
-    public OrderDetailDto confirmDevelopmentPayment(Long orderId) {
-        if (!wechatPayClient.isDevelopmentMode()) {
-            throw new BusinessException(403, "生产模式不允许使用开发支付确认接口");
-        }
-        OrderDetailDto order = storefrontService.confirmDevelopmentPayment(orderId);
-        enqueuePrint(order);
-        return order;
-    }
-
     public OrderDetailDto confirmPayment(PaymentNotifyRequest request) {
         validatePaymentNotificationIdentity(request);
-        OrderDetailDto order = storefrontService.confirmPayment(request);
-        enqueuePrint(order);
-        return order;
+        PaymentConfirmationResult result = storefrontService.confirmPayment(request);
+        if (result.newlyPaid()) {
+            enqueuePrint(result.order());
+        }
+        return result.order();
     }
 
     public OrderDetailDto refreshPaymentStatus(Long orderId) {
         OrderDetailDto order = storefrontService.order(orderId);
-        if (!"待支付".equals(order.status()) || wechatPayClient.isDevelopmentMode()) {
+        if (!"待支付".equals(order.status())) {
             return order;
         }
         PaymentNotifyRequest payment = wechatPayClient.queryPayment(order);
@@ -61,8 +55,7 @@ public class WechatPaymentService {
     }
 
     private void validatePaymentNotificationIdentity(PaymentNotifyRequest request) {
-        if (!wechatPayClient.isDevelopmentMode()
-                && (!hasText(request.appId()) || !hasText(request.mchId()) || request.totalAmount() == null)) {
+        if (!hasText(request.appId()) || !hasText(request.mchId()) || request.totalAmount() == null) {
             throw new BusinessException(401, "微信支付生产回调缺少商户身份或金额信息");
         }
         if (hasText(request.appId()) && !request.appId().equals(wechatPayClient.appId())) {
@@ -88,9 +81,6 @@ public class WechatPaymentService {
     public RefundDto approveRefund(Long refundId) {
         RefundDto refund = storefrontService.adminRefund(refundId);
         OrderDetailDto order = storefrontService.adminOrder(refund.orderId());
-        if (wechatPayClient.isDevelopmentMode()) {
-            return storefrontService.approveRefund(refundId);
-        }
         wechatPayClient.requestRefund(refund, order);
         return storefrontService.markRefundProcessing(refundId);
     }

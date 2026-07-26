@@ -2,14 +2,11 @@ package com.xianda.freshdelivery;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.xianda.freshdelivery.common.BusinessException;
 import com.xianda.freshdelivery.config.WechatPayProperties;
 import com.xianda.freshdelivery.dto.OrderDetailDto;
-import com.xianda.freshdelivery.dto.PaymentDto;
 import com.xianda.freshdelivery.dto.PaymentNotifyRequest;
-import com.xianda.freshdelivery.dto.RefundNotifyRequest;
 import com.xianda.freshdelivery.service.WechatPayClient;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -31,43 +28,16 @@ class WechatPayClientTests {
     Path tempDir;
 
     @Test
-    void developmentModeReturnsMiniProgramPaymentParams() {
-        WechatPayClient client = newClient();
+    void paymentRequiresCompleteWechatPayConfiguration() {
+        WechatPayClient client = new WechatPayClient(new WechatPayProperties());
         OrderDetailDto order = new OrderDetailDto(1L, "XD20260705001", "待支付", null, "今日 14:00-16:00", List.of(), 0, 0, 0, 100, 0, 0, "", "", "", "", 1000L, List.of());
 
-        PaymentDto payment = client.createJsapiPayment(order, "dev_openid");
-
-        assertTrue(payment.developmentMode());
-        assertEquals("prepay_id=development_XD20260705001", payment.packageValue());
-        assertEquals("RSA", payment.signType());
+        assertThrows(BusinessException.class, () -> client.createJsapiPayment(order, "real-openid"));
     }
 
     @Test
-    void directPaymentNotifyPayloadCanBeParsedInDevelopmentMode() {
-        WechatPayClient client = newClient();
-
-        PaymentNotifyRequest request = client.parsePaymentNotify("{\"orderNo\":\"XD1\",\"transactionId\":\"TX1\",\"tradeState\":\"SUCCESS\"}", null, null, null, null);
-
-        assertEquals("XD1", request.orderNo());
-        assertEquals("TX1", request.transactionId());
-        assertEquals("SUCCESS", request.tradeState());
-    }
-
-    @Test
-    void directRefundNotifyPayloadCanBeParsedInDevelopmentMode() {
-        WechatPayClient client = newClient();
-
-        RefundNotifyRequest request = client.parseRefundNotify("{\"refundNo\":\"RF1\",\"refundStatus\":\"SUCCESS\"}", null, null, null, null);
-
-        assertEquals("RF1", request.refundNo());
-        assertEquals("SUCCESS", request.refundStatus());
-    }
-
-    @Test
-    void productionModeRejectsUnsignedDirectPaymentNotifyPayload() {
-        WechatPayProperties properties = new WechatPayProperties();
-        properties.setDevelopmentMode(false);
-        WechatPayClient client = new WechatPayClient(properties);
+    void rejectsUnsignedDirectPaymentNotifyPayload() {
+        WechatPayClient client = new WechatPayClient(new WechatPayProperties());
 
         assertThrows(BusinessException.class, () -> client.parsePaymentNotify(
                 "{\"orderNo\":\"XD1\",\"transactionId\":\"TX1\",\"tradeState\":\"SUCCESS\"}",
@@ -117,7 +87,6 @@ class WechatPayClientTests {
         String signature = Base64.getEncoder().encodeToString(signer.sign());
 
         WechatPayProperties properties = new WechatPayProperties();
-        properties.setDevelopmentMode(false);
         properties.setApiV3Key(apiV3Key);
         properties.setPublicKeyId("PUB_KEY_ID_TEST");
         properties.setPublicKeyPath(publicKeyPath.toString());
@@ -136,9 +105,16 @@ class WechatPayClientTests {
         assertEquals(100, request.totalAmount());
     }
 
-    private WechatPayClient newClient() {
-        WechatPayProperties properties = new WechatPayProperties();
-        properties.setDevelopmentMode(true);
-        return new WechatPayClient(properties);
+    @Test
+    void rejectsUnsignedDirectRefundNotifyPayload() {
+        WechatPayClient client = new WechatPayClient(new WechatPayProperties());
+
+        assertThrows(BusinessException.class, () -> client.parseRefundNotify(
+                "{\"refundNo\":\"RF1\",\"refundStatus\":\"SUCCESS\"}",
+                null,
+                null,
+                null,
+                null
+        ));
     }
 }

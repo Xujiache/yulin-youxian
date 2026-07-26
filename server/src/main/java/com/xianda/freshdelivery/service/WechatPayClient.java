@@ -54,10 +54,6 @@ public class WechatPayClient {
         this.properties = properties;
     }
 
-    public boolean isDevelopmentMode() {
-        return properties.isDevelopmentMode();
-    }
-
     public String appId() {
         return properties.getAppId();
     }
@@ -69,7 +65,10 @@ public class WechatPayClient {
     public boolean isPaymentConfigured() {
         return hasText(properties.getAppId())
                 && hasText(properties.getMchId())
+                && hasText(properties.getApiV3Key())
                 && hasText(properties.getMerchantSerialNo())
+                && hasText(properties.getPlatformCertificatePath())
+                && hasText(properties.getNotifyUrl())
                 && hasPrivateKey();
     }
 
@@ -78,12 +77,9 @@ public class WechatPayClient {
     }
 
     public PaymentDto createJsapiPayment(OrderDetailDto order, String openId) {
-        if (properties.isDevelopmentMode()) {
-            return developmentPayment(order);
-        }
         ensurePaymentConfigured();
-        if (!hasText(openId) || openId.startsWith("dev_")) {
-            throw new BusinessException(500, "真实微信支付需要正式微信 openId，请关闭小程序登录 development 模式并配置 AppID/AppSecret");
+        if (!hasText(openId)) {
+            throw new BusinessException(500, "真实微信支付需要微信 openId");
         }
 
         JsonNode response = postJson("/v3/pay/transactions/jsapi", Map.of(
@@ -103,13 +99,10 @@ public class WechatPayClient {
         String nonceStr = nonce();
         String packageValue = "prepay_id=" + prepayId;
         String paySign = signMiniAppPayment(timeStamp, nonceStr, packageValue);
-        return new PaymentDto(order.id(), order.orderNo(), order.status(), timeStamp, nonceStr, packageValue, SIGN_TYPE, paySign, false);
+        return new PaymentDto(order.id(), order.orderNo(), order.status(), timeStamp, nonceStr, packageValue, SIGN_TYPE, paySign);
     }
 
     public PaymentNotifyRequest queryPayment(OrderDetailDto order) {
-        if (properties.isDevelopmentMode()) {
-            return new PaymentNotifyRequest(order.orderNo(), "", order.status());
-        }
         ensurePaymentConfigured();
         String path = "/v3/pay/transactions/out-trade-no/" + order.orderNo() + "?mchid=" + properties.getMchId();
         JsonNode response = getJson(path);
@@ -129,9 +122,6 @@ public class WechatPayClient {
     }
 
     public void requestRefund(RefundDto refund, OrderDetailDto order) {
-        if (properties.isDevelopmentMode()) {
-            return;
-        }
         ensureRefundConfigured();
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("out_trade_no", order.orderNo());
@@ -150,69 +140,35 @@ public class WechatPayClient {
 
     public PaymentNotifyRequest parsePaymentNotify(String body, String timestamp, String nonce, String serial, String signature) {
         JsonNode payload = callbackPayload(body, timestamp, nonce, serial, signature);
-        if (payload.has("resource")) {
-            JsonNode decrypted = decryptResource(payload.path("resource"));
-            return new PaymentNotifyRequest(
-                    text(decrypted, "out_trade_no"),
-                    text(decrypted, "transaction_id"),
-                    text(decrypted, "trade_state"),
-                    text(decrypted, "appid"),
-                    text(decrypted, "mchid"),
-                    decrypted.path("amount").path("total").isInt()
-                            ? decrypted.path("amount").path("total").asInt()
-                            : null
-            );
-        }
-        if (!properties.isDevelopmentMode()) {
-            throw new BusinessException(401, "生产模式只接受已验签的微信支付回调");
-        }
-        try {
-            return objectMapper.readValue(body, PaymentNotifyRequest.class);
-        } catch (JsonProcessingException exception) {
-            throw new BusinessException(400, "微信支付回调数据格式错误");
-        }
+        JsonNode decrypted = decryptResource(payload.path("resource"));
+        return new PaymentNotifyRequest(
+                text(decrypted, "out_trade_no"),
+                text(decrypted, "transaction_id"),
+                text(decrypted, "trade_state"),
+                text(decrypted, "appid"),
+                text(decrypted, "mchid"),
+                decrypted.path("amount").path("total").isInt()
+                        ? decrypted.path("amount").path("total").asInt()
+                        : null
+        );
     }
 
     public RefundNotifyRequest parseRefundNotify(String body, String timestamp, String nonce, String serial, String signature) {
         JsonNode payload = callbackPayload(body, timestamp, nonce, serial, signature);
-        if (payload.has("resource")) {
-            JsonNode decrypted = decryptResource(payload.path("resource"));
-            return new RefundNotifyRequest(
-                    text(decrypted, "out_refund_no"),
-                    text(decrypted, "refund_status")
-            );
-        }
-        if (!properties.isDevelopmentMode()) {
-            throw new BusinessException(401, "生产模式只接受已验签的微信退款回调");
-        }
-        try {
-            return objectMapper.readValue(body, RefundNotifyRequest.class);
-        } catch (JsonProcessingException exception) {
-            throw new BusinessException(400, "微信退款回调数据格式错误");
-        }
-    }
-
-    private PaymentDto developmentPayment(OrderDetailDto order) {
-        String timeStamp = String.valueOf(Instant.now().getEpochSecond());
-        return new PaymentDto(
-                order.id(),
-                order.orderNo(),
-                order.status(),
-                timeStamp,
-                nonce(),
-                "prepay_id=development_" + order.orderNo(),
-                SIGN_TYPE,
-                "development-pay-sign",
-                true
+        JsonNode decrypted = decryptResource(payload.path("resource"));
+        return new RefundNotifyRequest(
+                text(decrypted, "out_refund_no"),
+                text(decrypted, "refund_status")
         );
     }
 
     private JsonNode callbackPayload(String body, String timestamp, String nonce, String serial, String signature) {
         try {
             JsonNode payload = objectMapper.readTree(body);
-            if (payload.has("resource")) {
-                verifyCallbackSignature(body, timestamp, nonce, serial, signature);
+            if (!payload.hasNonNull("resource")) {
+                throw new BusinessException(401, "微信支付回调缺少加密资源");
             }
+            verifyCallbackSignature(body, timestamp, nonce, serial, signature);
             return payload;
         } catch (JsonProcessingException exception) {
             throw new BusinessException(400, "微信支付回调 JSON 格式错误");
@@ -220,9 +176,6 @@ public class WechatPayClient {
     }
 
     private void verifyCallbackSignature(String body, String timestamp, String nonce, String serial, String wechatSignature) {
-        if (properties.isDevelopmentMode() && !hasVerificationMaterial()) {
-            return;
-        }
         if (!isCallbackVerificationConfigured()
                 || !hasText(timestamp)
                 || !hasText(nonce)
@@ -442,7 +395,7 @@ public class WechatPayClient {
     }
 
     private void ensurePaymentConfigured() {
-        if (!isPaymentConfigured() || !hasText(properties.getNotifyUrl())) {
+        if (!isPaymentConfigured()) {
             throw new BusinessException(500, "微信支付配置不完整");
         }
     }

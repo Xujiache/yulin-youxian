@@ -1,6 +1,6 @@
 const { yuan } = require("../../utils/format");
 const { getHome } = require("../../api/catalog");
-const { confirmDevelopmentPayment, getOrder, payOrder } = require("../../api/orders");
+const { getOrder, payOrder } = require("../../api/orders");
 const { syncTheme } = require("../../utils/theme");
 const {
   isPaidOrder,
@@ -116,15 +116,11 @@ Page({
     this.setData({ paying: true, paymentNotice: "" });
     try {
       const payment = await payOrder(this.data.orderId);
-      const paymentResult = await requestWechatPayment(payment);
-      if (paymentResult && paymentResult.developmentMode) {
-        await confirmDevelopmentPayment(this.data.orderId);
-      } else {
-        const order = await waitForPaymentResult(this.data.orderId);
-        if (!isPaidOrder(order)) {
-          this.setData({ paymentNotice: "支付结果还在确认中，请稍后刷新订单状态。" });
-          return;
-        }
+      await requestWechatPayment(payment);
+      const order = await waitForPaymentResult(this.data.orderId);
+      if (!isPaidOrder(order)) {
+        this.setData({ paymentNotice: "支付结果还在确认中，请稍后刷新订单状态。" });
+        return;
       }
       await this.refreshOrder();
       wx.showToast({ title: "支付成功", icon: "success" });

@@ -9,12 +9,6 @@ spring:
 persistence:
   mode: file
 
-wechat:
-  miniapp:
-    development-mode: true
-  pay:
-    development-mode: true
-
 auth:
   admin:
     username: admin

@@ -31,12 +31,10 @@ management:
 
 wechat:
   miniapp:
-    development-mode: ${WECHAT_MINIAPP_DEVELOPMENT_MODE:false}
     app-id: ${WECHAT_MINIAPP_APP_ID:}
     app-secret: ${WECHAT_MINIAPP_APP_SECRET:}
     code2-session-url: ${WECHAT_MINIAPP_CODE2_SESSION_URL:https://api.weixin.qq.com/sns/jscode2session}
   pay:
-    development-mode: ${WECHAT_PAY_DEVELOPMENT_MODE:false}
     app-id: ${WECHAT_PAY_APP_ID:}
     mch-id: ${WECHAT_PAY_MCH_ID:}
     api-v3-key: ${WECHAT_PAY_API_V3_KEY:}

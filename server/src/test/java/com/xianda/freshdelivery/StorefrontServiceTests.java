@@ -88,7 +88,14 @@ class StorefrontServiceTests {
         assertEquals("待支付", pending.status());
         assertEquals("待支付", service.order(order.id()).status());
 
-        OrderDetailDto paid = service.confirmDevelopmentPayment(order.id());
+        OrderDetailDto paid = service.confirmPayment(new PaymentNotifyRequest(
+                order.orderNo(),
+                "TX-PAID",
+                "SUCCESS",
+                "wx-test-app",
+                "test-mch",
+                order.payableAmount()
+        )).order();
         assertEquals("已支付/待接单", paid.status());
         assertEquals(paid.payableAmount(), paid.paidAmount());
     }

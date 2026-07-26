@@ -1,15 +1,13 @@
 # 真实微信支付上线配置
 
-本项目后端已经使用微信支付 API v3 的小程序/JSAPI 支付接口。生产环境必须关闭 development 模式，并配置真实小程序、商户号、商户 API 私钥、API v3 密钥、平台证书和公网 HTTPS 回调地址。
+本项目后端仅使用微信支付 API v3 的小程序/JSAPI 支付接口，必须配置真实小程序、商户号、商户 API 私钥、API v3 密钥、平台证书和公网 HTTPS 回调地址。
 
 ## 必需配置
 
 ```text
-WECHAT_MINIAPP_DEVELOPMENT_MODE=false
 WECHAT_MINIAPP_APP_ID=小程序 AppID
 WECHAT_MINIAPP_APP_SECRET=小程序 AppSecret
 
-WECHAT_PAY_DEVELOPMENT_MODE=false
 WECHAT_PAY_APP_ID=与小程序绑定的 AppID
 WECHAT_PAY_MCH_ID=微信支付商户号
 WECHAT_PAY_API_V3_KEY=32 位 APIv3 密钥
@@ -34,8 +32,8 @@ WECHAT_PAY_REFUND_NOTIFY_URL=https://你的域名/api/wx/refunds/wechat/notify
 
 ## 上线前验证
 
-- 后端启动日志和 `/api/wx/payments/wechat/config-check` 均确认 `developmentMode=false`。
-- 使用真实微信用户登录，不能使用 `dev_openid`。
+- 后端启动后，通过 `/api/wx/payments/wechat/config-check` 确认 `configured=true` 与 `callbackVerificationConfigured=true`。
+- 使用真实微信用户登录。
 - 先使用 0.01 元真实订单验证下单、支付回调和订单状态。
 - 验证用户取消支付时订单仍为待支付，重复回调不会重复处理。
 - 发起一笔小额退款，验证退款回调后退款状态更新。

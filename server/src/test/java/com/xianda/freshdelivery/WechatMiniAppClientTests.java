@@ -1,6 +1,5 @@
 package com.xianda.freshdelivery;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.xianda.freshdelivery.common.BusinessException;
@@ -11,22 +10,10 @@ import org.junit.jupiter.api.Test;
 
 class WechatMiniAppClientTests {
     @Test
-    void developmentModeUsesStableClientIdOpenId() {
+    void requiresMiniAppCredentials() {
         WechatMiniAppProperties properties = new WechatMiniAppProperties();
-        properties.setDevelopmentMode(true);
         WechatMiniAppClient client = new WechatMiniAppClient(properties);
 
-        String openId = client.resolveOpenId(new WxLoginRequest("dev-code", "client-1", null, null));
-
-        assertEquals("dev_client-1", openId);
-    }
-
-    @Test
-    void productionModeRequiresMiniAppCredentials() {
-        WechatMiniAppProperties properties = new WechatMiniAppProperties();
-        properties.setDevelopmentMode(false);
-        WechatMiniAppClient client = new WechatMiniAppClient(properties);
-
-        assertThrows(BusinessException.class, () -> client.resolveOpenId(new WxLoginRequest("real-code", null, null, null)));
+        assertThrows(BusinessException.class, () -> client.resolveOpenId(new WxLoginRequest("real-code", null, null)));
     }
 }

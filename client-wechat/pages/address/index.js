@@ -70,11 +70,15 @@ Page({
       if (!address) {
         return;
       }
-      wx.setStorageSync("checkoutSelectedAddress", address);
-      wx.navigateBack();
+      this.selectAddress(address);
       return;
     }
     this.openEditById(id);
+  },
+
+  selectAddress(address) {
+    wx.setStorageSync("checkoutSelectedAddress", address);
+    wx.navigateBack();
   },
 
   handleEdit(event) {
@@ -195,13 +199,15 @@ Page({
         longitude: form.longitude,
         isDefault: form.isDefault
       };
-      if (form.id) {
-        await updateAddress(form.id, payload);
-      } else {
-        await createAddress(payload);
-      }
+      const savedAddress = form.id
+        ? await updateAddress(form.id, payload)
+        : await createAddress(payload);
       this.setData({ formVisible: false, form: EMPTY_FORM });
       await this.loadAddresses();
+      if (this.data.selectMode && savedAddress) {
+        this.selectAddress(savedAddress);
+        return;
+      }
       wx.showToast({ title: "已保存", icon: "success" });
     } catch {
       wx.showToast({ title: "保存失败", icon: "none" });
