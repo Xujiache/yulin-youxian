@@ -6,6 +6,10 @@ Component({
     product: {
       type: Object,
       value: {}
+    },
+    eagerImage: {
+      type: Boolean,
+      value: false
     }
   },
 

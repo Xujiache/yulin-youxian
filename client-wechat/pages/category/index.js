@@ -9,6 +9,9 @@ const {
 } = require("../../utils/product-filter");
 const { requireCompleteProfile } = require("../../utils/auth-guard");
 const { syncTheme } = require("../../utils/theme");
+const { cacheImage, getCachedImageUrl } = require("../../utils/image-cache");
+
+const PRELOAD_IMAGE_COUNT = 4;
 
 Page({
   data: {
@@ -16,7 +19,11 @@ Page({
     loading: true,
     categories: [],
     rawProducts: [],
+    filteredProducts: [],
     products: [],
+    productBatchSize: 12,
+    loadingMore: false,
+    hasMoreProducts: false,
     activeCategoryId: 1,
     filterVisible: false,
     sortMode: "default",
@@ -60,12 +67,25 @@ Page({
   },
 
   async updateProducts(categoryId) {
+    const requestId = (this.categoryRequestId || 0) + 1;
+    this.categoryRequestId = requestId;
     try {
       const remoteProducts = await getProducts({ categoryId });
-      this.setData({ rawProducts: remoteProducts.length ? remoteProducts : await getProducts() });
+      if (requestId !== this.categoryRequestId) {
+        return;
+      }
+      this.setData({ rawProducts: remoteProducts });
       this.applyFilters();
     } catch {
-      this.setData({ rawProducts: [], products: [] });
+      if (requestId !== this.categoryRequestId) {
+        return;
+      }
+      this.setData({
+        rawProducts: [],
+        filteredProducts: [],
+        products: [],
+        hasMoreProducts: false
+      });
       wx.showToast({ title: "商品加载失败", icon: "none" });
     }
   },
@@ -201,15 +221,67 @@ Page({
   },
 
   applyFilters() {
-    const products = applyProductFilters(this.data.rawProducts, {
+    const filteredProducts = applyProductFilters(this.data.rawProducts, {
       sortMode: this.data.sortMode,
       priceRange: this.data.priceRange,
       onlyStock: this.data.onlyStock
     });
+    const products = this.prepareVisibleProducts(filteredProducts.slice(0, this.data.productBatchSize));
     this.setData({
+      filteredProducts,
       products,
+      hasMoreProducts: products.length < filteredProducts.length,
       filterCount: getActiveFilterCount(this.data),
       activeFilterText: getOptionLabel(SORT_OPTIONS, this.data.sortMode) || "综合排序"
+    });
+    this.preloadProductImages(filteredProducts.slice(0, this.data.productBatchSize + PRELOAD_IMAGE_COUNT));
+  },
+
+  loadMoreProducts() {
+    if (this.data.loadingMore || !this.data.hasMoreProducts) {
+      return;
+    }
+    this.setData({ loadingMore: true });
+    const nextProducts = this.data.filteredProducts.slice(
+      0,
+      this.data.products.length + this.data.productBatchSize
+    );
+    this.setData({
+      products: this.prepareVisibleProducts(nextProducts),
+      hasMoreProducts: nextProducts.length < this.data.filteredProducts.length,
+      loadingMore: false
+    });
+    this.preloadProductImages(this.data.filteredProducts.slice(
+      nextProducts.length,
+      nextProducts.length + PRELOAD_IMAGE_COUNT
+    ));
+  },
+
+  prepareVisibleProducts(products) {
+    return products.map((product) => ({
+      ...product,
+      eagerImage: true,
+      image: getCachedImageUrl(product.image)
+    }));
+  },
+
+  preloadProductImages(products) {
+    const uniqueImages = Array.from(new Set(
+      products.map((product) => product && product.image).filter(Boolean)
+    ));
+    uniqueImages.forEach((imageUrl) => {
+      cacheImage(imageUrl).then((cachedUrl) => {
+        if (!cachedUrl || cachedUrl === imageUrl) {
+          return;
+        }
+        const products = this.data.products.map((product) => (
+          product.image === imageUrl ? { ...product, image: cachedUrl } : product
+        ));
+        const filteredProducts = this.data.filteredProducts.map((product) => (
+          product.image === imageUrl ? { ...product, image: cachedUrl } : product
+        ));
+        this.setData({ products, filteredProducts });
+      }).catch(() => {});
     });
   },
 

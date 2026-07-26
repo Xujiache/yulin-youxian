@@ -271,6 +271,14 @@
   box-shadow: 0 10rpx 22rpx rgba(0, 122, 61, 0.18);
 }
 
+.load-more-state {
+  padding: 28rpx 0 42rpx;
+  color: #8a9690;
+  font-size: 22rpx;
+  line-height: 30rpx;
+  text-align: center;
+}
+
 .reset-button::after,
 .done-button::after {
   border: 0;

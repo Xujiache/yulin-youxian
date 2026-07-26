@@ -25,14 +25,19 @@
       </view>
     </scroll-view>
 
-    <scroll-view class="product-panel" scroll-y>
+    <scroll-view
+      class="product-panel"
+      scroll-y
+      lower-threshold="520"
+      bindscrolltolower="loadMoreProducts"
+    >
       <view class="panel-head">
-        <text>共 {{products.length}} 件商品</text>
+        <text>共 {{filteredProducts.length}} 件商品</text>
         <text>{{activeFilterText}}</text>
       </view>
 
       <view class="filter-toolbar">
-        <text class="toolbar-result">共{{products.length}}件商品</text>
+        <text class="toolbar-result">共{{filteredProducts.length}}件商品</text>
         <view class="toolbar-actions">
           <view class="toolbar-item {{sortMode === 'default' ? 'active' : ''}}" data-value="default" bindtap="chooseQuickSort">
             <text>综合</text>
@@ -53,11 +58,15 @@
           wx:for="{{products}}"
           wx:key="id"
           product="{{item}}"
+          eager-image="{{true}}"
           bind:add="handleAdd"
         />
       </view>
 
-      <view wx:else class="empty-state">
+      <view wx:if="{{loadingMore}}" class="load-more-state">正在加载更多商品</view>
+      <view wx:elif="{{hasMoreProducts}}" class="load-more-state">上拉加载更多</view>
+
+      <view wx:if="{{!products.length}}" class="empty-state">
         <image class="empty-icon" src="/assets/icons/search.svg" mode="aspectFit" />
         <text class="empty-title">没有符合条件的商品</text>
         <text class="empty-subtitle">换个分类或重置筛选条件</text>

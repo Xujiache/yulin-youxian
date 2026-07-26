@@ -1,5 +1,5 @@
 const { API_BASE_URL } = require("../utils/config");
-const { cacheImage, getCachedImageUrl } = require("../utils/image-cache");
+const { getCachedImageUrl } = require("../utils/image-cache");
 
 function numberOr(value, fallback) {
   const number = Number(value);
@@ -17,10 +17,8 @@ function normalizeAssetUrl(url) {
     const app = getApp();
     const baseUrl = (app.globalData && app.globalData.apiBaseUrl) || API_BASE_URL;
     const normalized = baseUrl ? `${baseUrl}${url}` : url;
-    cacheImage(normalized);
     return getCachedImageUrl(normalized);
   }
-  cacheImage(url);
   return getCachedImageUrl(url);
 }
 

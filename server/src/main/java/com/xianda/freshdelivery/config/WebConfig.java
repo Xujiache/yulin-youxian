@@ -7,6 +7,7 @@ import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 import java.nio.file.Path;
+import java.time.Duration;
 
 @Configuration
 public class WebConfig implements WebMvcConfigurer {
@@ -49,12 +50,17 @@ public class WebConfig implements WebMvcConfigurer {
     @Override
     public void addResourceHandlers(ResourceHandlerRegistry registry) {
         registry.addResourceHandler("/uploads/**")
-                .addResourceLocations("file:data/uploads/");
+                .addResourceLocations("file:data/uploads/")
+                .setCacheControl(org.springframework.http.CacheControl.maxAge(Duration.ofDays(30))
+                        .cachePublic()
+                        .immutable());
         String productAssetsLocation = Path.of(System.getProperty("user.dir"), "../client-wechat/assets/products/")
                 .normalize()
                 .toUri()
                 .toString();
         registry.addResourceHandler("/assets/products/**")
-                .addResourceLocations(productAssetsLocation, "classpath:/static/assets/products/");
+                .addResourceLocations(productAssetsLocation, "classpath:/static/assets/products/")
+                .setCacheControl(org.springframework.http.CacheControl.maxAge(Duration.ofDays(7))
+                        .cachePublic());
     }
 }
