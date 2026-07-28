@@ -67,9 +67,11 @@ public class WechatPayClient {
                 && hasText(properties.getMchId())
                 && hasText(properties.getApiV3Key())
                 && hasText(properties.getMerchantSerialNo())
-                && hasText(properties.getPlatformCertificatePath())
                 && hasText(properties.getNotifyUrl())
-                && hasPrivateKey();
+                && hasPrivateKey()
+                // 微信支付支持“平台证书”或“微信支付公钥”两种验签材料。
+                // 使用公钥模式时，平台证书路径为空是正常配置，不能据此禁止下单。
+                && hasVerificationMaterial();
     }
 
     public boolean isCallbackVerificationConfigured() {

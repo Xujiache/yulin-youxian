@@ -14,6 +14,7 @@ public record SettingsDto(
         @NotBlank String businessHours,
         @NotBlank String contactPhone,
         Boolean firstOrderFreeDelivery,
+        Boolean autoDeliveryEnabled,
         List<FreeDeliveryCampaignDto> freeDeliveryCampaigns
 ) {
 }

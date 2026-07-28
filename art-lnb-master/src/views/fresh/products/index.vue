@@ -11,12 +11,17 @@
     <ElCard class="fresh-card" shadow="never">
       <div class="fresh-toolbar">
         <div class="fresh-toolbar__left">
+          <ElInput
+            v-model.trim="query.keyword"
+            clearable
+            placeholder="搜索商品名称或副标题"
+            style="width: 260px"
+          />
           <ElSelect
             v-model="query.categoryId"
             clearable
             placeholder="全部分类"
             style="width: 180px"
-            @change="loadProducts"
           >
             <ElOption
               v-for="item in categories"
@@ -25,14 +30,43 @@
               :value="item.id || 0"
             />
           </ElSelect>
-          <ElButton :loading="loading" @click="loadProducts">刷新</ElButton>
+          <ElSelect v-model="query.status" clearable placeholder="全部状态" style="width: 130px">
+            <ElOption label="上架中" value="on-sale" />
+            <ElOption label="已下架" value="off-sale" />
+          </ElSelect>
+          <ElSelect v-model="query.recommended" clearable placeholder="首页推荐" style="width: 130px">
+            <ElOption label="仅看推荐" value="recommended" />
+            <ElOption label="普通商品" value="normal" />
+          </ElSelect>
+          <ElSelect v-model="query.stock" clearable placeholder="全部库存" style="width: 130px">
+            <ElOption label="有库存" value="in-stock" />
+            <ElOption label="已售罄" value="sold-out" />
+            <ElOption label="低库存（≤10）" value="low-stock" />
+          </ElSelect>
+        </div>
+        <div class="fresh-toolbar__left fresh-toolbar__filters">
+          <span class="filter-label">价格（元）</span>
+          <ElInputNumber v-model="query.minPrice" :min="0" :precision="2" controls-position="right" placeholder="最低" style="width: 120px" />
+          <span class="filter-separator">至</span>
+          <ElInputNumber v-model="query.maxPrice" :min="0" :precision="2" controls-position="right" placeholder="最高" style="width: 120px" />
+          <ElSelect v-model="query.sort" style="width: 160px">
+            <ElOption label="默认排序" value="default" />
+            <ElOption label="价格从低到高" value="price-asc" />
+            <ElOption label="价格从高到低" value="price-desc" />
+            <ElOption label="库存从低到高" value="stock-asc" />
+            <ElOption label="库存从高到低" value="stock-desc" />
+            <ElOption label="名称 A-Z" value="name-asc" />
+          </ElSelect>
+          <span class="filter-result">匹配 {{ filteredProducts.length }} / {{ products.length }} 件</span>
+          <ElButton @click="resetFilters">重置筛选</ElButton>
+          <ElButton :loading="loading" @click="loadProducts">刷新数据</ElButton>
         </div>
         <div class="fresh-toolbar__right">
           <ElButton @click="goCategories">管理分类</ElButton>
         </div>
       </div>
 
-      <ElTable v-loading="loading" :data="products" border empty-text="暂无商品">
+      <ElTable v-loading="loading" :data="filteredProducts" border empty-text="没有符合筛选条件的商品">
         <ElTableColumn label="图片" width="86">
           <template #default="{ row }">
             <ElImage
@@ -230,7 +264,25 @@
   const dialogVisible = ref(false)
   const categories = ref<Category[]>([])
   const products = ref<Product[]>([])
-  const query = reactive<{ categoryId?: number | null }>({ categoryId: null })
+  const query = reactive<{
+    categoryId?: number | null
+    keyword: string
+    status: '' | 'on-sale' | 'off-sale'
+    recommended: '' | 'recommended' | 'normal'
+    stock: '' | 'in-stock' | 'sold-out' | 'low-stock'
+    minPrice: number | undefined
+    maxPrice: number | undefined
+    sort: 'default' | 'price-asc' | 'price-desc' | 'stock-asc' | 'stock-desc' | 'name-asc'
+  }>({
+    categoryId: null,
+    keyword: '',
+    status: '',
+    recommended: '',
+    stock: '',
+    minPrice: undefined,
+    maxPrice: undefined,
+    sort: 'default'
+  })
   const form = reactive<Product>(emptyForm())
 
   function emptyForm(): Product {
@@ -263,6 +315,37 @@
   const categoryName = (categoryId: number | null) =>
     categories.value.find((item) => item.id === categoryId)?.name || '未分类'
 
+  const filteredProducts = computed(() => {
+    const keyword = query.keyword.trim().toLocaleLowerCase()
+    const minPrice = query.minPrice == null ? undefined : yuanToCent(query.minPrice)
+    const maxPrice = query.maxPrice == null ? undefined : yuanToCent(query.maxPrice)
+    const rows = products.value.filter((item) => {
+      const stock = Number(item.stockQty || 0)
+      const text = `${item.name || ''} ${item.subtitle || ''} ${item.badge || ''}`.toLocaleLowerCase()
+      if (query.categoryId && item.categoryId !== query.categoryId) return false
+      if (keyword && !text.includes(keyword)) return false
+      if (query.status === 'on-sale' && item.status !== 1) return false
+      if (query.status === 'off-sale' && item.status === 1) return false
+      if (query.recommended === 'recommended' && !item.recommended) return false
+      if (query.recommended === 'normal' && item.recommended) return false
+      if (query.stock === 'in-stock' && stock <= 0) return false
+      if (query.stock === 'sold-out' && stock > 0) return false
+      if (query.stock === 'low-stock' && (stock <= 0 || stock > 10)) return false
+      if (minPrice != null && Number(item.unitPrice || 0) < minPrice) return false
+      if (maxPrice != null && Number(item.unitPrice || 0) > maxPrice) return false
+      return true
+    })
+
+    return [...rows].sort((left, right) => {
+      if (query.sort === 'price-asc') return Number(left.unitPrice || 0) - Number(right.unitPrice || 0)
+      if (query.sort === 'price-desc') return Number(right.unitPrice || 0) - Number(left.unitPrice || 0)
+      if (query.sort === 'stock-asc') return Number(left.stockQty || 0) - Number(right.stockQty || 0)
+      if (query.sort === 'stock-desc') return Number(right.stockQty || 0) - Number(left.stockQty || 0)
+      if (query.sort === 'name-asc') return left.name.localeCompare(right.name, 'zh-CN')
+      return Number(left.sortOrder || 0) - Number(right.sortOrder || 0) || Number(left.id || 0) - Number(right.id || 0)
+    })
+  })
+
   const loadCategories = async () => {
     categories.value = await getCategories()
   }
@@ -270,7 +353,7 @@
   const loadProducts = async () => {
     loading.value = true
     try {
-      const result = await getProducts({ categoryId: query.categoryId })
+      const result = await getProducts({})
       products.value = (result.items || []).map((item) => ({
         ...item,
         recommended: Boolean(item.recommended)
@@ -285,6 +368,17 @@
   const loadAll = async () => {
     await loadCategories()
     await loadProducts()
+  }
+
+  const resetFilters = () => {
+    query.categoryId = null
+    query.keyword = ''
+    query.status = ''
+    query.recommended = ''
+    query.stock = ''
+    query.minPrice = undefined
+    query.maxPrice = undefined
+    query.sort = 'default'
   }
 
   const openCreate = () => {
@@ -403,6 +497,27 @@
     display: flex;
     align-items: center;
     gap: 14px;
+  }
+
+  .fresh-toolbar {
+    align-items: flex-start;
+    flex-wrap: wrap;
+
+    &__filters {
+      width: 100%;
+    }
+  }
+
+  .filter-label,
+  .filter-separator,
+  .filter-result {
+    color: var(--art-gray-600);
+    font-size: 13px;
+    white-space: nowrap;
+  }
+
+  .filter-result {
+    margin-left: auto;
   }
 
   .upload-preview {

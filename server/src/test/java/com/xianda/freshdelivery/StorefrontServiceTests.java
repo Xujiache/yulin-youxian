@@ -12,10 +12,12 @@ import com.xianda.freshdelivery.dto.CartDto;
 import com.xianda.freshdelivery.dto.CategoryDto;
 import com.xianda.freshdelivery.dto.CreateAddressRequest;
 import com.xianda.freshdelivery.dto.CreateOrderRequest;
+import com.xianda.freshdelivery.dto.DeliverySlotDto;
 import com.xianda.freshdelivery.dto.OrderDetailDto;
 import com.xianda.freshdelivery.dto.PaymentNotifyRequest;
 import com.xianda.freshdelivery.dto.ProductDto;
 import com.xianda.freshdelivery.dto.RefundDto;
+import com.xianda.freshdelivery.dto.SettingsDto;
 import com.xianda.freshdelivery.service.StorefrontService;
 import java.math.BigDecimal;
 import java.nio.file.Path;
@@ -48,6 +50,17 @@ class StorefrontServiceTests {
     }
 
     @Test
+    void availableDeliverySlotsIncludeAutomaticDateAndWeekday() {
+        StorefrontService service = newService();
+
+        List<DeliverySlotDto> slots = service.availableDeliverySlots();
+
+        assertTrue(!slots.isEmpty());
+        assertTrue(slots.stream().allMatch(slot ->
+                slot.label().matches(".*\\d{1,2}:\\d{2}-\\d{1,2}:\\d{2}（\\d{1,2}月\\d{1,2}日 周[一二三四五六日]）")));
+    }
+
+    @Test
     void orderCreationDecreasesStock() {
         StorefrontService service = newService();
         CurrentUserContext.setUserId(1000L);
@@ -76,7 +89,7 @@ class StorefrontServiceTests {
     }
 
     @Test
-    void payDoesNotMarkPaidUntilPaymentConfirmed() {
+    void paymentConfirmationAutomaticallyAcceptsOrderByDefault() {
         StorefrontService service = newService();
         CurrentUserContext.setUserId(1000L);
         Long addressId = service.createAddress(addressRequest()).id();
@@ -96,8 +109,35 @@ class StorefrontServiceTests {
                 "test-mch",
                 order.payableAmount()
         )).order();
-        assertEquals("已支付/待接单", paid.status());
+        assertEquals("备货中", paid.status());
         assertEquals(paid.payableAmount(), paid.paidAmount());
+        assertEquals("TX-PAID", paid.transactionId());
+        assertEquals("TX-PAID", service.order(order.id()).transactionId());
+    }
+
+    @Test
+    void disabledAutoDeliveryKeepsPaidOrderForManualProcessing() {
+        StorefrontService service = newService();
+        SettingsDto current = service.settings();
+        service.updateSettings(new SettingsDto(
+                current.storeName(), current.logoUrl(), current.minOrderAmount(), current.deliveryFee(), current.packageFee(),
+                current.businessHours(), current.contactPhone(), current.firstOrderFreeDelivery(), false, current.freeDeliveryCampaigns()
+        ));
+        CurrentUserContext.setUserId(1000L);
+        Long addressId = service.createAddress(addressRequest()).id();
+        service.addCartItem(106L, BigDecimal.ONE);
+        CartDto cart = service.cart();
+        OrderDetailDto order = service.createOrder(new CreateOrderRequest(addressId, 1L, "", cart.items().stream().map(item -> item.id()).toList()));
+
+        OrderDetailDto paid = service.confirmPayment(new PaymentNotifyRequest(
+                order.orderNo(), "TX-MANUAL", "SUCCESS", "wx-test-app", "test-mch", order.payableAmount()
+        )).order();
+
+        assertEquals("已支付/待接单", paid.status());
+        assertEquals(1, service.batchPrepareOrders(List.of(paid.id())).success());
+        assertEquals("备货中", service.order(paid.id()).status());
+        assertEquals(1, service.batchDeliverOrders(List.of(paid.id())).success());
+        assertEquals("配送中", service.order(paid.id()).status());
     }
 
     @Test

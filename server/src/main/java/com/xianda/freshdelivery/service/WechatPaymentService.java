@@ -7,6 +7,9 @@ import com.xianda.freshdelivery.dto.AdminRefundCreateRequest;
 import com.xianda.freshdelivery.dto.PaymentConfirmationResult;
 import com.xianda.freshdelivery.dto.PaymentDto;
 import com.xianda.freshdelivery.dto.PaymentNotifyRequest;
+import com.xianda.freshdelivery.dto.BatchOrderActionResult;
+import java.util.ArrayList;
+import java.util.List;
 import com.xianda.freshdelivery.dto.RefundDto;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -52,6 +55,49 @@ public class WechatPaymentService {
             return order;
         }
         return confirmPayment(payment);
+    }
+
+    public OrderDetailDto deliverAdminOrder(Long orderId) {
+        ensurePaymentTransaction(orderId);
+        return storefrontService.deliverOrder(orderId);
+    }
+
+    public OrderDetailDto refreshAdminPaymentTransaction(Long orderId) {
+        return ensurePaymentTransaction(orderId);
+    }
+
+    public BatchOrderActionResult batchDeliverAdminOrders(List<Long> orderIds) {
+        List<Long> uniqueIds = orderIds == null ? List.of() : orderIds.stream().distinct().toList();
+        List<Long> processed = new ArrayList<>();
+        List<BatchOrderActionResult.BatchOrderActionError> errors = new ArrayList<>();
+        for (Long orderId : uniqueIds) {
+            try {
+                OrderDetailDto order = ensurePaymentTransaction(orderId);
+                storefrontService.deliverOrder(orderId);
+                processed.add(orderId);
+            } catch (BusinessException exception) {
+                String orderNo;
+                try {
+                    orderNo = storefrontService.adminOrder(orderId).orderNo();
+                } catch (Exception ignored) {
+                    orderNo = "";
+                }
+                errors.add(new BatchOrderActionResult.BatchOrderActionError(orderId, orderNo, exception.getMessage()));
+            }
+        }
+        return new BatchOrderActionResult(uniqueIds.size(), processed.size(), errors.size(), processed, errors);
+    }
+
+    private OrderDetailDto ensurePaymentTransaction(Long orderId) {
+        OrderDetailDto order = storefrontService.adminOrder(orderId);
+        if (hasText(order.transactionId())) {
+            return order;
+        }
+        PaymentNotifyRequest payment = wechatPayClient.queryPayment(order);
+        if (!"SUCCESS".equalsIgnoreCase(payment.tradeState())) {
+            throw new BusinessException(409, "微信支付尚未成功，无法生成发货表格");
+        }
+        return storefrontService.recordPaymentTransaction(orderId, payment.transactionId());
     }
 
     private void validatePaymentNotificationIdentity(PaymentNotifyRequest request) {

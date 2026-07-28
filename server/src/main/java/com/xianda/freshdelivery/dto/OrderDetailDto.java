@@ -20,6 +20,7 @@ public record OrderDetailDto(
         String latestRefundStatus,
         String latestRefundReason,
         Long userId,
-        List<RefundDto> refunds
+        List<RefundDto> refunds,
+        String transactionId
 ) {
 }

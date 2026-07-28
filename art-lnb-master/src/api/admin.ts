@@ -108,6 +108,19 @@ export interface OrderDetail {
   latestRefundReason?: string
   userId: number
   refunds: Refund[]
+  transactionId: string
+}
+
+export interface BatchOrderActionResult {
+  requested: number
+  success: number
+  skipped: number
+  processedOrderIds: number[]
+  errors: Array<{
+    orderId: number
+    orderNo: string
+    reason: string
+  }>
 }
 
 export interface Refund {
@@ -147,6 +160,7 @@ export interface StoreSettings {
   businessHours: string
   contactPhone: string
   firstOrderFreeDelivery: boolean
+  autoDeliveryEnabled: boolean
   freeDeliveryCampaigns: FreeDeliveryCampaign[]
 }
 
@@ -407,6 +421,12 @@ export function deliverOrder(id: number) {
   })
 }
 
+export function refreshOrderPaymentTransaction(id: number) {
+  return request.post<OrderDetail>({
+    url: `/api/admin/orders/${id}/payment-transaction/refresh`
+  })
+}
+
 export function completeOrder(id: number) {
   return request.post<OrderDetail>({
     url: `/api/admin/orders/${id}/complete`
@@ -416,6 +436,20 @@ export function completeOrder(id: number) {
 export function cancelOrder(id: number) {
   return request.post<OrderDetail>({
     url: `/api/admin/orders/${id}/cancel`
+  })
+}
+
+export function batchPrepareOrders(orderIds: number[]) {
+  return request.post<BatchOrderActionResult>({
+    url: '/api/admin/orders/batch/prepare',
+    data: { orderIds }
+  })
+}
+
+export function batchDeliverOrders(orderIds: number[]) {
+  return request.post<BatchOrderActionResult>({
+    url: '/api/admin/orders/batch/deliver',
+    data: { orderIds }
   })
 }
 
@@ -567,7 +601,9 @@ export function getPrinterConfig() {
   })
 }
 
-export function updatePrinterConfig(data: Pick<PrinterConfig, 'enabled' | 'autoPrintOnPaid' | 'retryLimit' | 'printerModel'>) {
+export function updatePrinterConfig(
+  data: Pick<PrinterConfig, 'enabled' | 'autoPrintOnPaid' | 'retryLimit' | 'printerModel'>
+) {
   return request.put<PrinterConfig>({
     url: '/api/admin/printing/config',
     data

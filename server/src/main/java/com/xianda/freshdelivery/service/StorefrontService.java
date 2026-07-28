@@ -8,6 +8,7 @@ import com.xianda.freshdelivery.dto.AddressDto;
 import com.xianda.freshdelivery.dto.AdminOrderDto;
 import com.xianda.freshdelivery.dto.AdminRefundCreateRequest;
 import com.xianda.freshdelivery.dto.BannerDto;
+import com.xianda.freshdelivery.dto.BatchOrderActionResult;
 import com.xianda.freshdelivery.dto.CartDto;
 import com.xianda.freshdelivery.dto.CartItemDto;
 import com.xianda.freshdelivery.dto.CategoryDto;
@@ -41,6 +42,8 @@ import java.math.RoundingMode;
 import java.nio.file.Path;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -50,6 +53,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -59,6 +64,11 @@ public class StorefrontService {
     private static final String STATE_KEY = "storefront";
     private static final int DEFAULT_DELIVERY_FEE = 500;
     private static final int DEFAULT_PACKAGE_FEE = 100;
+    private static final ZoneId STORE_ZONE = ZoneId.of("Asia/Shanghai");
+    private static final Pattern DELIVERY_TIME_RANGE_PATTERN =
+            Pattern.compile("(\\d{1,2}:\\d{2})\\s*[-~—至]\\s*(\\d{1,2}:\\d{2})");
+    private static final DateTimeFormatter DELIVERY_DATE_FORMATTER = DateTimeFormatter.ofPattern("M月d日");
+    private static final String[] CHINESE_WEEKDAYS = {"周一", "周二", "周三", "周四", "周五", "周六", "周日"};
 
     private final ObjectMapper objectMapper = new ObjectMapper().enable(SerializationFeature.INDENT_OUTPUT);
     private final Path storagePath;
@@ -82,8 +92,9 @@ public class StorefrontService {
     private final Map<Long, DeliverySlotDto> deliverySlots = new LinkedHashMap<>();
     private final Map<Long, OrderState> orders = new LinkedHashMap<>();
     private final Map<Long, RefundState> refunds = new LinkedHashMap<>();
+    private final Map<String, String> paymentTransactionIds = new LinkedHashMap<>();
 
-    private SettingsDto settings = new SettingsDto("禹邻优鲜", "/assets/products/store-logo.png", 0, DEFAULT_DELIVERY_FEE, DEFAULT_PACKAGE_FEE, "08:00-20:00", "400-800-1234", false, List.of());
+    private SettingsDto settings = new SettingsDto("禹邻优鲜", "/assets/products/store-logo.png", 0, DEFAULT_DELIVERY_FEE, DEFAULT_PACKAGE_FEE, "08:00-20:00", "400-800-1234", false, true, List.of());
 
     @Autowired
     public StorefrontService(
@@ -161,9 +172,6 @@ public class StorefrontService {
                     item.enabled() == null || item.enabled()
             ));
             sort += 10;
-        }
-        if (banners.isEmpty()) {
-            seedBanners();
         }
         resetSequences();
         persist();
@@ -429,8 +437,11 @@ public class StorefrontService {
     }
 
     public synchronized List<DeliverySlotDto> availableDeliverySlots() {
+        LocalDateTime current = LocalDateTime.now(STORE_ZONE);
         return deliverySlots.values().stream()
                 .filter(DeliverySlotDto::available)
+                .filter(slot -> isDeliverySlotOpen(slot, current))
+                .map(slot -> displayDeliverySlot(slot, current.toLocalDate()))
                 .toList();
     }
 
@@ -482,6 +493,7 @@ public class StorefrontService {
                 request.businessHours(),
                 request.contactPhone(),
                 Boolean.TRUE.equals(request.firstOrderFreeDelivery()),
+                !Boolean.FALSE.equals(request.autoDeliveryEnabled()),
                 normalizeFreeDeliveryCampaigns(request.freeDeliveryCampaigns())
         );
         persist();
@@ -531,7 +543,7 @@ public class StorefrontService {
         }
         preview.items().forEach(this::decreaseStock);
         long id = orderId.incrementAndGet();
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.now(STORE_ZONE);
         String createdAt = now.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME);
         String deliveryDate = deliveryDateForSlot(preview.deliverySlot().label(), now.toLocalDate()).toString();
         String orderNo = "XD" + now.format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss")) + id;
@@ -643,6 +655,16 @@ public class StorefrontService {
         return toOrderDetailDto(adminOrderState(id));
     }
 
+    public synchronized OrderDetailDto recordPaymentTransaction(Long id, String transactionId) {
+        OrderState order = adminOrderState(id);
+        if (transactionId == null || transactionId.isBlank()) {
+            throw new BusinessException(409, "微信支付订单未返回交易单号");
+        }
+        paymentTransactionIds.put(order.orderNo(), transactionId.trim());
+        persist();
+        return toOrderDetailDto(order);
+    }
+
     public synchronized PrintModels.BatchPrintResultDto batchPrintOrders(List<Long> orderIds) {
         if (orderIds == null || orderIds.isEmpty()) {
             return new PrintModels.BatchPrintResultDto(0, 0, List.of(), List.of());
@@ -691,10 +713,15 @@ public class StorefrontService {
         if (request.totalAmount() != null && !request.totalAmount().equals(order.payableAmount())) {
             throw new BusinessException(409, "微信支付回调金额与订单金额不一致");
         }
+        if (request.transactionId() != null && !request.transactionId().isBlank()) {
+            paymentTransactionIds.put(order.orderNo(), request.transactionId().trim());
+        }
         if (!"待支付".equals(order.status())) {
+            persist();
             return new PaymentConfirmationResult(toOrderDetailDto(order), false);
         }
-        OrderState paid = order.withStatus("已支付/待接单").withPaidAmount(order.payableAmount());
+        String nextStatus = Boolean.FALSE.equals(settings.autoDeliveryEnabled()) ? "已支付/待接单" : "备货中";
+        OrderState paid = order.withStatus(nextStatus).withPaidAmount(order.payableAmount());
         orders.put(order.id(), paid);
         persist();
         return new PaymentConfirmationResult(toOrderDetailDto(paid), true);
@@ -976,6 +1003,38 @@ public class StorefrontService {
         return acceptOrder(id);
     }
 
+    public synchronized BatchOrderActionResult batchPrepareOrders(List<Long> orderIds) {
+        return batchOrderAction(orderIds, "prepare");
+    }
+
+    public synchronized BatchOrderActionResult batchDeliverOrders(List<Long> orderIds) {
+        return batchOrderAction(orderIds, "deliver");
+    }
+
+    private BatchOrderActionResult batchOrderAction(List<Long> orderIds, String action) {
+        List<Long> uniqueIds = orderIds == null ? List.of() : orderIds.stream().distinct().toList();
+        List<Long> processed = new ArrayList<>();
+        List<BatchOrderActionResult.BatchOrderActionError> errors = new ArrayList<>();
+        for (Long orderId : uniqueIds) {
+            OrderState order = orders.get(orderId);
+            if (order == null) {
+                errors.add(new BatchOrderActionResult.BatchOrderActionError(orderId, "", "订单不存在"));
+                continue;
+            }
+            try {
+                if ("prepare".equals(action)) {
+                    acceptOrder(orderId);
+                } else {
+                    deliverOrder(orderId);
+                }
+                processed.add(orderId);
+            } catch (BusinessException exception) {
+                errors.add(new BatchOrderActionResult.BatchOrderActionError(orderId, order.orderNo(), exception.getMessage()));
+            }
+        }
+        return new BatchOrderActionResult(uniqueIds.size(), processed.size(), errors.size(), processed, errors);
+    }
+
     public synchronized OrderDetailDto deliverOrder(Long id) {
         OrderState order = adminOrderState(id);
         if (!List.of("已支付/待接单", "备货中").contains(order.status())) {
@@ -1015,9 +1074,6 @@ public class StorefrontService {
             StorefrontSnapshot snapshot = objectMapper.readValue(payload, StorefrontSnapshot.class);
             banners.clear();
             banners.addAll(snapshot.banners() == null ? List.of() : snapshot.banners());
-            if (banners.isEmpty()) {
-                seedBanners();
-            }
             categories.clear();
             categories.addAll((snapshot.categories() == null ? List.<CategoryDto>of() : snapshot.categories()).stream()
                     .map(this::normalizeCategory)
@@ -1047,6 +1103,8 @@ public class StorefrontService {
                 RefundDto normalized = normalizeRefund(refund);
                 refunds.put(normalized.id(), new RefundState(normalized.userId(), normalized));
             }
+            paymentTransactionIds.clear();
+            paymentTransactionIds.putAll(snapshot.paymentTransactionIds() == null ? Map.of() : snapshot.paymentTransactionIds());
             settings = settingsOrDefault(snapshot.settings());
             resetSequences();
             return true;
@@ -1065,6 +1123,7 @@ public class StorefrontService {
                 new ArrayList<>(deliverySlots.values()),
                 new ArrayList<>(orders.values()),
                 new ArrayList<>(refunds.values()),
+                new LinkedHashMap<>(paymentTransactionIds),
                 settings
         );
         try {
@@ -1424,7 +1483,7 @@ public class StorefrontService {
                 order.orderNo(),
                 order.status(),
                 order.payableAmount(),
-                order.deliverySlot(),
+                deliverySlotDisplay(order),
                 "共 " + order.items().size() + " 件商品",
                 order.items().stream().map(OrderItemDto::imageUrl).limit(3).toList(),
                 orderDateTimeText(order),
@@ -1476,7 +1535,7 @@ public class StorefrontService {
                 order.orderNo(),
                 order.status(),
                 order.address(),
-                order.deliverySlot(),
+                deliverySlotDisplay(order),
                 order.items(),
                 order.productAmount(),
                 order.deliveryFee(),
@@ -1489,7 +1548,8 @@ public class StorefrontService {
                 latestRefund == null ? "" : latestRefund.status(),
                 latestRefund == null ? "" : latestRefund.reason(),
                 order.userId(),
-                refundsForOrder(order.id())
+                refundsForOrder(order.id()),
+                paymentTransactionIds.getOrDefault(order.orderNo(), "")
         );
     }
 
@@ -1579,11 +1639,56 @@ public class StorefrontService {
     }
 
     private LocalDate deliveryDateForSlot(String deliverySlot, LocalDate createdDate) {
-        LocalDate baseDate = createdDate == null ? LocalDate.now() : createdDate;
-        if (deliverySlot != null && deliverySlot.contains("明日")) {
+        LocalDate baseDate = createdDate == null ? LocalDate.now(STORE_ZONE) : createdDate;
+        if (deliverySlot != null && (deliverySlot.contains("明日") || deliverySlot.contains("明天"))) {
             return baseDate.plusDays(1);
         }
         return baseDate;
+    }
+
+    private boolean isDeliverySlotOpen(DeliverySlotDto slot, LocalDateTime current) {
+        LocalDate deliveryDate = deliveryDateForSlot(slot.label(), current.toLocalDate());
+        Matcher matcher = DELIVERY_TIME_RANGE_PATTERN.matcher(slot.label() == null ? "" : slot.label());
+        if (!matcher.find()) {
+            return !deliveryDate.isBefore(current.toLocalDate());
+        }
+        try {
+            LocalTime startTime = LocalTime.parse(matcher.group(1), DateTimeFormatter.ofPattern("H:mm"));
+            return deliveryDate.isAfter(current.toLocalDate())
+                    || (deliveryDate.equals(current.toLocalDate()) && startTime.isAfter(current.toLocalTime()));
+        } catch (RuntimeException ignored) {
+            return !deliveryDate.isBefore(current.toLocalDate());
+        }
+    }
+
+    private DeliverySlotDto displayDeliverySlot(DeliverySlotDto slot, LocalDate today) {
+        LocalDate deliveryDate = deliveryDateForSlot(slot.label(), today);
+        return new DeliverySlotDto(
+                slot.id(),
+                deliverySlotDisplay(slot.label(), deliveryDate, today),
+                slot.maxOrders(),
+                slot.available()
+        );
+    }
+
+    private String deliverySlotDisplay(OrderState order) {
+        return deliverySlotDisplay(order.deliverySlot(), deliveryDate(order), LocalDate.now(STORE_ZONE));
+    }
+
+    private String deliverySlotDisplay(String source, LocalDate deliveryDate, LocalDate today) {
+        Matcher matcher = DELIVERY_TIME_RANGE_PATTERN.matcher(source == null ? "" : source);
+        String timeRange = matcher.find()
+                ? matcher.group(1) + "-" + matcher.group(2)
+                : (source == null ? "" : source.replace("今日", "").replace("今天", "")
+                        .replace("明日", "").replace("明天", "").trim());
+        String weekday = CHINESE_WEEKDAYS[deliveryDate.getDayOfWeek().getValue() - 1];
+        if (deliveryDate.equals(today)) {
+            return "今日 " + timeRange + "（" + deliveryDate.format(DELIVERY_DATE_FORMATTER) + " " + weekday + "）";
+        }
+        if (deliveryDate.equals(today.plusDays(1))) {
+            return "明日 " + timeRange + "（" + deliveryDate.format(DELIVERY_DATE_FORMATTER) + " " + weekday + "）";
+        }
+        return deliveryDate.format(DELIVERY_DATE_FORMATTER) + " " + weekday + " " + timeRange;
     }
 
     private LocalDateTime createdAt(OrderState order) {
@@ -1810,6 +1915,7 @@ public class StorefrontService {
                 source.businessHours(),
                 source.contactPhone(),
                 Boolean.TRUE.equals(source.firstOrderFreeDelivery()),
+                !Boolean.FALSE.equals(source.autoDeliveryEnabled()),
                 normalizeFreeDeliveryCampaigns(source.freeDeliveryCampaigns())
         );
     }
@@ -1954,6 +2060,7 @@ public class StorefrontService {
             List<DeliverySlotDto> deliverySlots,
             List<OrderState> orders,
             List<RefundState> refunds,
+            Map<String, String> paymentTransactionIds,
             SettingsDto settings
     ) {
     }

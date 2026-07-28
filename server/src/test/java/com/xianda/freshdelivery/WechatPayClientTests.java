@@ -30,9 +30,40 @@ class WechatPayClientTests {
     @Test
     void paymentRequiresCompleteWechatPayConfiguration() {
         WechatPayClient client = new WechatPayClient(new WechatPayProperties());
-        OrderDetailDto order = new OrderDetailDto(1L, "XD20260705001", "待支付", null, "今日 14:00-16:00", List.of(), 0, 0, 0, 100, 0, 0, "", "", "", "", 1000L, List.of());
+        OrderDetailDto order = new OrderDetailDto(1L, "XD20260705001", "待支付", null, "今日 14:00-16:00", List.of(), 0, 0, 0, 100, 0, 0, "", "", "", "", 1000L, List.of(), "");
 
         assertThrows(BusinessException.class, () -> client.createJsapiPayment(order, "real-openid"));
+    }
+
+    @Test
+    void publicKeyModeDoesNotRequirePlatformCertificateForPaymentConfiguration() throws Exception {
+        Path publicKeyPath = tempDir.resolve("wechatpay_pub_key.pem");
+        Files.writeString(publicKeyPath, "-----BEGIN PUBLIC KEY-----\nTEST\n-----END PUBLIC KEY-----\n");
+
+        WechatPayProperties properties = new WechatPayProperties();
+        properties.setAppId("wx-test");
+        properties.setMchId("1900000109");
+        properties.setApiV3Key("1234567890abcdefghijklmnopqrstuv");
+        properties.setMerchantSerialNo("MERCHANT_SERIAL");
+        properties.setPrivateKey("configured-private-key");
+        properties.setPublicKeyId("PUB_KEY_ID_TEST");
+        properties.setPublicKeyPath(publicKeyPath.toString());
+        properties.setNotifyUrl("https://example.test/api/wx/payments/wechat/notify");
+
+        assertEquals(true, new WechatPayClient(properties).isPaymentConfigured());
+    }
+
+    @Test
+    void paymentConfigurationStillRequiresEitherPublicKeyOrPlatformCertificate() {
+        WechatPayProperties properties = new WechatPayProperties();
+        properties.setAppId("wx-test");
+        properties.setMchId("1900000109");
+        properties.setApiV3Key("1234567890abcdefghijklmnopqrstuv");
+        properties.setMerchantSerialNo("MERCHANT_SERIAL");
+        properties.setPrivateKey("configured-private-key");
+        properties.setNotifyUrl("https://example.test/api/wx/payments/wechat/notify");
+
+        assertEquals(false, new WechatPayClient(properties).isPaymentConfigured());
     }
 
     @Test
