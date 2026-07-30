@@ -3,11 +3,11 @@ page {
   --radius-panel: 32rpx;
   --radius-control: 18rpx;
   --radius-pill: 999rpx;
-  --page-bg: #eef3f0;
+  --page-bg: #eaf1ed;
   --surface: #ffffff;
   --surface-soft: #f6f9f7;
   --surface-muted: #e8efeb;
-  --surface-line: #dfe8e3;
+  --surface-line: #d8e4dc;
   --ink: #122019;
   --ink-muted: #63726a;
   --ink-faint: #8d9a93;
@@ -15,8 +15,8 @@ page {
   --brand-deep: #006d42;
   --brand-soft: #e2f5eb;
   --danger: #c94143;
-  --shadow-soft: 0 12rpx 34rpx rgba(26, 62, 43, 0.07);
-  --shadow-float: 0 18rpx 44rpx rgba(19, 68, 44, 0.14);
+  --shadow-soft: 0 14rpx 36rpx rgba(26, 62, 43, 0.09);
+  --shadow-float: 0 22rpx 50rpx rgba(19, 68, 44, 0.16);
   --glass-blur: 0;
   min-height: 100vh;
   background: var(--page-bg);
@@ -114,8 +114,10 @@ button::after {
   justify-content: space-between;
   height: 176rpx;
   padding: 88rpx 176rpx 0 28rpx;
-  background: var(--page-bg);
-  box-shadow: 0 1rpx 0 rgba(16, 24, 21, 0.04);
+  background: rgba(234, 241, 237, 0.96);
+  box-shadow: 0 10rpx 24rpx rgba(24, 60, 41, 0.04);
+  backdrop-filter: blur(18rpx);
+  -webkit-backdrop-filter: blur(18rpx);
 }
 
 .filter-toolbar {

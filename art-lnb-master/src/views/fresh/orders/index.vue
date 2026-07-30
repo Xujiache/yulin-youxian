@@ -319,6 +319,10 @@
               <div v-else class="image-thumb empty-thumb">无图</div>
               <div>
                 <strong>{{ row.productName }}</strong>
+                <div v-if="row.specificationText" class="sku-spec">
+                  {{ row.specificationText }}
+                  <span v-if="row.skuCode">SKU：{{ row.skuCode }}</span>
+                </div>
                 <div class="muted"
                   >{{ row.quantity }}{{ row.saleUnit }} x {{ money(row.unitPrice) }}</div
                 >
@@ -870,6 +874,19 @@
     display: flex;
     align-items: center;
     gap: 10px;
+  }
+
+  .sku-spec {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 10px;
+    margin-top: 4px;
+    color: #087f45;
+    font-size: 12px;
+
+    span {
+      color: #8b9991;
+    }
   }
 
   .order-filter {

@@ -29,6 +29,9 @@ import com.xianda.freshdelivery.dto.PaymentNotifyRequest;
 import com.xianda.freshdelivery.dto.PrintModels;
 import com.xianda.freshdelivery.dto.ProductDto;
 import com.xianda.freshdelivery.dto.ProductSaveRequest;
+import com.xianda.freshdelivery.dto.ProductSkuDto;
+import com.xianda.freshdelivery.dto.ProductSpecGroupDto;
+import com.xianda.freshdelivery.dto.ProductSpecOptionDto;
 import com.xianda.freshdelivery.dto.RefundDto;
 import com.xianda.freshdelivery.dto.RefundNotifyRequest;
 import com.xianda.freshdelivery.dto.RefundRequest;
@@ -51,6 +54,7 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.regex.Matcher;
@@ -69,6 +73,9 @@ public class StorefrontService {
             Pattern.compile("(\\d{1,2}:\\d{2})\\s*[-~—至]\\s*(\\d{1,2}:\\d{2})");
     private static final DateTimeFormatter DELIVERY_DATE_FORMATTER = DateTimeFormatter.ofPattern("M月d日");
     private static final String[] CHINESE_WEEKDAYS = {"周一", "周二", "周三", "周四", "周五", "周六", "周日"};
+    private static final int MAX_SPEC_GROUPS = 3;
+    private static final int MAX_SPEC_OPTIONS = 20;
+    private static final int MAX_SKU_COMBINATIONS = 200;
 
     private final ObjectMapper objectMapper = new ObjectMapper().enable(SerializationFeature.INDENT_OUTPUT);
     private final Path storagePath;
@@ -80,6 +87,7 @@ public class StorefrontService {
     private final AtomicLong orderId = new AtomicLong(1000);
     private final AtomicLong refundId = new AtomicLong(2000);
     private final AtomicLong productId = new AtomicLong(200);
+    private final AtomicLong skuId = new AtomicLong(1000);
     private final AtomicLong categoryId = new AtomicLong(10);
     private final AtomicLong deliverySlotId = new AtomicLong(10);
     private final AtomicLong bannerId = new AtomicLong(10);
@@ -241,7 +249,7 @@ public class StorefrontService {
     public synchronized ProductDto createProduct(ProductSaveRequest request) {
         ensureCategory(request.categoryId());
         long id = productId.incrementAndGet();
-        ProductDto product = toProductDto(id, request, nextProductSortOrder());
+        ProductDto product = toProductDto(id, request, nextProductSortOrder(), null);
         products.put(id, product);
         persist();
         return product;
@@ -250,7 +258,8 @@ public class StorefrontService {
     public synchronized ProductDto updateProduct(Long id, ProductSaveRequest request) {
         ProductDto current = product(id);
         ensureCategory(request.categoryId());
-        ProductDto product = toProductDto(id, request, current.sortOrder());
+        ProductDto product = toProductDto(id, request, current.sortOrder(), current);
+        validateSkuRemovalAgainstOpenOrders(current, product);
         products.put(id, product);
         persist();
         return product;
@@ -258,7 +267,7 @@ public class StorefrontService {
 
     public synchronized ProductDto updateProductStatus(Long id, Integer status) {
         ProductDto current = product(id);
-        ProductDto next = copyProduct(current, current.stockQty(), status == null ? current.status() : status);
+        ProductDto next = copyProduct(current, current.stockQty(), normalizeBinaryStatus(status, "商品状态"));
         products.put(id, next);
         persist();
         return next;
@@ -266,6 +275,12 @@ public class StorefrontService {
 
     public synchronized ProductDto updateProductStock(Long id, BigDecimal stockQty) {
         ProductDto current = product(id);
+        if (Boolean.TRUE.equals(current.skuEnabled())) {
+            throw new BusinessException(400, "多规格商品请在 SKU 明细中维护库存");
+        }
+        if (stockQty == null) {
+            throw new BusinessException(400, "库存不能为空");
+        }
         if (stockQty.compareTo(BigDecimal.ZERO) < 0) {
             throw new BusinessException(400, "库存不能小于 0");
         }
@@ -288,6 +303,13 @@ public class StorefrontService {
 
     public synchronized void deleteProduct(Long id) {
         product(id);
+        boolean referencedByOpenOrder = orders.values().stream()
+                .filter(order -> "待支付".equals(order.status()))
+                .flatMap(order -> order.items().stream())
+                .anyMatch(item -> item.productId().equals(id));
+        if (referencedByOpenOrder) {
+            throw new BusinessException(409, "商品存在未完成订单，不能删除；可先将商品下架");
+        }
         products.remove(id);
         cartItems.values().removeIf(item -> item.productId().equals(id));
         persist();
@@ -302,32 +324,49 @@ public class StorefrontService {
                 .toList();
         int total = items.stream()
                 .filter(CartItemDto::selected)
+                .filter(item -> "AVAILABLE".equals(item.availabilityCode()))
                 .mapToInt(CartItemDto::amount)
                 .sum();
-        int selectedCount = (int) items.stream().filter(CartItemDto::selected).count();
+        int selectedCount = (int) items.stream()
+                .filter(CartItemDto::selected)
+                .filter(item -> "AVAILABLE".equals(item.availabilityCode()))
+                .count();
         return new CartDto(items, selectedCount, total);
     }
 
     public synchronized CartItemDto addCartItem(Long productId, BigDecimal quantity) {
+        return addCartItem(productId, null, quantity);
+    }
+
+    public synchronized CartItemDto addCartItem(Long productId, Long selectedSkuId, BigDecimal quantity) {
         Long userId = currentUserId();
         ProductDto product = product(productId);
-        validateProductForPurchase(product, quantity);
+        ProductSkuDto sku = resolveSkuForPurchase(product, selectedSkuId);
+        validateProductForPurchase(product, sku, quantity);
 
         CartItemState existing = cartItems.values().stream()
                 .filter(item -> item.userId().equals(userId))
                 .filter(item -> item.productId().equals(productId))
+                .filter(item -> Objects.equals(item.skuId(), selectedSkuId))
                 .findFirst()
                 .orElse(null);
         if (existing != null) {
             BigDecimal nextQuantity = existing.quantity().add(quantity);
-            validateProductForPurchase(product, nextQuantity);
+            validateProductForPurchase(product, sku, nextQuantity);
             CartItemState next = existing.withQuantity(nextQuantity).withSelected(true);
             cartItems.put(existing.id(), next);
             persist();
             return toCartItemDto(next);
         }
 
-        CartItemState state = new CartItemState(cartId.incrementAndGet(), userId, productId, quantity, true);
+        CartItemState state = new CartItemState(
+                cartId.incrementAndGet(),
+                userId,
+                productId,
+                selectedSkuId,
+                quantity,
+                true
+        );
         cartItems.put(state.id(), state);
         persist();
         return toCartItemDto(state);
@@ -336,9 +375,39 @@ public class StorefrontService {
     public synchronized CartItemDto updateCartItem(Long cartItemId, BigDecimal quantity) {
         CartItemState item = cartItem(cartItemId);
         ProductDto product = product(item.productId());
-        validateProductForPurchase(product, quantity);
+        ProductSkuDto sku = resolveSkuForPurchase(product, item.skuId());
+        validateProductForPurchase(product, sku, quantity);
         CartItemState next = item.withQuantity(quantity);
         cartItems.put(cartItemId, next);
+        persist();
+        return toCartItemDto(next);
+    }
+
+    public synchronized CartItemDto replaceCartItemSku(Long cartItemId, Long selectedSkuId, BigDecimal quantity) {
+        CartItemState item = cartItem(cartItemId);
+        ProductDto product = product(item.productId());
+        ProductSkuDto sku = resolveSkuForPurchase(product, selectedSkuId);
+        validateProductForPurchase(product, sku, quantity);
+
+        CartItemState existing = cartItems.values().stream()
+                .filter(candidate -> !candidate.id().equals(item.id()))
+                .filter(candidate -> candidate.userId().equals(item.userId()))
+                .filter(candidate -> candidate.productId().equals(item.productId()))
+                .filter(candidate -> Objects.equals(candidate.skuId(), selectedSkuId))
+                .findFirst()
+                .orElse(null);
+        if (existing != null) {
+            BigDecimal mergedQuantity = existing.quantity().add(quantity);
+            validateProductForPurchase(product, sku, mergedQuantity);
+            CartItemState merged = existing.withQuantity(mergedQuantity).withSelected(true);
+            cartItems.remove(item.id());
+            cartItems.put(merged.id(), merged);
+            persist();
+            return toCartItemDto(merged);
+        }
+
+        CartItemState next = item.withSku(selectedSkuId, quantity).withSelected(true);
+        cartItems.put(next.id(), next);
         persist();
         return toCartItemDto(next);
     }
@@ -516,9 +585,31 @@ public class StorefrontService {
     }
 
     public synchronized OrderPreviewDto preview(OrderPreviewRequest request) {
-        AddressDto address = address(request.addressId());
-        DeliverySlotDto deliverySlot = availableDeliverySlot(request.deliverySlotId());
-        List<OrderItemDto> items = buildOrderItems(request.cartItemIds());
+        return buildOrderPreview(
+                request.addressId(),
+                request.deliverySlotId(),
+                request.cartItemIds(),
+                request.productId(),
+                request.skuId(),
+                request.quantity(),
+                -1L
+        );
+    }
+
+    private OrderPreviewDto buildOrderPreview(
+            Long addressId,
+            Long deliverySlotId,
+            List<Long> cartItemIds,
+            Long productId,
+            Long selectedSkuId,
+            BigDecimal quantity,
+            Long directItemId
+    ) {
+        AddressDto address = address(addressId);
+        DeliverySlotDto deliverySlot = availableDeliverySlot(deliverySlotId);
+        List<OrderItemDto> items = hasCartItems(cartItemIds)
+                ? buildOrderItems(cartItemIds)
+                : List.of(buildBuyNowOrderItem(directItemId, productId, selectedSkuId, quantity));
         int productAmount = items.stream().mapToInt(OrderItemDto::amount).sum();
         DeliveryDiscount deliveryDiscount = deliveryDiscount(LocalDate.now(), currentUserId());
         int deliveryFee = deliveryDiscount.waived() ? 0 : settings.deliveryFee();
@@ -537,7 +628,16 @@ public class StorefrontService {
 
     public synchronized OrderDetailDto createOrder(CreateOrderRequest request) {
         Long userId = currentUserId();
-        OrderPreviewDto preview = preview(new OrderPreviewRequest(request.addressId(), request.deliverySlotId(), request.cartItemIds(), request.remark()));
+        boolean cartCheckout = hasCartItems(request.cartItemIds());
+        OrderPreviewDto preview = buildOrderPreview(
+                request.addressId(),
+                request.deliverySlotId(),
+                request.cartItemIds(),
+                request.productId(),
+                request.skuId(),
+                request.quantity(),
+                cartCheckout ? -1L : cartId.incrementAndGet()
+        );
         if (preview.payableAmount() < settings.minOrderAmount()) {
             throw new BusinessException(400, "订单金额低于起送价");
         }
@@ -566,7 +666,9 @@ public class StorefrontService {
                 deliveryDate
         );
         orders.put(id, state);
-        request.cartItemIds().forEach(cartItems::remove);
+        if (cartCheckout) {
+            request.cartItemIds().forEach(cartItems::remove);
+        }
         persist();
         return toOrderDetailDto(state);
     }
@@ -1080,7 +1182,8 @@ public class StorefrontService {
                     .toList());
             products.clear();
             for (ProductDto product : snapshot.products() == null ? List.<ProductDto>of() : snapshot.products()) {
-                products.put(product.id(), product);
+                ProductDto normalized = normalizeLoadedProduct(product);
+                products.put(normalized.id(), normalized);
             }
             cartItems.clear();
             for (CartItemState item : snapshot.cartItems() == null ? List.<CartItemState>of() : snapshot.cartItems()) {
@@ -1113,6 +1216,12 @@ public class StorefrontService {
         }
     }
 
+    public synchronized void reloadFromPersistence() {
+        if (!loadState()) {
+            throw new IllegalStateException("恢复后的业务数据不存在: " + storagePath);
+        }
+    }
+
     private void persist() {
         StorefrontSnapshot snapshot = new StorefrontSnapshot(
                 new ArrayList<>(banners),
@@ -1139,6 +1248,12 @@ public class StorefrontService {
         orderId.set(max(orders.keySet(), 1000));
         refundId.set(max(refunds.keySet(), 2000));
         productId.set(max(products.keySet(), 200));
+        skuId.set(products.values().stream()
+                .flatMap(product -> product.skus().stream())
+                .map(ProductSkuDto::id)
+                .filter(Objects::nonNull)
+                .max(Long::compareTo)
+                .orElse(1000L));
         categoryId.set(categories.stream().map(CategoryDto::id).max(Long::compareTo).orElse(10L));
         deliverySlotId.set(max(deliverySlots.keySet(), 10));
         bannerId.set(banners.stream().map(BannerDto::id).max(Long::compareTo).orElse(10L));
@@ -1154,23 +1269,66 @@ public class StorefrontService {
         return max;
     }
 
-    private ProductDto toProductDto(Long id, ProductSaveRequest request, Integer fallbackSortOrder) {
-        return new ProductDto(
+    private ProductDto toProductDto(Long id, ProductSaveRequest request, Integer fallbackSortOrder, ProductDto current) {
+        boolean skuEnabled = Boolean.TRUE.equals(request.skuEnabled());
+        ProductDto base = new ProductDto(
                 id,
                 request.categoryId(),
-                request.name(),
-                request.subtitle(),
-                request.imageUrl(),
-                request.saleUnit(),
+                request.name().trim(),
+                cleanText(request.subtitle()),
+                request.imageUrl().trim(),
+                request.saleUnit().trim(),
                 request.unitPrice(),
                 request.minPurchaseQty(),
                 request.stepQty(),
                 request.stockQty(),
-                request.badge(),
-                request.status(),
+                cleanText(request.badge()),
+                normalizeBinaryStatus(request.status(), "商品状态"),
                 Boolean.TRUE.equals(request.recommended()),
-                request.sortOrder() != null ? request.sortOrder() : fallbackSortOrder
+                request.sortOrder() != null ? request.sortOrder() : fallbackSortOrder,
+                false,
+                request.unitPrice(),
+                request.unitPrice(),
+                request.status() != null
+                        && request.status() == 1
+                        && request.stockQty().compareTo(BigDecimal.ZERO) > 0 ? 1 : 0,
+                List.of(),
+                List.of()
         );
+        if (!skuEnabled) {
+            return base;
+        }
+
+        List<ProductSpecGroupDto> specGroups = normalizeSpecGroups(request.specGroups());
+        List<ProductSkuDto> skus = normalizeProductSkus(
+                id,
+                request.imageUrl(),
+                specGroups,
+                request.skus(),
+                current
+        );
+        return summarizeSkuProduct(new ProductDto(
+                base.id(),
+                base.categoryId(),
+                base.name(),
+                base.subtitle(),
+                base.imageUrl(),
+                base.saleUnit(),
+                base.unitPrice(),
+                base.minPurchaseQty(),
+                base.stepQty(),
+                base.stockQty(),
+                base.badge(),
+                base.status(),
+                base.recommended(),
+                base.sortOrder(),
+                true,
+                base.unitPrice(),
+                base.unitPrice(),
+                0,
+                specGroups,
+                skus
+        ));
     }
 
     private ProductDto copyProduct(ProductDto product, BigDecimal stockQty, Integer status) {
@@ -1178,7 +1336,7 @@ public class StorefrontService {
     }
 
     private ProductDto copyProduct(ProductDto product, BigDecimal stockQty, Integer status, Integer sortOrder) {
-        return new ProductDto(
+        ProductDto next = new ProductDto(
                 product.id(),
                 product.categoryId(),
                 product.name(),
@@ -1192,8 +1350,447 @@ public class StorefrontService {
                 product.badge(),
                 status,
                 Boolean.TRUE.equals(product.recommended()),
-                sortOrder
+                sortOrder,
+                Boolean.TRUE.equals(product.skuEnabled()),
+                product.minUnitPrice(),
+                product.maxUnitPrice(),
+                product.availableSkuCount(),
+                product.specGroups(),
+                product.skus()
         );
+        return Boolean.TRUE.equals(next.skuEnabled()) ? summarizeSkuProduct(next) : normalizeLoadedProduct(next);
+    }
+
+    private List<ProductSpecGroupDto> normalizeSpecGroups(List<ProductSpecGroupDto> requestedGroups) {
+        List<ProductSpecGroupDto> groups = requestedGroups == null ? List.of() : requestedGroups;
+        if (groups.isEmpty()) {
+            throw new BusinessException(400, "开启多规格后至少需要设置一个规格维度");
+        }
+        if (groups.size() > MAX_SPEC_GROUPS) {
+            throw new BusinessException(400, "每个商品最多设置 " + MAX_SPEC_GROUPS + " 个规格维度");
+        }
+
+        Set<String> groupIds = new HashSet<>();
+        Set<String> groupNames = new HashSet<>();
+        Set<String> optionIds = new HashSet<>();
+        List<ProductSpecGroupDto> normalized = new ArrayList<>();
+        for (int groupIndex = 0; groupIndex < groups.size(); groupIndex++) {
+            ProductSpecGroupDto group = groups.get(groupIndex);
+            if (group == null) {
+                throw new BusinessException(400, "规格维度不能为空");
+            }
+            String groupId = requiredText(group.id(), "规格维度 ID");
+            String groupName = requiredText(group.name(), "规格维度名称");
+            if (!groupIds.add(groupId)) {
+                throw new BusinessException(400, "规格维度 ID 不能重复");
+            }
+            if (!groupNames.add(groupName.toLowerCase())) {
+                throw new BusinessException(400, "规格维度名称不能重复");
+            }
+            List<ProductSpecOptionDto> options = group.options() == null ? List.of() : group.options();
+            if (options.isEmpty()) {
+                throw new BusinessException(400, "规格「" + groupName + "」至少需要一个规格值");
+            }
+            if (options.size() > MAX_SPEC_OPTIONS) {
+                throw new BusinessException(400, "每个规格维度最多设置 " + MAX_SPEC_OPTIONS + " 个规格值");
+            }
+
+            Set<String> optionNames = new HashSet<>();
+            List<ProductSpecOptionDto> normalizedOptions = new ArrayList<>();
+            for (int optionIndex = 0; optionIndex < options.size(); optionIndex++) {
+                ProductSpecOptionDto option = options.get(optionIndex);
+                if (option == null) {
+                    throw new BusinessException(400, "规格值不能为空");
+                }
+                String optionId = requiredText(option.id(), "规格值 ID");
+                String optionName = requiredText(option.name(), "规格值名称");
+                if (!optionIds.add(optionId)) {
+                    throw new BusinessException(400, "规格值 ID 不能重复");
+                }
+                if (!optionNames.add(optionName.toLowerCase())) {
+                    throw new BusinessException(400, "规格「" + groupName + "」中的规格值名称不能重复");
+                }
+                normalizedOptions.add(new ProductSpecOptionDto(
+                        optionId,
+                        optionName,
+                        cleanText(option.imageUrl()),
+                        option.sortOrder() == null ? (optionIndex + 1) * 10 : option.sortOrder()
+                ));
+            }
+            normalizedOptions.sort(Comparator
+                    .comparingInt((ProductSpecOptionDto option) -> option.sortOrder() == null ? Integer.MAX_VALUE : option.sortOrder())
+                    .thenComparing(ProductSpecOptionDto::id));
+            normalized.add(new ProductSpecGroupDto(
+                    groupId,
+                    groupName,
+                    group.sortOrder() == null ? (groupIndex + 1) * 10 : group.sortOrder(),
+                    normalizedOptions
+            ));
+        }
+        normalized.sort(Comparator
+                .comparingInt((ProductSpecGroupDto group) -> group.sortOrder() == null ? Integer.MAX_VALUE : group.sortOrder())
+                .thenComparing(ProductSpecGroupDto::id));
+        return List.copyOf(normalized);
+    }
+
+    private List<ProductSkuDto> normalizeProductSkus(
+            Long productId,
+            String productImageUrl,
+            List<ProductSpecGroupDto> specGroups,
+            List<ProductSkuDto> requestedSkus,
+            ProductDto current
+    ) {
+        int expectedCombinations = 1;
+        for (ProductSpecGroupDto group : specGroups) {
+            expectedCombinations *= group.options().size();
+            if (expectedCombinations > MAX_SKU_COMBINATIONS) {
+                throw new BusinessException(400, "规格组合不能超过 " + MAX_SKU_COMBINATIONS + " 个");
+            }
+        }
+
+        List<ProductSkuDto> skus = requestedSkus == null ? List.of() : requestedSkus;
+        if (skus.size() != expectedCombinations) {
+            throw new BusinessException(400, "SKU 明细必须覆盖全部 " + expectedCombinations + " 个规格组合");
+        }
+
+        Map<String, ProductSpecOptionDto> optionById = new LinkedHashMap<>();
+        Map<String, String> groupByOptionId = new LinkedHashMap<>();
+        for (ProductSpecGroupDto group : specGroups) {
+            for (ProductSpecOptionDto option : group.options()) {
+                optionById.put(option.id(), option);
+                groupByOptionId.put(option.id(), group.id());
+            }
+        }
+
+        Set<Long> currentSkuIds = new HashSet<>();
+        if (current != null) {
+            current.skus().stream().map(ProductSkuDto::id).filter(Objects::nonNull).forEach(currentSkuIds::add);
+        }
+        Set<String> combinationKeys = new HashSet<>();
+        Set<String> skuCodes = new HashSet<>();
+        Set<String> barcodes = new HashSet<>();
+        List<ProductSkuDto> normalized = new ArrayList<>();
+        int defaultCount = 0;
+
+        for (int index = 0; index < skus.size(); index++) {
+            ProductSkuDto sku = skus.get(index);
+            if (sku == null) {
+                throw new BusinessException(400, "SKU 明细不能为空");
+            }
+            List<String> canonicalOptionIds = new ArrayList<>();
+            List<String> optionNames = new ArrayList<>();
+            Set<String> selectedOptionIds = new HashSet<>(sku.optionValueIds());
+            if (selectedOptionIds.size() != sku.optionValueIds().size()) {
+                throw new BusinessException(400, "同一 SKU 不能重复选择规格值");
+            }
+            for (ProductSpecGroupDto group : specGroups) {
+                List<ProductSpecOptionDto> matches = group.options().stream()
+                        .filter(option -> selectedOptionIds.contains(option.id()))
+                        .toList();
+                if (matches.size() != 1) {
+                    throw new BusinessException(400, "每个 SKU 必须在规格「" + group.name() + "」中选择一个规格值");
+                }
+                canonicalOptionIds.add(matches.get(0).id());
+                optionNames.add(matches.get(0).name());
+            }
+            if (selectedOptionIds.stream().anyMatch(optionId -> !optionById.containsKey(optionId))) {
+                throw new BusinessException(400, "SKU 包含不存在的规格值");
+            }
+            if (selectedOptionIds.stream().map(groupByOptionId::get).distinct().count() != specGroups.size()) {
+                throw new BusinessException(400, "SKU 规格组合不完整");
+            }
+            String combinationKey = String.join("|", canonicalOptionIds);
+            if (!combinationKeys.add(combinationKey)) {
+                throw new BusinessException(400, "SKU 规格组合不能重复");
+            }
+
+            Long normalizedId;
+            if (sku.id() == null) {
+                normalizedId = skuId.incrementAndGet();
+            } else {
+                if (current == null || !currentSkuIds.contains(sku.id())) {
+                    throw new BusinessException(400, "SKU ID 不属于当前商品");
+                }
+                normalizedId = sku.id();
+            }
+            String skuCode = cleanText(sku.skuCode());
+            if (skuCode.isBlank()) {
+                skuCode = "YL" + productId + String.format("%03d", index + 1);
+            }
+            if (!skuCodes.add(skuCode.toLowerCase()) || skuCodeUsedByOtherProduct(productId, skuCode)) {
+                throw new BusinessException(400, "SKU 编码不能重复：" + skuCode);
+            }
+            String barcode = cleanText(sku.barcode());
+            if (!barcode.isBlank()
+                    && (!barcodes.add(barcode.toLowerCase()) || barcodeUsedByOtherProduct(productId, barcode))) {
+                throw new BusinessException(400, "SKU 条码不能重复：" + barcode);
+            }
+            int status = normalizeBinaryStatus(sku.status(), "SKU 状态");
+            if (Boolean.TRUE.equals(sku.defaultSku())) {
+                defaultCount++;
+            }
+            normalized.add(new ProductSkuDto(
+                    normalizedId,
+                    skuCode,
+                    barcode,
+                    canonicalOptionIds,
+                    String.join(" · ", optionNames),
+                    cleanText(sku.imageUrl()).isBlank() ? productImageUrl : cleanText(sku.imageUrl()),
+                    sku.unitPrice(),
+                    sku.stockQty(),
+                    sku.saleUnit().trim(),
+                    sku.minPurchaseQty(),
+                    sku.stepQty(),
+                    status,
+                    Boolean.TRUE.equals(sku.defaultSku()),
+                    sku.sortOrder() == null ? (index + 1) * 10 : sku.sortOrder()
+            ));
+        }
+        if (defaultCount > 1) {
+            throw new BusinessException(400, "每个商品只能设置一个默认 SKU");
+        }
+        boolean hasActiveSku = normalized.stream().anyMatch(sku -> sku.status() == 1);
+        boolean defaultIsActive = normalized.stream()
+                .filter(sku -> Boolean.TRUE.equals(sku.defaultSku()))
+                .allMatch(sku -> sku.status() == 1);
+        if (defaultCount == 1 && hasActiveSku && !defaultIsActive) {
+            throw new BusinessException(400, "有上架规格时，默认 SKU 必须处于上架状态");
+        }
+        if (defaultCount == 0 && !normalized.isEmpty()) {
+            int defaultIndex = 0;
+            for (int index = 0; index < normalized.size(); index++) {
+                if (normalized.get(index).status() == 1) {
+                    defaultIndex = index;
+                    break;
+                }
+            }
+            normalized.set(defaultIndex, copySkuWithDefault(normalized.get(defaultIndex), true));
+        }
+        normalized.sort(Comparator
+                .comparingInt((ProductSkuDto sku) -> sku.sortOrder() == null ? Integer.MAX_VALUE : sku.sortOrder())
+                .thenComparing(ProductSkuDto::id));
+        return List.copyOf(normalized);
+    }
+
+    private ProductDto normalizeLoadedProduct(ProductDto product) {
+        boolean skuEnabled = Boolean.TRUE.equals(product.skuEnabled()) && !product.skus().isEmpty();
+        if (!skuEnabled) {
+            int availableCount = product.status() != null
+                    && product.status() == 1
+                    && product.stockQty() != null
+                    && product.stockQty().compareTo(BigDecimal.ZERO) > 0 ? 1 : 0;
+            return new ProductDto(
+                    product.id(),
+                    product.categoryId(),
+                    product.name(),
+                    product.subtitle(),
+                    product.imageUrl(),
+                    product.saleUnit(),
+                    product.unitPrice(),
+                    product.minPurchaseQty(),
+                    product.stepQty(),
+                    product.stockQty(),
+                    product.badge(),
+                    product.status(),
+                    Boolean.TRUE.equals(product.recommended()),
+                    product.sortOrder(),
+                    false,
+                    product.unitPrice(),
+                    product.unitPrice(),
+                    availableCount,
+                    List.of(),
+                    List.of()
+            );
+        }
+
+        List<ProductSkuDto> normalizedSkus = new ArrayList<>();
+        boolean hasDefault = product.skus().stream().anyMatch(sku -> Boolean.TRUE.equals(sku.defaultSku()));
+        for (int index = 0; index < product.skus().size(); index++) {
+            ProductSkuDto sku = product.skus().get(index);
+            Long id = sku.id() == null ? skuId.incrementAndGet() : sku.id();
+            String code = cleanText(sku.skuCode());
+            if (code.isBlank()) {
+                code = "YL" + product.id() + String.format("%03d", index + 1);
+            }
+            String specificationText = cleanText(sku.specificationText());
+            if (specificationText.isBlank()) {
+                specificationText = specificationText(product.specGroups(), sku.optionValueIds());
+            }
+            normalizedSkus.add(new ProductSkuDto(
+                    id,
+                    code,
+                    cleanText(sku.barcode()),
+                    sku.optionValueIds(),
+                    specificationText,
+                    cleanText(sku.imageUrl()).isBlank() ? product.imageUrl() : sku.imageUrl(),
+                    sku.unitPrice(),
+                    sku.stockQty(),
+                    sku.saleUnit(),
+                    sku.minPurchaseQty(),
+                    sku.stepQty(),
+                    sku.status() == null ? 1 : sku.status(),
+                    hasDefault ? Boolean.TRUE.equals(sku.defaultSku()) : index == 0,
+                    sku.sortOrder() == null ? (index + 1) * 10 : sku.sortOrder()
+            ));
+        }
+        return summarizeSkuProduct(new ProductDto(
+                product.id(),
+                product.categoryId(),
+                product.name(),
+                product.subtitle(),
+                product.imageUrl(),
+                product.saleUnit(),
+                product.unitPrice(),
+                product.minPurchaseQty(),
+                product.stepQty(),
+                product.stockQty(),
+                product.badge(),
+                product.status(),
+                Boolean.TRUE.equals(product.recommended()),
+                product.sortOrder(),
+                true,
+                product.minUnitPrice(),
+                product.maxUnitPrice(),
+                product.availableSkuCount(),
+                product.specGroups(),
+                normalizedSkus
+        ));
+    }
+
+    private ProductDto summarizeSkuProduct(ProductDto product) {
+        if (!Boolean.TRUE.equals(product.skuEnabled()) || product.skus().isEmpty()) {
+            return normalizeLoadedProduct(product);
+        }
+        List<ProductSkuDto> pricedSkus = product.skus().stream().filter(sku -> sku.status() == 1).toList();
+        if (pricedSkus.isEmpty()) {
+            pricedSkus = product.skus();
+        }
+        int minPrice = pricedSkus.stream().mapToInt(ProductSkuDto::unitPrice).min().orElse(product.unitPrice());
+        int maxPrice = pricedSkus.stream().mapToInt(ProductSkuDto::unitPrice).max().orElse(product.unitPrice());
+        BigDecimal totalStock = product.skus().stream()
+                .filter(sku -> sku.status() == 1)
+                .map(ProductSkuDto::stockQty)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        int availableSkuCount = (int) product.skus().stream()
+                .filter(sku -> sku.status() == 1)
+                .filter(sku -> sku.stockQty().compareTo(BigDecimal.ZERO) > 0)
+                .count();
+        ProductSkuDto defaultSku = product.skus().stream()
+                .filter(sku -> Boolean.TRUE.equals(sku.defaultSku()))
+                .findFirst()
+                .orElse(pricedSkus.get(0));
+        return new ProductDto(
+                product.id(),
+                product.categoryId(),
+                product.name(),
+                product.subtitle(),
+                product.imageUrl(),
+                defaultSku.saleUnit(),
+                minPrice,
+                defaultSku.minPurchaseQty(),
+                defaultSku.stepQty(),
+                totalStock,
+                product.badge(),
+                product.status(),
+                Boolean.TRUE.equals(product.recommended()),
+                product.sortOrder(),
+                true,
+                minPrice,
+                maxPrice,
+                availableSkuCount,
+                product.specGroups(),
+                product.skus()
+        );
+    }
+
+    private ProductSkuDto copySkuWithDefault(ProductSkuDto sku, boolean defaultSku) {
+        return new ProductSkuDto(
+                sku.id(),
+                sku.skuCode(),
+                sku.barcode(),
+                sku.optionValueIds(),
+                sku.specificationText(),
+                sku.imageUrl(),
+                sku.unitPrice(),
+                sku.stockQty(),
+                sku.saleUnit(),
+                sku.minPurchaseQty(),
+                sku.stepQty(),
+                sku.status(),
+                defaultSku,
+                sku.sortOrder()
+        );
+    }
+
+    private String specificationText(List<ProductSpecGroupDto> groups, List<String> optionValueIds) {
+        Set<String> selected = new HashSet<>(optionValueIds == null ? List.of() : optionValueIds);
+        return groups.stream()
+                .flatMap(group -> group.options().stream())
+                .filter(option -> selected.contains(option.id()))
+                .sorted(Comparator.comparingInt(option -> optionValueIds.indexOf(option.id())))
+                .map(ProductSpecOptionDto::name)
+                .reduce((left, right) -> left + " · " + right)
+                .orElse("");
+    }
+
+    private int normalizeBinaryStatus(Integer status, String fieldName) {
+        if (status == null || (status != 0 && status != 1)) {
+            throw new BusinessException(400, fieldName + "只能是上架或下架");
+        }
+        return status;
+    }
+
+    private String requiredText(String value, String fieldName) {
+        String normalized = cleanText(value);
+        if (normalized.isBlank()) {
+            throw new BusinessException(400, fieldName + "不能为空");
+        }
+        return normalized;
+    }
+
+    private String cleanText(String value) {
+        return value == null ? "" : value.trim();
+    }
+
+    private boolean skuCodeUsedByOtherProduct(Long productId, String skuCode) {
+        return products.values().stream()
+                .filter(product -> !product.id().equals(productId))
+                .flatMap(product -> product.skus().stream())
+                .anyMatch(sku -> skuCode.equalsIgnoreCase(cleanText(sku.skuCode())));
+    }
+
+    private boolean barcodeUsedByOtherProduct(Long productId, String barcode) {
+        return products.values().stream()
+                .filter(product -> !product.id().equals(productId))
+                .flatMap(product -> product.skus().stream())
+                .anyMatch(sku -> barcode.equalsIgnoreCase(cleanText(sku.barcode())));
+    }
+
+    private void validateSkuRemovalAgainstOpenOrders(ProductDto current, ProductDto next) {
+        if (!Boolean.TRUE.equals(current.skuEnabled())) {
+            return;
+        }
+        Set<Long> nextSkuIds = next.skus().stream()
+                .map(ProductSkuDto::id)
+                .filter(Objects::nonNull)
+                .collect(java.util.stream.Collectors.toSet());
+        Set<Long> removedSkuIds = current.skus().stream()
+                .map(ProductSkuDto::id)
+                .filter(Objects::nonNull)
+                .filter(id -> !nextSkuIds.contains(id))
+                .collect(java.util.stream.Collectors.toSet());
+        if (removedSkuIds.isEmpty()) {
+            return;
+        }
+        boolean referenced = orders.values().stream()
+                .filter(order -> "待支付".equals(order.status()))
+                .flatMap(order -> order.items().stream())
+                .map(OrderItemDto::skuId)
+                .filter(Objects::nonNull)
+                .anyMatch(removedSkuIds::contains);
+        if (referenced) {
+            throw new BusinessException(409, "存在未完成订单引用即将删除的 SKU，请先完成或取消相关订单");
+        }
     }
 
     private Comparator<ProductDto> productOrder() {
@@ -1227,22 +1824,74 @@ public class StorefrontService {
         throw new BusinessException(404, "分类不存在");
     }
 
-    private void validateProductForPurchase(ProductDto product, BigDecimal quantity) {
+    private ProductSkuDto resolveSkuForPurchase(ProductDto product, Long selectedSkuId) {
+        if (!Boolean.TRUE.equals(product.skuEnabled())) {
+            if (selectedSkuId != null) {
+                throw new BusinessException(400, "当前商品不是多规格商品");
+            }
+            return null;
+        }
+        if (selectedSkuId == null) {
+            throw new BusinessException(400, "请选择商品规格");
+        }
+        return findSku(product, selectedSkuId)
+                .orElseThrow(() -> new BusinessException(409, "商品规格已调整，请重新选择"));
+    }
+
+    private java.util.Optional<ProductSkuDto> findSku(ProductDto product, Long selectedSkuId) {
+        if (selectedSkuId == null) {
+            return java.util.Optional.empty();
+        }
+        return product.skus().stream().filter(sku -> selectedSkuId.equals(sku.id())).findFirst();
+    }
+
+    private void validateProductForPurchase(ProductDto product, ProductSkuDto sku, BigDecimal quantity) {
         if (product.status() == null || product.status() != 1) {
             throw new BusinessException(400, "商品已下架");
         }
-        validateQuantity(product, quantity);
+        if (Boolean.TRUE.equals(product.skuEnabled())) {
+            if (sku == null) {
+                throw new BusinessException(400, "请选择商品规格");
+            }
+            if (sku.status() == null || sku.status() != 1) {
+                throw new BusinessException(400, "所选规格已下架，请重新选择");
+            }
+            validateQuantity(
+                    sku.minPurchaseQty(),
+                    sku.stepQty(),
+                    sku.stockQty(),
+                    quantity,
+                    product.name() + "（" + sku.specificationText() + "）"
+            );
+            return;
+        }
+        validateQuantity(
+                product.minPurchaseQty(),
+                product.stepQty(),
+                product.stockQty(),
+                quantity,
+                product.name()
+        );
     }
 
-    private void validateQuantity(ProductDto product, BigDecimal quantity) {
-        if (quantity.compareTo(product.minPurchaseQty()) < 0) {
+    private void validateQuantity(
+            BigDecimal minPurchaseQty,
+            BigDecimal stepQty,
+            BigDecimal stockQty,
+            BigDecimal quantity,
+            String productLabel
+    ) {
+        if (quantity == null || quantity.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new BusinessException(400, "购买数量必须大于 0");
+        }
+        if (quantity.compareTo(minPurchaseQty) < 0) {
             throw new BusinessException(400, "购买数量低于起购数量");
         }
-        if (quantity.compareTo(product.stockQty()) > 0) {
-            throw new BusinessException(400, "库存不足");
+        if (quantity.compareTo(stockQty) > 0) {
+            throw new BusinessException(400, productLabel + "库存不足");
         }
-        BigDecimal diff = quantity.subtract(product.minPurchaseQty());
-        BigDecimal remainder = diff.remainder(product.stepQty());
+        BigDecimal diff = quantity.subtract(minPurchaseQty);
+        BigDecimal remainder = diff.remainder(stepQty);
         if (remainder.compareTo(BigDecimal.ZERO) != 0) {
             throw new BusinessException(400, "购买数量不符合步进值");
         }
@@ -1250,6 +1899,16 @@ public class StorefrontService {
 
     private void decreaseStock(OrderItemDto item) {
         ProductDto product = product(item.productId());
+        if (Boolean.TRUE.equals(product.skuEnabled()) && item.skuId() != null) {
+            ProductSkuDto sku = findSku(product, item.skuId())
+                    .orElseThrow(() -> new BusinessException(409, item.productName() + "规格已调整"));
+            BigDecimal nextSkuStock = sku.stockQty().subtract(item.quantity());
+            if (nextSkuStock.compareTo(BigDecimal.ZERO) < 0) {
+                throw new BusinessException(400, item.productName() + "（" + item.specificationText() + "）库存不足");
+            }
+            products.put(product.id(), updateSkuStock(product, sku.id(), nextSkuStock));
+            return;
+        }
         BigDecimal nextStock = product.stockQty().subtract(item.quantity());
         if (nextStock.compareTo(BigDecimal.ZERO) < 0) {
             throw new BusinessException(400, product.name() + " 库存不足");
@@ -1260,8 +1919,57 @@ public class StorefrontService {
     private void restoreStock(List<OrderItemDto> items) {
         for (OrderItemDto item : items) {
             ProductDto product = product(item.productId());
+            if (Boolean.TRUE.equals(product.skuEnabled()) && item.skuId() != null) {
+                ProductSkuDto sku = findSku(product, item.skuId())
+                        .orElseThrow(() -> new BusinessException(409, item.productName() + "规格已调整，无法恢复库存"));
+                products.put(product.id(), updateSkuStock(product, sku.id(), sku.stockQty().add(item.quantity())));
+                continue;
+            }
             products.put(product.id(), copyProduct(product, product.stockQty().add(item.quantity()), product.status()));
         }
+    }
+
+    private ProductDto updateSkuStock(ProductDto product, Long selectedSkuId, BigDecimal stockQty) {
+        List<ProductSkuDto> skus = product.skus().stream()
+                .map(sku -> selectedSkuId.equals(sku.id()) ? new ProductSkuDto(
+                        sku.id(),
+                        sku.skuCode(),
+                        sku.barcode(),
+                        sku.optionValueIds(),
+                        sku.specificationText(),
+                        sku.imageUrl(),
+                        sku.unitPrice(),
+                        stockQty,
+                        sku.saleUnit(),
+                        sku.minPurchaseQty(),
+                        sku.stepQty(),
+                        sku.status(),
+                        sku.defaultSku(),
+                        sku.sortOrder()
+                ) : sku)
+                .toList();
+        return summarizeSkuProduct(new ProductDto(
+                product.id(),
+                product.categoryId(),
+                product.name(),
+                product.subtitle(),
+                product.imageUrl(),
+                product.saleUnit(),
+                product.unitPrice(),
+                product.minPurchaseQty(),
+                product.stepQty(),
+                product.stockQty(),
+                product.badge(),
+                product.status(),
+                product.recommended(),
+                product.sortOrder(),
+                true,
+                product.minUnitPrice(),
+                product.maxUnitPrice(),
+                product.availableSkuCount(),
+                product.specGroups(),
+                skus
+        ));
     }
 
     private CartItemState cartItem(Long cartItemId) {
@@ -1434,46 +2142,132 @@ public class StorefrontService {
     }
 
     private List<OrderItemDto> buildOrderItems(List<Long> cartItemIds) {
+        if (new HashSet<>(cartItemIds).size() != cartItemIds.size()) {
+            throw new BusinessException(400, "结算商品不能重复");
+        }
         return cartItemIds.stream()
                 .map(this::cartItem)
                 .map(item -> {
                     ProductDto product = product(item.productId());
-                    validateProductForPurchase(product, item.quantity());
-                    return toOrderItemDto(item.id(), product, item.quantity());
+                    ProductSkuDto sku = resolveSkuForPurchase(product, item.skuId());
+                    validateProductForPurchase(product, sku, item.quantity());
+                    return toOrderItemDto(item.id(), product, sku, item.quantity());
                 })
                 .toList();
     }
 
+    private boolean hasCartItems(List<Long> cartItemIds) {
+        return cartItemIds != null && !cartItemIds.isEmpty();
+    }
+
+    private OrderItemDto buildBuyNowOrderItem(
+            Long itemId,
+            Long productId,
+            Long selectedSkuId,
+            BigDecimal quantity
+    ) {
+        if (productId == null || quantity == null) {
+            throw new BusinessException(400, "立即购买商品信息不完整");
+        }
+        ProductDto product = product(productId);
+        ProductSkuDto sku = resolveSkuForPurchase(product, selectedSkuId);
+        validateProductForPurchase(product, sku, quantity);
+        return toOrderItemDto(itemId, product, sku, quantity);
+    }
+
     private CartItemDto toCartItemDto(CartItemState item) {
         ProductDto product = product(item.productId());
+        ProductSkuDto sku = Boolean.TRUE.equals(product.skuEnabled())
+                ? findSku(product, item.skuId()).orElse(null)
+                : null;
+        boolean skuSelectionRequired = Boolean.TRUE.equals(product.skuEnabled()) && sku == null;
+        String imageUrl = sku == null || cleanText(sku.imageUrl()).isBlank() ? product.imageUrl() : sku.imageUrl();
+        String saleUnit = sku == null ? product.saleUnit() : sku.saleUnit();
+        Integer unitPrice = sku == null ? product.unitPrice() : sku.unitPrice();
+        BigDecimal minPurchaseQty = sku == null ? product.minPurchaseQty() : sku.minPurchaseQty();
+        BigDecimal stepQty = sku == null ? product.stepQty() : sku.stepQty();
+        BigDecimal stockQty = sku == null ? product.stockQty() : sku.stockQty();
+        CartAvailability availability = cartAvailability(product, sku, item.quantity());
         return new CartItemDto(
                 item.id(),
                 product.id(),
                 product.name(),
                 product.subtitle(),
-                product.imageUrl(),
-                product.saleUnit(),
-                product.unitPrice(),
+                imageUrl,
+                saleUnit,
+                unitPrice,
                 item.quantity(),
-                product.minPurchaseQty(),
-                product.stepQty(),
-                product.stockQty(),
+                minPurchaseQty,
+                stepQty,
+                stockQty,
+                product.status(),
                 item.selected(),
-                amount(product.unitPrice(), item.quantity())
+                skuSelectionRequired ? 0 : amount(unitPrice, item.quantity()),
+                sku == null ? item.skuId() : sku.id(),
+                sku == null ? "" : sku.skuCode(),
+                skuSelectionRequired ? "规格已调整，请重新选择" : sku == null ? "" : sku.specificationText(),
+                sku == null ? null : sku.status(),
+                availability.code(),
+                availability.message(),
+                skuSelectionRequired
         );
     }
 
     private OrderItemDto toOrderItemDto(Long id, ProductDto product, BigDecimal quantity) {
+        ProductSkuDto sku = Boolean.TRUE.equals(product.skuEnabled())
+                ? product.skus().stream()
+                .filter(candidate -> Boolean.TRUE.equals(candidate.defaultSku()))
+                .findFirst()
+                .orElse(null)
+                : null;
+        return toOrderItemDto(id, product, sku, quantity);
+    }
+
+    private OrderItemDto toOrderItemDto(Long id, ProductDto product, ProductSkuDto sku, BigDecimal quantity) {
+        String imageUrl = sku == null || cleanText(sku.imageUrl()).isBlank() ? product.imageUrl() : sku.imageUrl();
+        String saleUnit = sku == null ? product.saleUnit() : sku.saleUnit();
+        Integer unitPrice = sku == null ? product.unitPrice() : sku.unitPrice();
         return new OrderItemDto(
                 id,
                 product.id(),
                 product.name(),
-                product.imageUrl(),
-                product.saleUnit(),
-                product.unitPrice(),
+                imageUrl,
+                saleUnit,
+                unitPrice,
                 quantity,
-                amount(product.unitPrice(), quantity)
+                amount(unitPrice, quantity),
+                sku == null ? null : sku.id(),
+                sku == null ? "" : sku.skuCode(),
+                sku == null ? "" : sku.specificationText()
         );
+    }
+
+    private CartAvailability cartAvailability(ProductDto product, ProductSkuDto sku, BigDecimal quantity) {
+        if (product.status() == null || product.status() != 1) {
+            return new CartAvailability("PRODUCT_OFF_SHELF", "商品已下架");
+        }
+        if (Boolean.TRUE.equals(product.skuEnabled())) {
+            if (sku == null) {
+                return new CartAvailability("SKU_SELECTION_REQUIRED", "商品规格已调整，请重新选择");
+            }
+            if (sku.status() == null || sku.status() != 1) {
+                return new CartAvailability("SKU_OFF_SHELF", "所选规格已下架，请重新选择");
+            }
+            if (sku.stockQty().compareTo(BigDecimal.ZERO) <= 0) {
+                return new CartAvailability("OUT_OF_STOCK", "所选规格库存不足");
+            }
+            if (quantity.compareTo(sku.stockQty()) > 0) {
+                return new CartAvailability("INSUFFICIENT_STOCK", "所选数量超过当前库存");
+            }
+            return new CartAvailability("AVAILABLE", "");
+        }
+        if (product.stockQty().compareTo(BigDecimal.ZERO) <= 0) {
+            return new CartAvailability("OUT_OF_STOCK", "商品库存不足");
+        }
+        if (quantity.compareTo(product.stockQty()) > 0) {
+            return new CartAvailability("INSUFFICIENT_STOCK", "所选数量超过当前库存");
+        }
+        return new CartAvailability("AVAILABLE", "");
     }
 
     private OrderDto toOrderDto(OrderState order) {
@@ -1562,7 +2356,6 @@ public class StorefrontService {
 
     private List<ProductDto> recommendedProducts() {
         return products.values().stream()
-                .filter(product -> product.status() == 1)
                 .filter(product -> Boolean.TRUE.equals(product.recommended()))
                 .sorted(productOrder())
                 .toList();
@@ -2081,21 +2874,36 @@ public class StorefrontService {
             Long id,
             Long userId,
             Long productId,
+            Long skuId,
             BigDecimal quantity,
             boolean selected
     ) {
+        public CartItemState(Long id, Long userId, Long productId, BigDecimal quantity, boolean selected) {
+            this(id, userId, productId, null, quantity, selected);
+        }
+
         CartItemState withQuantity(BigDecimal nextQuantity) {
-            return new CartItemState(id, userId, productId, nextQuantity, selected);
+            return new CartItemState(id, userId, productId, skuId, nextQuantity, selected);
         }
 
         CartItemState withSelected(boolean nextSelected) {
-            return new CartItemState(id, userId, productId, quantity, nextSelected);
+            return new CartItemState(id, userId, productId, skuId, quantity, nextSelected);
+        }
+
+        CartItemState withSku(Long nextSkuId, BigDecimal nextQuantity) {
+            return new CartItemState(id, userId, productId, nextSkuId, nextQuantity, selected);
         }
     }
 
     private record DeliveryDiscount(
             boolean waived,
             String notice
+    ) {
+    }
+
+    private record CartAvailability(
+            String code,
+            String message
     ) {
     }
 

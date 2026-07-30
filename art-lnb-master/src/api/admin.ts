@@ -26,6 +26,37 @@ export interface Category {
   iconUrl: string
 }
 
+export interface ProductSpecOption {
+  id: string
+  name: string
+  imageUrl: string
+  sortOrder: number
+}
+
+export interface ProductSpecGroup {
+  id: string
+  name: string
+  sortOrder: number
+  options: ProductSpecOption[]
+}
+
+export interface ProductSku {
+  id?: number
+  skuCode: string
+  barcode: string
+  optionValueIds: string[]
+  specificationText: string
+  imageUrl: string
+  unitPrice: number
+  stockQty: number
+  saleUnit: string
+  minPurchaseQty: number
+  stepQty: number
+  status: number
+  defaultSku: boolean
+  sortOrder: number
+}
+
 export interface Product {
   id?: number
   categoryId: number | null
@@ -41,6 +72,12 @@ export interface Product {
   status: number
   recommended: boolean
   sortOrder: number | null
+  skuEnabled: boolean
+  minUnitPrice: number
+  maxUnitPrice: number
+  availableSkuCount: number
+  specGroups: ProductSpecGroup[]
+  skus: ProductSku[]
 }
 
 export interface OrderSummary {
@@ -87,6 +124,9 @@ export interface OrderItem {
   unitPrice: number
   quantity: number
   amount: number
+  skuId?: number | null
+  skuCode?: string
+  specificationText?: string
 }
 
 export interface OrderDetail {
@@ -260,6 +300,14 @@ export interface BatchPrintResult {
   errors: BatchPrintError[]
 }
 
+export interface BackupMetadata {
+  fileName: string
+  type: string
+  createdAt: string
+  sizeBytes: number
+  sha256: string
+}
+
 export interface BatchPrintError {
   orderId: number
   reason: string
@@ -333,6 +381,12 @@ export function getProducts(params?: { categoryId?: number | null }) {
   return request.get<PageResult<Product>>({
     url: '/api/admin/products',
     params
+  })
+}
+
+export function getProduct(id: number) {
+  return request.get<Product>({
+    url: `/api/admin/products/${id}`
   })
 }
 
@@ -638,5 +692,23 @@ export function batchPrintOrders(orderIds: number[]) {
   return request.post<BatchPrintResult>({
     url: '/api/admin/printing/orders/batch',
     data: { orderIds }
+  })
+}
+
+export function getBackups() {
+  return request.get<BackupMetadata[]>({
+    url: '/api/admin/backups'
+  })
+}
+
+export function createBackup() {
+  return request.post<BackupMetadata>({
+    url: '/api/admin/backups'
+  })
+}
+
+export function restoreBackup(fileName: string) {
+  return request.post<{ restoredBackup: BackupMetadata; preRestoreBackup: BackupMetadata }>({
+    url: `/api/admin/backups/${encodeURIComponent(fileName)}/restore`
   })
 }

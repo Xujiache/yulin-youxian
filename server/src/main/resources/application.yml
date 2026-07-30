@@ -65,3 +65,12 @@ persistence:
   mysql:
     shadow-write-legacy-json: ${MYSQL_SHADOW_WRITE_LEGACY_JSON:true}
     reject-suspicious-question-marks: ${MYSQL_REJECT_SUSPICIOUS_QUESTION_MARKS:true}
+
+backup:
+  directory: ${BACKUP_DIRECTORY:data/backups}
+  data-directory: ${BACKUP_DATA_DIRECTORY:data}
+  retention-count: ${BACKUP_RETENTION_COUNT:30}
+  realtime-enabled: ${BACKUP_REALTIME_ENABLED:true}
+  realtime-debounce-ms: ${BACKUP_REALTIME_DEBOUNCE_MS:1500}
+  scheduled-interval-ms: ${BACKUP_SCHEDULED_INTERVAL_MS:300000}
+  scheduled-initial-delay-ms: ${BACKUP_SCHEDULED_INITIAL_DELAY_MS:30000}

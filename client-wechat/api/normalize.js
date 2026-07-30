@@ -27,12 +27,40 @@ function normalizeProduct(product) {
     return product;
   }
   const imageUrl = normalizeAssetUrl(product.imageUrl || product.image);
+  const specGroups = (product.specGroups || []).map((group) => ({
+    ...group,
+    sortOrder: numberOr(group.sortOrder, 0),
+    options: (group.options || []).map((option) => ({
+      ...option,
+      imageUrl: normalizeAssetUrl(option.imageUrl || ""),
+      sortOrder: numberOr(option.sortOrder, 0)
+    }))
+  }));
+  const skus = (product.skus || []).map((sku) => ({
+    ...sku,
+    unitPrice: numberOr(sku.unitPrice, 0),
+    stockQty: numberOr(sku.stockQty, 0),
+    minPurchaseQty: numberOr(sku.minPurchaseQty, 1),
+    stepQty: numberOr(sku.stepQty, 1),
+    status: numberOr(sku.status, 1),
+    sortOrder: numberOr(sku.sortOrder, 0),
+    defaultSku: Boolean(sku.defaultSku),
+    optionValueIds: (sku.optionValueIds || []).map(String),
+    imageUrl: normalizeAssetUrl(sku.imageUrl || imageUrl),
+    image: normalizeAssetUrl(sku.imageUrl || imageUrl)
+  }));
   return {
     ...product,
+    skuEnabled: Boolean(product.skuEnabled),
     minPurchaseQty: numberOr(product.minPurchaseQty, 1),
     stockQty: numberOr(product.stockQty, 0),
     stepQty: numberOr(product.stepQty, 1),
+    minUnitPrice: numberOr(product.minUnitPrice, numberOr(product.unitPrice, 0)),
+    maxUnitPrice: numberOr(product.maxUnitPrice, numberOr(product.unitPrice, 0)),
+    availableSkuCount: numberOr(product.availableSkuCount, 0),
     saleUnit: product.saleUnit || "",
+    specGroups,
+    skus,
     imageUrl,
     image: imageUrl
   };
@@ -48,11 +76,20 @@ function normalizeCartItem(item) {
     quantity: numberOr(item.quantity, 1),
     minPurchaseQty: numberOr(item.minPurchaseQty, 1),
     stockQty: numberOr(item.stockQty, 9999),
+    productStatus: numberOr(item.productStatus !== undefined ? item.productStatus : item.status, 1),
+    status: numberOr(item.productStatus !== undefined ? item.productStatus : item.status, 1),
     stepQty: numberOr(item.stepQty, 1),
     saleUnit: item.saleUnit || "",
     imageUrl,
     image: imageUrl,
-    name: item.name || item.productName
+    name: item.name || item.productName,
+    skuId: item.skuId === null || item.skuId === undefined ? null : numberOr(item.skuId, null),
+    skuStatus: item.skuStatus === null || item.skuStatus === undefined ? null : numberOr(item.skuStatus, 1),
+    skuSelectionRequired: Boolean(item.skuSelectionRequired),
+    specificationText: item.specificationText || "",
+    skuCode: item.skuCode || "",
+    availabilityCode: item.availabilityCode || "",
+    availabilityMessage: item.availabilityMessage || ""
   };
 }
 
@@ -65,7 +102,10 @@ function normalizeOrderItem(item) {
     ...item,
     imageUrl,
     image: imageUrl,
-    name: item.name || item.productName
+    name: item.name || item.productName,
+    skuId: item.skuId === null || item.skuId === undefined ? null : numberOr(item.skuId, null),
+    specificationText: item.specificationText || "",
+    skuCode: item.skuCode || ""
   };
 }
 

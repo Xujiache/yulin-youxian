@@ -1,5 +1,6 @@
 const { yuan } = require("../../utils/format");
 const { isGlassModeEnabled } = require("../../utils/theme");
+const { getProductAvailability } = require("../../utils/product-availability");
 
 Component({
   properties: {
@@ -15,7 +16,13 @@ Component({
 
   data: {
     priceText: "0.00",
-    glassMode: false
+    priceFrom: false,
+    priceSaleUnit: "",
+    glassMode: false,
+    unavailable: false,
+    availabilityLabel: "",
+    availabilityShortLabel: "",
+    availabilityMessage: ""
   },
 
   lifetimes: {
@@ -32,7 +39,21 @@ Component({
 
   observers: {
     product(product) {
-      this.setData({ priceText: yuan(product.unitPrice) });
+      const availability = getProductAvailability(product);
+      const minPriceSku = product.skuEnabled
+        ? (product.skus || [])
+            .filter((sku) => Number(sku.status) === 1)
+            .sort((left, right) => Number(left.unitPrice) - Number(right.unitPrice))[0]
+        : null;
+      this.setData({
+        priceText: yuan(product.minUnitPrice || product.unitPrice),
+        priceFrom: Boolean(product.skuEnabled && Number(product.maxUnitPrice) > Number(product.minUnitPrice)),
+        priceSaleUnit: minPriceSku ? minPriceSku.saleUnit : product.saleUnit,
+        unavailable: Boolean(availability.label),
+        availabilityLabel: availability.label,
+        availabilityShortLabel: availability.shortLabel,
+        availabilityMessage: availability.message
+      });
     }
   },
 
@@ -43,6 +64,10 @@ Component({
     },
 
     handleAdd() {
+      if (this.data.unavailable) {
+        wx.showToast({ title: this.data.availabilityMessage, icon: "none" });
+        return;
+      }
       this.triggerEvent("add", { product: this.properties.product });
     }
   }

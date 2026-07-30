@@ -14,6 +14,7 @@
       <image class="product-image" src="{{item.image}}" mode="aspectFill" lazy-load="{{true}}" />
       <view class="product-info">
         <text class="product-name">{{item.name}}</text>
+        <text wx:if="{{item.specificationText}}" class="product-spec">{{item.specificationText}}</text>
         <text class="product-spec">数量：{{item.quantity}}{{item.saleUnit}}</text>
         <text class="product-price">￥{{item.amountText}}</text>
       </view>

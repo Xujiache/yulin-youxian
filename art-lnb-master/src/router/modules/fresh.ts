@@ -42,6 +42,16 @@ export const freshRoutes: AppRouteRecord = {
       }
     },
     {
+      path: 'products/editor',
+      name: 'FreshProductEditor',
+      component: '/fresh/products/editor',
+      meta: {
+        title: '编辑商品',
+        isHide: true,
+        keepAlive: false
+      }
+    },
+    {
       path: 'banners',
       name: 'FreshBanners',
       component: '/fresh/banners',
@@ -109,6 +119,16 @@ export const freshRoutes: AppRouteRecord = {
         title: '小票打印',
         icon: 'ri:printer-line',
         keepAlive: true
+      }
+    },
+    {
+      path: 'backups',
+      name: 'FreshBackups',
+      component: '/fresh/backups',
+      meta: {
+        title: '数据备份',
+        icon: 'ri:database-2-line',
+        keepAlive: false
       }
     }
   ]

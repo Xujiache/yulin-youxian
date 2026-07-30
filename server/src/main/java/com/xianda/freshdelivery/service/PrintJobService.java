@@ -410,6 +410,12 @@ public class PrintJobService {
         }
     }
 
+    public synchronized void reloadFromPersistence() {
+        jobs.clear();
+        config = defaultConfig();
+        loadState();
+    }
+
     private void persist() {
         try {
             stateStore.save(STATE_KEY, storagePath, objectMapper.writeValueAsBytes(new PrintSnapshot(config, new ArrayList<>(jobs.values()))));
@@ -446,7 +452,10 @@ public class PrintJobService {
     private PrintReceiptDto receiptForOrder(OrderDetailDto order) {
         List<PrintReceiptItemDto> items = (order.items() == null ? List.<OrderItemDto>of() : order.items()).stream()
                 .map(item -> new PrintReceiptItemDto(
-                        clean(item.productName(), "商品"),
+                        clean(item.productName(), "商品")
+                                + (item.specificationText() == null || item.specificationText().isBlank()
+                                ? ""
+                                : " [" + item.specificationText().trim() + "]"),
                         clean(formatQuantity(item.quantity(), item.saleUnit()), ""),
                         yuan(item.unitPrice()),
                         yuan(item.amount())

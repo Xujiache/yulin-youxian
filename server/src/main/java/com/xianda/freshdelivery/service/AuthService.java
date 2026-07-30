@@ -230,6 +230,11 @@ public class AuthService {
         }
     }
 
+    public synchronized void reloadFromPersistence() {
+        profilesByOpenId.clear();
+        loadProfiles();
+    }
+
     private synchronized void persistProfiles() {
         try {
             List<UserProfileState> profiles = profilesByOpenId.entrySet().stream()

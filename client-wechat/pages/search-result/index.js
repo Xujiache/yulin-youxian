@@ -284,9 +284,9 @@ Page({
     if (!requireCompleteProfile()) {
       return;
     }
-    const { product, quantity } = event.detail;
+    const { product, quantity, skuId } = event.detail;
     try {
-      await addCartItem(product.id, quantity);
+      await addCartItem(product.id, quantity, skuId);
       await this.loadCartCount();
       wx.showToast({ title: "已加入购物车", icon: "success" });
     } catch {
