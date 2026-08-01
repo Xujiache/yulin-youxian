@@ -6,25 +6,18 @@ import org.springframework.stereotype.Component;
 @Component
 @ConfigurationProperties(prefix = "wechat.pay")
 public class WechatPayProperties {
-    private boolean developmentMode = false;
     private String appId = "";
     private String mchId = "";
     private String apiV3Key = "";
     private String merchantSerialNo = "";
     private String privateKey = "";
     private String privateKeyPath = "";
+    private String publicKeyId = "";
+    private String publicKeyPath = "";
     private String platformCertificatePath = "";
     private String baseUrl = "https://api.mch.weixin.qq.com";
     private String notifyUrl = "";
     private String refundNotifyUrl = "";
-
-    public boolean isDevelopmentMode() {
-        return developmentMode;
-    }
-
-    public void setDevelopmentMode(boolean developmentMode) {
-        this.developmentMode = developmentMode;
-    }
 
     public String getAppId() {
         return appId;
@@ -80,6 +73,22 @@ public class WechatPayProperties {
 
     public void setPlatformCertificatePath(String platformCertificatePath) {
         this.platformCertificatePath = platformCertificatePath;
+    }
+
+    public String getPublicKeyId() {
+        return publicKeyId;
+    }
+
+    public void setPublicKeyId(String publicKeyId) {
+        this.publicKeyId = publicKeyId;
+    }
+
+    public String getPublicKeyPath() {
+        return publicKeyPath;
+    }
+
+    public void setPublicKeyPath(String publicKeyPath) {
+        this.publicKeyPath = publicKeyPath;
     }
 
     public String getBaseUrl() {

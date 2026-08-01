@@ -6,6 +6,7 @@ import java.math.BigDecimal;
 
 public record CartItemRequest(
         @NotNull Long productId,
+        Long skuId,
         @NotNull @DecimalMin("0.001") BigDecimal quantity
 ) {
 }

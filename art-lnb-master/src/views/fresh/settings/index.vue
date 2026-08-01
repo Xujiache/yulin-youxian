@@ -90,6 +90,11 @@
           <span class="form-tip">开启后，新用户第一次下单自动减免配送费。</span>
         </ElFormItem>
 
+        <ElFormItem label="自动接单">
+          <ElSwitch v-model="form.autoDeliveryEnabled" active-text="开启" inactive-text="关闭" />
+          <span class="form-tip">开启后，支付成功的订单自动接单并进入“备货中”；开始配送仍需在订单管理中手动选择。</span>
+        </ElFormItem>
+
         <ElFormItem label="全平台免配送">
           <div class="campaign-editor">
             <div class="campaign-create">
@@ -165,6 +170,7 @@
     businessHours: '',
     contactPhone: '',
     firstOrderFreeDelivery: false,
+    autoDeliveryEnabled: true,
     freeDeliveryCampaigns: []
   })
   const newCampaign = reactive<{ reason: string; range: string[] }>({
@@ -194,6 +200,7 @@
     Object.assign(form, {
       ...settingsResult,
       firstOrderFreeDelivery: Boolean(settingsResult.firstOrderFreeDelivery),
+      autoDeliveryEnabled: settingsResult.autoDeliveryEnabled !== false,
       freeDeliveryCampaigns: normalizeCampaigns(settingsResult.freeDeliveryCampaigns)
     })
   }

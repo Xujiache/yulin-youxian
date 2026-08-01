@@ -108,6 +108,14 @@
   border: 1rpx solid #ffd8ad;
 }
 
+.payment-notice {
+  color: #6d5200;
+  font-size: 26rpx;
+  line-height: 38rpx;
+  background: #fff9e6;
+  border: 1rpx solid #f3d889;
+}
+
 .module-title {
   display: block;
   color: #101815;

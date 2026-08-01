@@ -6,6 +6,7 @@ import com.xianda.freshdelivery.dto.CartItemDto;
 import com.xianda.freshdelivery.dto.CartItemRequest;
 import com.xianda.freshdelivery.dto.ToggleSelectedRequest;
 import com.xianda.freshdelivery.dto.UpdateCartItemRequest;
+import com.xianda.freshdelivery.dto.UpdateCartItemSkuRequest;
 import com.xianda.freshdelivery.service.StorefrontService;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -33,12 +34,20 @@ public class WxCartController {
 
     @PostMapping("/items")
     public ApiResponse<CartItemDto> addItem(@Valid @RequestBody CartItemRequest request) {
-        return ApiResponse.ok(storefrontService.addCartItem(request.productId(), request.quantity()));
+        return ApiResponse.ok(storefrontService.addCartItem(request.productId(), request.skuId(), request.quantity()));
     }
 
     @PutMapping("/items/{id}")
     public ApiResponse<CartItemDto> updateItem(@PathVariable Long id, @Valid @RequestBody UpdateCartItemRequest request) {
         return ApiResponse.ok(storefrontService.updateCartItem(id, request.quantity()));
+    }
+
+    @PutMapping("/items/{id}/sku")
+    public ApiResponse<CartItemDto> replaceSku(
+            @PathVariable Long id,
+            @Valid @RequestBody UpdateCartItemSkuRequest request
+    ) {
+        return ApiResponse.ok(storefrontService.replaceCartItemSku(id, request.skuId(), request.quantity()));
     }
 
     @PutMapping("/items/{id}/selected")

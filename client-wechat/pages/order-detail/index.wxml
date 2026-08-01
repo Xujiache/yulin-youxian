@@ -49,7 +49,8 @@
       <image class="goods-image" src="{{item.image}}" mode="aspectFill" lazy-load="{{true}}" />
       <view class="goods-info">
         <text class="goods-name">{{item.name || item.productName}}</text>
-        <text class="goods-spec">{{item.quantity}}{{item.saleUnit}} x1</text>
+        <text wx:if="{{item.specificationText}}" class="goods-spec">{{item.specificationText}}</text>
+        <text class="goods-spec">数量：{{item.quantity}}{{item.saleUnit}}</text>
       </view>
       <text class="goods-price">￥{{item.amountText}}</text>
     </view>
@@ -78,8 +79,13 @@
     </view>
   </view>
 
+  <view wx:if="{{paymentNotice}}" class="payment-notice card">
+    <text>{{paymentNotice}}</text>
+  </view>
+
   <view class="detail-actions">
+    <button wx:if="{{isPendingPayment}}" class="primary-button detail-action-button" disabled="{{paying}}" bindtap="handlePay">{{paying ? '支付处理中' : '继续支付'}}</button>
     <button class="ghost-button detail-action-button" bindtap="handleService">联系客服</button>
-    <button class="primary-button detail-action-button" bindtap="handleRefund">申请退款</button>
+    <button wx:if="{{!isPendingPayment}}" class="primary-button detail-action-button" bindtap="handleRefund">申请退款</button>
   </view>
 </view>

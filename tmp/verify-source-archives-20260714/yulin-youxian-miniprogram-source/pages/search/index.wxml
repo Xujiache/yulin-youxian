@@ -1,0 +1,93 @@
+<view class="search-page {{glassMode ? 'glass-mode' : ''}}">
+  <skeleton wx:if="{{loading}}" type="search" />
+  <view class="page-header search-header">
+    <image class="back-icon" src="/assets/icons/back-green.svg" mode="aspectFit" bindtap="goBack" />
+    <text class="page-title centered-title">搜索</text>
+  </view>
+
+  <view class="search-box">
+    <view class="search-card">
+      <image class="search-icon" src="/assets/icons/search.svg" mode="aspectFit" />
+      <input
+        class="search-input"
+        value="{{keyword}}"
+        focus
+        confirm-type="search"
+        placeholder="搜索蔬菜、水果、生鲜商品"
+        bindinput="handleInput"
+        bindconfirm="handleConfirm"
+      />
+      <button class="search-button" bindtap="handleConfirm">搜索</button>
+    </view>
+  </view>
+
+  <view class="section" wx:if="{{recentKeywords.length}}">
+    <view class="section-head">
+      <text class="section-title">最近搜索</text>
+      <text class="section-note">再次下单更快</text>
+    </view>
+    <view class="keyword-grid">
+      <view
+        wx:for="{{recentKeywords}}"
+        wx:key="*this"
+        class="keyword-chip"
+        data-keyword="{{item}}"
+        bindtap="handleKeyword"
+      >
+        {{item}}
+      </view>
+    </view>
+  </view>
+
+  <view class="rank-section">
+    <view class="section-head">
+      <text class="section-title">大家都在搜</text>
+      <text class="section-note">本店热搜</text>
+    </view>
+    <view class="rank-list">
+      <view
+        wx:for="{{hotRanks}}"
+        wx:key="id"
+        class="rank-item"
+        data-keyword="{{item.name}}"
+        bindtap="handleKeyword"
+      >
+        <text class="rank-no rank-hot rank-{{item.rank}} {{item.topClass}}">{{item.rank}}</text>
+        <image wx:if="{{item.image}}" class="rank-image" src="{{item.image}}" mode="aspectFill" lazy-load="{{true}}" />
+        <view class="rank-copy">
+          <view class="rank-name-line">
+            <text class="rank-name">{{item.name}}</text>
+            <text wx:if="{{item.badge}}" class="rank-badge">{{item.badge}}</text>
+          </view>
+          <text class="rank-subtitle">{{item.subtitle}}</text>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <view class="rank-section new-rank">
+    <view class="section-head">
+      <text class="section-title">上新榜</text>
+      <text class="section-note">今日新鲜优先</text>
+    </view>
+    <view class="rank-list">
+      <view
+        wx:for="{{newRanks}}"
+        wx:key="id"
+        class="rank-item"
+        data-keyword="{{item.name}}"
+        bindtap="handleKeyword"
+      >
+        <text class="rank-no rank-new rank-{{item.rank}} {{item.topClass}}">{{item.rank}}</text>
+        <image wx:if="{{item.image}}" class="rank-image" src="{{item.image}}" mode="aspectFill" lazy-load="{{true}}" />
+        <view class="rank-copy">
+          <view class="rank-name-line">
+            <text class="rank-name">{{item.name}}</text>
+            <text wx:if="{{item.badge}}" class="rank-badge">{{item.badge}}</text>
+          </view>
+          <text class="rank-subtitle">{{item.subtitle}}</text>
+        </view>
+      </view>
+    </view>
+  </view>
+</view>

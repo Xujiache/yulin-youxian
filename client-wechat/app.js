@@ -1,24 +1,6 @@
 const { API_BASE_URL } = require("./utils/config");
 const { preloadStaticImages } = require("./utils/image-cache");
 
-function createClientId() {
-  if (wx.getRandomValues) {
-    const random = new Uint32Array(2);
-    wx.getRandomValues(random);
-    return `wx_${Date.now()}_${random[0].toString(16)}${random[1].toString(16)}`;
-  }
-  return `wx_${Date.now()}_${Date.now().toString(36)}`;
-}
-
-function getClientId() {
-  let clientId = wx.getStorageSync("clientId");
-  if (!clientId) {
-    clientId = createClientId();
-    wx.setStorageSync("clientId", clientId);
-  }
-  return clientId;
-}
-
 function currentRoute() {
   const pages = getCurrentPages();
   const current = pages[pages.length - 1];
@@ -79,13 +61,16 @@ App({
     this.loginPromise = new Promise((resolve, reject) => {
       wx.login({
         success: ({ code }) => {
+          if (!code) {
+            reject(new Error("微信登录失败，请重试"));
+            return;
+          }
           wx.request({
             url: `${this.globalData.apiBaseUrl}/api/wx/auth/login`,
             method: "POST",
             timeout: 15000,
             data: {
-              code: code || "dev-code",
-              clientId: getClientId(),
+              code,
               nickName: profile.nickName || "",
               avatarUrl: profile.avatarUrl || ""
             },

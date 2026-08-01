@@ -31,18 +31,18 @@ management:
 
 wechat:
   miniapp:
-    development-mode: ${WECHAT_MINIAPP_DEVELOPMENT_MODE:false}
     app-id: ${WECHAT_MINIAPP_APP_ID:}
     app-secret: ${WECHAT_MINIAPP_APP_SECRET:}
     code2-session-url: ${WECHAT_MINIAPP_CODE2_SESSION_URL:https://api.weixin.qq.com/sns/jscode2session}
   pay:
-    development-mode: ${WECHAT_PAY_DEVELOPMENT_MODE:false}
     app-id: ${WECHAT_PAY_APP_ID:}
     mch-id: ${WECHAT_PAY_MCH_ID:}
     api-v3-key: ${WECHAT_PAY_API_V3_KEY:}
     merchant-serial-no: ${WECHAT_PAY_MERCHANT_SERIAL_NO:}
     private-key: ${WECHAT_PAY_PRIVATE_KEY:}
     private-key-path: ${WECHAT_PAY_PRIVATE_KEY_PATH:}
+    public-key-id: ${WECHAT_PAY_PUBLIC_KEY_ID:}
+    public-key-path: ${WECHAT_PAY_PUBLIC_KEY_PATH:}
     platform-certificate-path: ${WECHAT_PAY_PLATFORM_CERTIFICATE_PATH:}
     base-url: ${WECHAT_PAY_BASE_URL:https://api.mch.weixin.qq.com}
     notify-url: ${WECHAT_PAY_NOTIFY_URL:}
@@ -52,6 +52,8 @@ auth:
   admin:
     username: ${ADMIN_USERNAME:admin}
     password: ${ADMIN_PASSWORD:Admin@123456}
+    additional-username: ${ADMIN_ADDITIONAL_USERNAME:}
+    additional-password: ${ADMIN_ADDITIONAL_PASSWORD:}
   profile-storage-path: ${AUTH_PROFILE_STORAGE_PATH:data/user-profiles.json}
 
 storefront:
@@ -63,3 +65,12 @@ persistence:
   mysql:
     shadow-write-legacy-json: ${MYSQL_SHADOW_WRITE_LEGACY_JSON:true}
     reject-suspicious-question-marks: ${MYSQL_REJECT_SUSPICIOUS_QUESTION_MARKS:true}
+
+backup:
+  directory: ${BACKUP_DIRECTORY:data/backups}
+  data-directory: ${BACKUP_DATA_DIRECTORY:data}
+  retention-count: ${BACKUP_RETENTION_COUNT:30}
+  realtime-enabled: ${BACKUP_REALTIME_ENABLED:true}
+  realtime-debounce-ms: ${BACKUP_REALTIME_DEBOUNCE_MS:1500}
+  scheduled-interval-ms: ${BACKUP_SCHEDULED_INTERVAL_MS:300000}
+  scheduled-initial-delay-ms: ${BACKUP_SCHEDULED_INITIAL_DELAY_MS:30000}

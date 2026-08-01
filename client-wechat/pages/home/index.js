@@ -1,8 +1,9 @@
-const { getHome } = require("../../api/catalog");
+const { getHome, getProducts } = require("../../api/catalog");
 const { addCartItem, getCart } = require("../../api/cart");
 const { requireCompleteProfile } = require("../../utils/auth-guard");
 const { cachedAssetUrl } = require("../../utils/image-cache");
 const { syncTheme } = require("../../utils/theme");
+const { sortAvailableFirst } = require("../../utils/product-availability");
 
 Page({
   data: {
@@ -12,6 +13,7 @@ Page({
     banners: [],
     categories: [],
     products: [],
+    otherProducts: [],
     sheetVisible: false,
     selectedProduct: null,
     cartCount: 0
@@ -28,7 +30,10 @@ Page({
 
   async loadHome() {
     try {
-      const home = await getHome();
+      const [home, allProducts] = await Promise.all([
+        getHome(),
+        getProducts().catch(() => [])
+      ]);
       const banners = (home.banners && home.banners.length ? home.banners : [
         {
           title: home.bannerTitle || "今日新鲜到店",
@@ -52,6 +57,11 @@ Page({
           linkTarget: ""
         }
       ]).filter((item) => item && item.imageUrl);
+      const products = sortAvailableFirst(home.recommendedProducts || []);
+      const recommendedIds = new Set(products.map((product) => product.id));
+      const otherProducts = sortAvailableFirst(allProducts.filter((product) => (
+        product && !recommendedIds.has(product.id)
+      )));
       this.setData({
         storeLogoUrl: home.logoUrl || cachedAssetUrl("/assets/products/store-logo.png"),
         banners,
@@ -59,7 +69,8 @@ Page({
           ...item,
           icon: item.iconUrl || item.imageUrl || "/assets/icons/category-default.svg"
         })),
-        products: home.recommendedProducts || []
+        products,
+        otherProducts
       });
     } catch {
       wx.showToast({ title: "请先启动后端服务", icon: "none" });
@@ -98,9 +109,9 @@ Page({
     if (!requireCompleteProfile()) {
       return;
     }
-    const { product, quantity } = event.detail;
+    const { product, quantity, skuId } = event.detail;
     try {
-      await addCartItem(product.id, quantity);
+      await addCartItem(product.id, quantity, skuId);
       await this.loadCartCount();
       wx.showToast({ title: "已加入购物车", icon: "success" });
     } catch {

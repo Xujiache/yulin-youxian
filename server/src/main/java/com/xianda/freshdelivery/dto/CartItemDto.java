@@ -14,7 +14,15 @@ public record CartItemDto(
         BigDecimal minPurchaseQty,
         BigDecimal stepQty,
         BigDecimal stockQty,
+        Integer productStatus,
         boolean selected,
-        Integer amount
+        Integer amount,
+        Long skuId,
+        String skuCode,
+        String specificationText,
+        Integer skuStatus,
+        String availabilityCode,
+        String availabilityMessage,
+        boolean skuSelectionRequired
 ) {
 }

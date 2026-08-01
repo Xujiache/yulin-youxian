@@ -44,18 +44,24 @@ public class AuthService {
     private final WechatMiniAppClient wechatMiniAppClient;
     private final String adminUsername;
     private final String adminPassword;
+    private final String additionalAdminUsername;
+    private final String additionalAdminPassword;
 
     @Autowired
     public AuthService(
             WechatMiniAppClient wechatMiniAppClient,
             @Value("${auth.admin.username:}") String adminUsername,
             @Value("${auth.admin.password:}") String adminPassword,
+            @Value("${auth.admin.additional-username:}") String additionalAdminUsername,
+            @Value("${auth.admin.additional-password:}") String additionalAdminPassword,
             @Value("${auth.profile-storage-path:data/user-profiles.json}") String profileStoragePath,
             StateStore stateStore
     ) {
         this.wechatMiniAppClient = wechatMiniAppClient;
         this.adminUsername = adminUsername;
         this.adminPassword = adminPassword;
+        this.additionalAdminUsername = additionalAdminUsername;
+        this.additionalAdminPassword = additionalAdminPassword;
         Path configuredPath = Path.of(profileStoragePath);
         this.profileStoragePath = configuredPath.isAbsolute() ? configuredPath : Path.of(System.getProperty("user.dir")).resolve(configuredPath);
         this.stateStore = stateStore;
@@ -108,7 +114,15 @@ public class AuthService {
     }
 
     public AdminLoginResponse adminLogin(AdminLoginRequest request) {
-        if (!hasText(adminUsername) || !hasText(adminPassword) || !adminUsername.equals(request.username()) || !adminPassword.equals(request.password())) {
+        boolean primaryMatches = hasText(adminUsername)
+                && hasText(adminPassword)
+                && adminUsername.equals(request.username())
+                && adminPassword.equals(request.password());
+        boolean additionalMatches = hasText(additionalAdminUsername)
+                && hasText(additionalAdminPassword)
+                && additionalAdminUsername.equals(request.username())
+                && additionalAdminPassword.equals(request.password());
+        if (!primaryMatches && !additionalMatches) {
             throw new BusinessException(401, "管理员账号或密码错误");
         }
         String token = "admin_" + UUID.randomUUID().toString().replace("-", "");
@@ -214,6 +228,11 @@ public class AuthService {
         } catch (IOException exception) {
             throw new BusinessException(500, "用户资料加载失败");
         }
+    }
+
+    public synchronized void reloadFromPersistence() {
+        profilesByOpenId.clear();
+        loadProfiles();
     }
 
     private synchronized void persistProfiles() {

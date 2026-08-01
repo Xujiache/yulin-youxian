@@ -1,0 +1,21 @@
+{
+  "outputRoot": "C:/Users/Administrator/Desktop/生鲜同城/deliverables/20260714-smart-delivery-source",
+  "packages": {
+    "yulin-youxian-backend-source": {
+      "textFiles": 90,
+      "binaryFiles": 3,
+      "bytes": 615672
+    },
+    "yulin-youxian-admin-source": {
+      "textFiles": 273,
+      "binaryFiles": 53,
+      "bytes": 3781100
+    },
+    "yulin-youxian-miniprogram-source": {
+      "textFiles": 128,
+      "binaryFiles": 34,
+      "bytes": 1914341
+    }
+  },
+  "sha256": "a17586ff93da62ebbfd0078dfed9739dd4380308a916e0278c7a63bd8afcfae7"
+}

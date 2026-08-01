@@ -1,0 +1,46 @@
+<view class="setup-page">
+  <skeleton wx:if="{{loading}}" type="form" />
+  <view class="setup-hero">
+    <image class="setup-bg" src="{{setupBg}}" mode="aspectFill" />
+    <view class="setup-mask"></view>
+    <view class="setup-copy">
+      <text class="setup-title">{{pageTitle}}</text>
+      <text class="setup-subtitle">{{pageSubtitle}}</text>
+    </view>
+  </view>
+
+  <view class="setup-card">
+    <view class="card-head">
+      <text class="card-title">完善资料</text>
+      <text class="card-subtitle">用于配送通知、订单沟通和售后服务</text>
+    </view>
+
+    <button class="avatar-button" open-type="chooseAvatar" bindchooseavatar="handleChooseAvatar">
+      <view class="avatar-shell">
+        <image class="avatar-preview" src="{{avatarUrl}}" mode="aspectFill" />
+        <view class="avatar-badge">换</view>
+      </view>
+      <text class="avatar-action">点击设置头像</text>
+    </button>
+
+    <view class="field">
+      <view class="field-head">
+        <text class="field-label">昵称</text>
+        <text class="field-tip">{{fieldTip}}</text>
+      </view>
+      <view class="field-control">
+        <input
+          class="field-input"
+          type="nickname"
+          value="{{nickName}}"
+          placeholder="请输入昵称"
+          bindinput="handleNameInput"
+        />
+      </view>
+    </view>
+
+    <button class="submit-button" loading="{{submitting}}" bindtap="handleSubmit">
+      {{submitting ? '保存中' : submitText}}
+    </button>
+  </view>
+</view>

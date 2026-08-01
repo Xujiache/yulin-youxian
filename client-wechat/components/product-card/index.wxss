@@ -17,6 +17,30 @@
 .product-image {
   width: 100%;
   height: 100%;
+  transition: filter 180ms ease-out, opacity 180ms ease-out;
+}
+
+.product-card.is-unavailable .product-image {
+  filter: grayscale(72%);
+  opacity: 0.56;
+}
+
+.sold-out-badge {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 128rpx;
+  height: 52rpx;
+  padding: 0 18rpx;
+  color: #ffffff;
+  font-size: 23rpx;
+  font-weight: 700;
+  background: rgba(20, 31, 26, 0.76);
+  border-radius: 12rpx;
+  transform: translate(-50%, -50%);
 }
 
 .badge {
@@ -75,6 +99,10 @@
   white-space: nowrap;
 }
 
+.product-card.is-unavailable .price {
+  color: #707873;
+}
+
 .currency {
   font-size: 22rpx;
   font-weight: 700;
@@ -83,6 +111,12 @@
 .value {
   font-size: 32rpx;
   font-weight: 800;
+}
+
+.price-from {
+  margin-left: 3rpx;
+  font-size: 19rpx;
+  font-weight: 700;
 }
 
 .unit {
@@ -115,6 +149,17 @@
 .add-icon {
   width: 28rpx;
   height: 28rpx;
+}
+
+.add-button.is-disabled {
+  color: #5f6863;
+  background: #dfe4e1;
+  box-shadow: none;
+}
+
+.sold-out-button-text {
+  font-size: 18rpx;
+  font-weight: 700;
 }
 
 .product-card.glass-mode {

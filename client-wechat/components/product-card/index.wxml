@@ -1,7 +1,10 @@
-<view class="product-card {{glassMode ? 'glass-mode' : ''}}" bindtap="handleTap">
+<view class="product-card {{glassMode ? 'glass-mode' : ''}} {{unavailable ? 'is-unavailable' : ''}}" bindtap="handleTap">
   <view class="image-wrap">
-    <image class="product-image" src="{{product.image}}" mode="aspectFill" lazy-load="{{true}}" />
+    <image class="product-image" src="{{product.image}}" mode="aspectFill" lazy-load="{{!eagerImage}}" />
     <text wx:if="{{product.badge}}" class="badge">{{product.badge}}</text>
+    <view wx:if="{{unavailable}}" class="sold-out-badge">
+      <text>{{availabilityLabel}}</text>
+    </view>
   </view>
   <view class="body">
     <text class="name">{{product.name}}</text>
@@ -10,10 +13,12 @@
       <view class="price">
         <text class="currency">¥</text>
         <text class="value">{{priceText}}</text>
-        <text class="unit">/{{product.saleUnit}}</text>
+        <text wx:if="{{priceFrom}}" class="price-from">起</text>
+        <text class="unit">/{{priceSaleUnit}}</text>
       </view>
-      <button class="add-button" catchtap="handleAdd">
-        <image class="add-icon" src="/assets/icons/add-white.svg" mode="aspectFit" />
+      <button class="add-button {{unavailable ? 'is-disabled' : ''}}" catchtap="handleAdd">
+        <image wx:if="{{!unavailable}}" class="add-icon" src="/assets/icons/add-white.svg" mode="aspectFit" />
+        <text wx:else class="sold-out-button-text">{{availabilityShortLabel}}</text>
       </button>
     </view>
   </view>

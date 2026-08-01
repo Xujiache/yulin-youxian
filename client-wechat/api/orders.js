@@ -60,9 +60,9 @@ function payOrder(id) {
   });
 }
 
-function confirmDevelopmentPayment(id) {
+function refreshPaymentStatus(id) {
   return request({
-    url: `/api/wx/orders/${id}/pay/development-success`,
+    url: `/api/wx/orders/${id}/payment-status`,
     method: "POST"
   });
 }
@@ -122,7 +122,7 @@ module.exports = {
   previewOrder,
   createOrder,
   payOrder,
-  confirmDevelopmentPayment,
+  refreshPaymentStatus,
   submitRefund,
   uploadRefundEvidence
 };

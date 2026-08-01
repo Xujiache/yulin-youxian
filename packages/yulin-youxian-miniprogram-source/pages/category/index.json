@@ -1,0 +1,7 @@
+{
+  "usingComponents": {
+    "app-tabbar": "../../components/app-tabbar/index",
+    "product-card": "../../components/product-card/index",
+    "cart-add-sheet": "../../components/cart-add-sheet/index"
+  }
+}

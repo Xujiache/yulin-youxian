@@ -207,7 +207,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 72rpx;
+  min-height: 96rpx;
   padding: 16rpx 20rpx;
   overflow: hidden;
   color: #4f5d55;
@@ -229,6 +229,10 @@
 .slot-label {
   position: relative;
   z-index: 1;
+  width: 100%;
+  line-height: 1.45;
+  text-align: center;
+  word-break: keep-all;
 }
 
 .slot-check {
@@ -363,6 +367,13 @@
   flex: 1;
   color: #4f5d55;
   font-size: 24rpx;
+}
+
+.pay-processing {
+  flex: 1;
+  color: #007a3d;
+  font-size: 24rpx;
+  font-weight: 700;
 }
 
 .pay-price {

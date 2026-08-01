@@ -22,7 +22,7 @@
               v-if="row.iconUrl"
               class="category-icon"
               :src="assetUrl(row.iconUrl)"
-              fit="cover"
+              fit="contain"
               :preview-src-list="[assetUrl(row.iconUrl)]"
               preview-teleported
             />
@@ -47,7 +47,7 @@
         </ElFormItem>
         <ElFormItem label="分类图标">
           <div class="upload-row">
-            <ElImage v-if="form.iconUrl" class="upload-preview" :src="assetUrl(form.iconUrl)" fit="cover" />
+            <ElImage v-if="form.iconUrl" class="upload-preview" :src="assetUrl(form.iconUrl)" fit="contain" />
             <div v-else class="upload-preview upload-preview--empty">待上传</div>
             <ElUpload
               accept=".jpg,.jpeg,.png,.webp"
@@ -185,12 +185,10 @@
 
   .category-icon,
   .upload-preview {
-    width: 64px;
-    height: 64px;
-    overflow: hidden;
-    border: 1px solid var(--art-border-color);
-    border-radius: 8px;
-    background: #f4f8f5;
+    display: block;
+    width: 72px;
+    height: 72px;
+    object-fit: contain;
   }
 
   .category-icon--empty,
@@ -200,6 +198,9 @@
     justify-content: center;
     color: var(--art-text-gray-600);
     font-size: 12px;
+    border: 1px dashed var(--art-border-color);
+    border-radius: 8px;
+    background: #f7faf8;
   }
 
   .upload-row {

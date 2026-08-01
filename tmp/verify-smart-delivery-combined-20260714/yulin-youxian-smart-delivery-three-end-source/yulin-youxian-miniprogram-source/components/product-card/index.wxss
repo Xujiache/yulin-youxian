@@ -1,0 +1,134 @@
+.product-card {
+  position: relative;
+  overflow: hidden;
+  background: #ffffff;
+  border-radius: 18rpx;
+  box-shadow: 0 8rpx 22rpx rgba(8, 34, 20, 0.05);
+}
+
+.image-wrap {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  padding: 0;
+  background: #f4f7f5;
+}
+
+.product-image {
+  width: 100%;
+  height: 100%;
+}
+
+.badge {
+  position: absolute;
+  top: 0;
+  left: 0;
+  padding: 6rpx 14rpx;
+  color: #1e5b2b;
+  font-size: 20rpx;
+  font-weight: 600;
+  background: #e9f4df;
+  border-radius: 0 0 10rpx 0;
+}
+
+.body {
+  position: relative;
+  min-height: 188rpx;
+  padding: 18rpx 18rpx 20rpx;
+}
+
+.name {
+  display: block;
+  min-height: 74rpx;
+  color: #101815;
+  font-size: 26rpx;
+  font-weight: 700;
+  line-height: 36rpx;
+}
+
+.subtitle {
+  display: block;
+  height: 32rpx;
+  margin-top: 2rpx;
+  overflow: hidden;
+  color: #68736c;
+  font-size: 22rpx;
+  line-height: 32rpx;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12rpx;
+  margin-top: 12rpx;
+}
+
+.price {
+  display: flex;
+  align-items: baseline;
+  flex: 1;
+  min-width: 0;
+  color: #00833f;
+  white-space: nowrap;
+}
+
+.currency {
+  font-size: 22rpx;
+  font-weight: 700;
+}
+
+.value {
+  font-size: 32rpx;
+  font-weight: 800;
+}
+
+.unit {
+  overflow: hidden;
+  color: #5b665f;
+  font-size: 22rpx;
+  text-overflow: ellipsis;
+}
+
+.add-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 60rpx;
+  min-width: 60rpx;
+  max-width: 60rpx;
+  height: 60rpx;
+  min-height: 60rpx;
+  padding: 0;
+  color: #ffffff;
+  font-size: 32rpx;
+  font-weight: 800;
+  line-height: 1;
+  background: #008a45;
+  border-radius: 999rpx;
+  box-shadow: 0 8rpx 18rpx rgba(0, 122, 61, 0.18);
+}
+
+.add-icon {
+  width: 28rpx;
+  height: 28rpx;
+}
+
+.product-card.glass-mode {
+  background: var(--surface);
+  border: 1rpx solid var(--surface-line);
+  box-shadow: var(--shadow-soft);
+  backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+}
+
+.product-card.glass-mode .image-wrap {
+  background: rgba(240, 250, 244, 0.44);
+}
+
+.product-card.glass-mode .body {
+  background: rgba(255, 255, 255, 0.24);
+}

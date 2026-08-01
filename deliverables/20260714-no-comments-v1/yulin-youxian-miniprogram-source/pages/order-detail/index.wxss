@@ -1,0 +1,278 @@
+.order-detail-page {
+  min-height: 100vh;
+  padding: 196rpx 24rpx 190rpx;
+  background: #f5f6f7;
+}
+
+.detail-header {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 176rpx;
+  padding: 88rpx 24rpx 0;
+  background: #f5f6f7;
+  box-shadow: 0 1rpx 0 rgba(16, 24, 21, 0.04);
+}
+
+.back,
+.placeholder {
+  width: 56rpx;
+}
+
+.back {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  height: 56rpx;
+  z-index: 1;
+}
+
+.back-icon {
+  width: 36rpx;
+  height: 36rpx;
+}
+
+.title {
+  position: absolute;
+  left: 120rpx;
+  right: 120rpx;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 88rpx;
+  color: #101815;
+  font-size: 32rpx;
+  font-weight: 700;
+}
+
+.card {
+  margin-bottom: 24rpx;
+  padding: 28rpx;
+}
+
+.status-card {
+  color: #ffffff;
+  background: linear-gradient(135deg, #007a3d 0%, #55bd3c 100%);
+  box-shadow: 0 16rpx 34rpx rgba(0, 122, 61, 0.18);
+}
+
+.glass-mode .status-card {
+  color: #ffffff;
+  background: linear-gradient(135deg, #006d42 0%, #18a861 100%);
+  border-color: rgba(255, 255, 255, 0.3);
+  box-shadow: 0 18rpx 38rpx rgba(0, 109, 66, 0.24), inset 0 1rpx 0 rgba(255, 255, 255, 0.24);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.glass-mode .status-card .status {
+  color: #ffffff;
+}
+
+.glass-mode .status-card .status-desc {
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.status {
+  display: block;
+  color: #ffffff;
+  font-size: 42rpx;
+  font-weight: 800;
+  line-height: 52rpx;
+}
+
+.status-desc,
+.line {
+  display: block;
+  margin-top: 12rpx;
+  color: #5b665f;
+  font-size: 26rpx;
+  line-height: 38rpx;
+}
+
+.status-desc {
+  color: rgba(255, 255, 255, 0.86);
+}
+
+.refund-notice {
+  color: #9a4a00;
+  font-size: 26rpx;
+  line-height: 38rpx;
+  background: #fff7ed;
+  border: 1rpx solid #ffd8ad;
+}
+
+.module-title {
+  display: block;
+  color: #101815;
+  font-size: 30rpx;
+  font-weight: 700;
+}
+
+.goods-item {
+  display: flex;
+  align-items: center;
+  gap: 20rpx;
+  padding: 24rpx 0;
+  border-bottom: 1rpx solid #eef1ef;
+}
+
+.goods-item:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.goods-image {
+  flex-shrink: 0;
+  width: 120rpx;
+  height: 120rpx;
+  background: #eef3ed;
+  border-radius: 18rpx;
+}
+
+.goods-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.goods-name {
+  display: block;
+  font-size: 28rpx;
+  font-weight: 700;
+  color: #101815;
+}
+
+.goods-spec {
+  display: block;
+  margin-top: 8rpx;
+  color: #5b665f;
+  font-size: 24rpx;
+}
+
+.goods-price {
+  font-size: 28rpx;
+  color: #007a3d;
+  font-weight: 700;
+}
+
+.refund-history {
+  padding-bottom: 10rpx;
+}
+
+.refund-record {
+  padding: 24rpx 0;
+  border-bottom: 1rpx solid #eef1ef;
+}
+
+.refund-record:last-child {
+  border-bottom: 0;
+}
+
+.refund-record-head,
+.refund-status-group {
+  display: flex;
+  justify-content: space-between;
+  gap: 12rpx;
+}
+
+.refund-status-group {
+  align-items: flex-end;
+  flex-direction: column;
+}
+
+.refund-source,
+.refund-no,
+.refund-reason,
+.refund-time {
+  display: block;
+}
+
+.refund-source {
+  color: #101815;
+  font-size: 27rpx;
+  font-weight: 700;
+}
+
+.refund-no,
+.refund-time {
+  margin-top: 6rpx;
+  color: #87918c;
+  font-size: 21rpx;
+}
+
+.refund-amount {
+  color: #007a3d;
+  font-size: 28rpx;
+  font-weight: 800;
+}
+
+.refund-status {
+  color: #49705c;
+  font-size: 22rpx;
+}
+
+.refund-reason {
+  margin-top: 16rpx;
+  color: #4f5c55;
+  font-size: 24rpx;
+  line-height: 36rpx;
+}
+
+.amount-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 14rpx 0;
+  color: #5b665f;
+  font-size: 26rpx;
+}
+
+.amount-row.strong {
+  margin-top: 6rpx;
+  padding-top: 20rpx;
+  color: #007a3d;
+  font-size: 32rpx;
+  font-weight: 800;
+  border-top: 1rpx solid #eef1ef;
+}
+
+.detail-actions {
+  position: fixed;
+  left: 24rpx;
+  right: auto;
+  bottom: calc(20rpx + env(safe-area-inset-bottom));
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-sizing: border-box;
+  width: calc(100% - 48rpx);
+  gap: 16rpx;
+  padding: 14rpx 16rpx;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.98);
+  border: 1rpx solid rgba(0, 122, 61, 0.08);
+  border-radius: 30rpx;
+  box-shadow: 0 18rpx 44rpx rgba(8, 34, 20, 0.14);
+}
+
+.detail-action-button {
+  flex: 1;
+  width: auto;
+  min-width: 0;
+  height: 82rpx;
+  min-height: 82rpx;
+  box-sizing: border-box;
+  padding: 0;
+  margin: 0;
+  font-size: 28rpx;
+  line-height: 82rpx;
+}
+
+.detail-actions .primary-button {
+  box-shadow: 0 12rpx 24rpx rgba(0, 122, 61, 0.16);
+}

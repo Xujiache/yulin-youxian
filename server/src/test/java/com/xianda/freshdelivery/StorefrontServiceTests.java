@@ -7,16 +7,27 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.xianda.freshdelivery.common.CurrentUserContext;
 import com.xianda.freshdelivery.common.BusinessException;
 import com.xianda.freshdelivery.dto.AdminRefundCreateRequest;
+import com.xianda.freshdelivery.dto.AdminOrderDto;
 import com.xianda.freshdelivery.dto.CartDto;
 import com.xianda.freshdelivery.dto.CategoryDto;
 import com.xianda.freshdelivery.dto.CreateAddressRequest;
 import com.xianda.freshdelivery.dto.CreateOrderRequest;
+import com.xianda.freshdelivery.dto.DeliverySlotDto;
 import com.xianda.freshdelivery.dto.OrderDetailDto;
+import com.xianda.freshdelivery.dto.PaymentNotifyRequest;
 import com.xianda.freshdelivery.dto.ProductDto;
+import com.xianda.freshdelivery.dto.ProductSaveRequest;
+import com.xianda.freshdelivery.dto.ProductSkuDto;
+import com.xianda.freshdelivery.dto.ProductSpecGroupDto;
+import com.xianda.freshdelivery.dto.ProductSpecOptionDto;
 import com.xianda.freshdelivery.dto.RefundDto;
+import com.xianda.freshdelivery.dto.SettingsDto;
 import com.xianda.freshdelivery.service.StorefrontService;
 import java.math.BigDecimal;
 import java.nio.file.Path;
+import java.time.LocalDate;
+import java.util.List;
+import java.util.Set;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -43,6 +54,17 @@ class StorefrontServiceTests {
     }
 
     @Test
+    void availableDeliverySlotsIncludeAutomaticDateAndWeekday() {
+        StorefrontService service = newService();
+
+        List<DeliverySlotDto> slots = service.availableDeliverySlots();
+
+        assertTrue(!slots.isEmpty());
+        assertTrue(slots.stream().allMatch(slot ->
+                slot.label().matches(".*\\d{1,2}:\\d{2}-\\d{1,2}:\\d{2}（\\d{1,2}月\\d{1,2}日 周[一二三四五六日]）")));
+    }
+
+    @Test
     void orderCreationDecreasesStock() {
         StorefrontService service = newService();
         CurrentUserContext.setUserId(1000L);
@@ -58,7 +80,185 @@ class StorefrontServiceTests {
     }
 
     @Test
-    void payDoesNotMarkPaidUntilPaymentConfirmed() {
+    void productSortOrderControlsStorefrontAndRecommendedProductOrder() {
+        StorefrontService service = newService();
+
+        service.updateProductSortOrder(104L, 0);
+        service.updateProductSortOrder(101L, 20);
+
+        List<ProductDto> products = service.products(null, null);
+        assertEquals(104L, products.get(0).id());
+        assertTrue(products.indexOf(service.product(101L)) > products.indexOf(service.product(104L)));
+        assertEquals(104L, service.home().recommendedProducts().get(0).id());
+    }
+
+    @Test
+    void multiSkuCartSeparatesVariantsAndOrderFreezesSkuSnapshot() {
+        StorefrontService service = newService();
+        ProductDto product = service.createProduct(multiSkuProductRequest("多规格蓝莓"));
+        ProductSkuDto firstSku = product.skus().get(0);
+        ProductSkuDto secondSku = product.skus().get(1);
+        BigDecimal firstStock = firstSku.stockQty();
+        BigDecimal secondStock = secondSku.stockQty();
+
+        CurrentUserContext.setUserId(1000L);
+        Long addressId = service.createAddress(addressRequest()).id();
+        service.addCartItem(product.id(), firstSku.id(), BigDecimal.ONE);
+        service.addCartItem(product.id(), secondSku.id(), BigDecimal.ONE);
+
+        CartDto cart = service.cart();
+        assertEquals(2, cart.items().size());
+        assertTrue(cart.items().stream().allMatch(item -> "AVAILABLE".equals(item.availabilityCode())));
+
+        OrderDetailDto order = service.createOrder(new CreateOrderRequest(
+                addressId,
+                1L,
+                "",
+                cart.items().stream().map(item -> item.id()).toList()
+        ));
+        assertEquals(2, order.items().size());
+        assertEquals(firstSku.specificationText(), order.items().get(0).specificationText());
+        assertEquals(firstSku.skuCode(), order.items().get(0).skuCode());
+        assertEquals(firstSku.unitPrice(), order.items().get(0).unitPrice());
+
+        ProductDto afterCreate = service.product(product.id());
+        assertEquals(firstStock.subtract(BigDecimal.ONE), sku(afterCreate, firstSku.id()).stockQty());
+        assertEquals(secondStock.subtract(BigDecimal.ONE), sku(afterCreate, secondSku.id()).stockQty());
+
+        service.cancelOrder(order.id());
+        ProductDto afterCancel = service.product(product.id());
+        assertEquals(firstStock, sku(afterCancel, firstSku.id()).stockQty());
+        assertEquals(secondStock, sku(afterCancel, secondSku.id()).stockQty());
+    }
+
+    @Test
+    void sameSkuMergesInCartButDifferentSkuDoesNot() {
+        StorefrontService service = newService();
+        ProductDto product = service.createProduct(multiSkuProductRequest("多规格草莓"));
+        CurrentUserContext.setUserId(1000L);
+
+        service.addCartItem(product.id(), product.skus().get(0).id(), BigDecimal.ONE);
+        service.addCartItem(product.id(), product.skus().get(0).id(), BigDecimal.ONE);
+        service.addCartItem(product.id(), product.skus().get(1).id(), BigDecimal.ONE);
+
+        CartDto cart = service.cart();
+        assertEquals(2, cart.items().size());
+        assertEquals(new BigDecimal("2"), cart.items().get(0).quantity());
+    }
+
+    @Test
+    void buyNowCreatesOnlyTheRequestedSkuWithoutChangingCart() {
+        StorefrontService service = newService();
+        ProductDto product = service.createProduct(multiSkuProductRequest("立即购买测试商品"));
+        ProductSkuDto cartSku = product.skus().get(0);
+        ProductSkuDto buyNowSku = product.skus().get(1);
+        CurrentUserContext.setUserId(1000L);
+        Long addressId = service.createAddress(addressRequest()).id();
+        service.addCartItem(product.id(), cartSku.id(), BigDecimal.ONE);
+
+        CartDto beforeCart = service.cart();
+        BigDecimal beforeStock = buyNowSku.stockQty();
+        OrderDetailDto order = service.createOrder(new CreateOrderRequest(
+                addressId,
+                1L,
+                "立即购买",
+                null,
+                product.id(),
+                buyNowSku.id(),
+                BigDecimal.ONE
+        ));
+
+        CartDto afterCart = service.cart();
+        assertEquals(beforeCart.items().size(), afterCart.items().size());
+        assertEquals(cartSku.id(), afterCart.items().get(0).skuId());
+        assertEquals(buyNowSku.id(), order.items().get(0).skuId());
+        assertEquals(
+                beforeStock.subtract(BigDecimal.ONE),
+                sku(service.product(product.id()), buyNowSku.id()).stockQty()
+        );
+    }
+
+    @Test
+    void multiSkuProductCanBeSavedWhenEverySkuIsOffShelf() {
+        StorefrontService service = newService();
+        ProductSaveRequest source = multiSkuProductRequest("全规格下架商品");
+        List<ProductSkuDto> disabledSkus = source.skus().stream()
+                .map(sku -> new ProductSkuDto(
+                        sku.id(),
+                        sku.skuCode(),
+                        sku.barcode(),
+                        sku.optionValueIds(),
+                        sku.specificationText(),
+                        sku.imageUrl(),
+                        sku.unitPrice(),
+                        sku.stockQty(),
+                        sku.saleUnit(),
+                        sku.minPurchaseQty(),
+                        sku.stepQty(),
+                        0,
+                        sku.defaultSku(),
+                        sku.sortOrder()
+                ))
+                .toList();
+        ProductDto product = service.createProduct(new ProductSaveRequest(
+                source.categoryId(),
+                source.name(),
+                source.subtitle(),
+                source.imageUrl(),
+                source.saleUnit(),
+                source.unitPrice(),
+                source.minPurchaseQty(),
+                source.stepQty(),
+                source.stockQty(),
+                source.badge(),
+                source.status(),
+                source.recommended(),
+                source.sortOrder(),
+                source.skuEnabled(),
+                source.specGroups(),
+                disabledSkus
+        ));
+
+        assertEquals(0, product.availableSkuCount());
+        assertTrue(product.skus().stream().allMatch(sku -> sku.status() == 0));
+        assertEquals(1, product.skus().stream().filter(ProductSkuDto::defaultSku).count());
+    }
+
+    @Test
+    void legacyCartRequiresReselectionWhenProductEnablesSku() {
+        StorefrontService service = newService();
+        CurrentUserContext.setUserId(1000L);
+        service.addCartItem(106L, BigDecimal.ONE);
+        ProductDto current = service.product(106L);
+        ProductSaveRequest request = multiSkuProductRequest(current.name());
+        service.updateProduct(106L, new ProductSaveRequest(
+                current.categoryId(),
+                request.name(),
+                current.subtitle(),
+                current.imageUrl(),
+                request.saleUnit(),
+                request.unitPrice(),
+                request.minPurchaseQty(),
+                request.stepQty(),
+                request.stockQty(),
+                current.badge(),
+                current.status(),
+                current.recommended(),
+                current.sortOrder(),
+                true,
+                request.specGroups(),
+                request.skus()
+        ));
+
+        CartDto cart = service.cart();
+        assertEquals(1, cart.items().size());
+        assertTrue(cart.items().get(0).skuSelectionRequired());
+        assertEquals("SKU_SELECTION_REQUIRED", cart.items().get(0).availabilityCode());
+        assertEquals(0, cart.items().get(0).amount());
+    }
+
+    @Test
+    void paymentConfirmationAutomaticallyAcceptsOrderByDefault() {
         StorefrontService service = newService();
         CurrentUserContext.setUserId(1000L);
         Long addressId = service.createAddress(addressRequest()).id();
@@ -70,9 +270,63 @@ class StorefrontServiceTests {
         assertEquals("待支付", pending.status());
         assertEquals("待支付", service.order(order.id()).status());
 
-        OrderDetailDto paid = service.confirmDevelopmentPayment(order.id());
-        assertEquals("已支付/待接单", paid.status());
+        OrderDetailDto paid = service.confirmPayment(new PaymentNotifyRequest(
+                order.orderNo(),
+                "TX-PAID",
+                "SUCCESS",
+                "wx-test-app",
+                "test-mch",
+                order.payableAmount()
+        )).order();
+        assertEquals("备货中", paid.status());
         assertEquals(paid.payableAmount(), paid.paidAmount());
+        assertEquals("TX-PAID", paid.transactionId());
+        assertEquals("TX-PAID", service.order(order.id()).transactionId());
+    }
+
+    @Test
+    void disabledAutoDeliveryKeepsPaidOrderForManualProcessing() {
+        StorefrontService service = newService();
+        SettingsDto current = service.settings();
+        service.updateSettings(new SettingsDto(
+                current.storeName(), current.logoUrl(), current.minOrderAmount(), current.deliveryFee(), current.packageFee(),
+                current.businessHours(), current.contactPhone(), current.firstOrderFreeDelivery(), false, current.freeDeliveryCampaigns()
+        ));
+        CurrentUserContext.setUserId(1000L);
+        Long addressId = service.createAddress(addressRequest()).id();
+        service.addCartItem(106L, BigDecimal.ONE);
+        CartDto cart = service.cart();
+        OrderDetailDto order = service.createOrder(new CreateOrderRequest(addressId, 1L, "", cart.items().stream().map(item -> item.id()).toList()));
+
+        OrderDetailDto paid = service.confirmPayment(new PaymentNotifyRequest(
+                order.orderNo(), "TX-MANUAL", "SUCCESS", "wx-test-app", "test-mch", order.payableAmount()
+        )).order();
+
+        assertEquals("已支付/待接单", paid.status());
+        assertEquals(1, service.batchPrepareOrders(List.of(paid.id())).success());
+        assertEquals("备货中", service.order(paid.id()).status());
+        assertEquals(1, service.batchDeliverOrders(List.of(paid.id())).success());
+        assertEquals("配送中", service.order(paid.id()).status());
+    }
+
+    @Test
+    void paymentAmountMismatchDoesNotMarkOrderPaid() {
+        StorefrontService service = newService();
+        CurrentUserContext.setUserId(1000L);
+        Long addressId = service.createAddress(addressRequest()).id();
+        service.addCartItem(106L, BigDecimal.ONE);
+        CartDto cart = service.cart();
+        OrderDetailDto order = service.createOrder(new CreateOrderRequest(addressId, 1L, "", cart.items().stream().map(item -> item.id()).toList()));
+
+        assertThrows(BusinessException.class, () -> service.confirmPayment(new PaymentNotifyRequest(
+                order.orderNo(),
+                "TX-MISMATCH",
+                "SUCCESS",
+                "",
+                "",
+                order.payableAmount() + 1
+        )));
+        assertEquals("待支付", service.order(order.id()).status());
     }
 
     @Test
@@ -120,11 +374,149 @@ class StorefrontServiceTests {
         assertEquals(120, service.adminOrder(1004L).refundedAmount());
     }
 
+    @Test
+    void adminOrdersKeepSameBuildingTogetherInDeliveryOrder() {
+        StorefrontService service = newService();
+        CurrentUserContext.setUserId(10001L);
+        Long secondBuildingAddressId = service.createAddress(new CreateAddressRequest(
+                "配送测试",
+                "13800000000",
+                "2号楼 601室",
+                "乌鲁木齐社区",
+                43.8256,
+                87.6168,
+                false
+        )).id();
+        Long sameBuildingOtherDoorId = service.createAddress(new CreateAddressRequest(
+                "配送测试二",
+                "13800000001",
+                "1号楼 701室",
+                "乌鲁木齐社区",
+                43.8256,
+                87.6168,
+                false
+        )).id();
+        OrderDetailDto sameBuildingFirst = createOrder(service, 1L, 1L);
+        OrderDetailDto otherDoor = createOrder(service, sameBuildingOtherDoorId, 1L);
+        OrderDetailDto secondBuilding = createOrder(service, secondBuildingAddressId, 1L);
+        OrderDetailDto sameBuildingSecond = createOrder(service, 1L, 2L);
+        Set<Long> createdOrderIds = Set.of(sameBuildingFirst.id(), otherDoor.id(), secondBuilding.id(), sameBuildingSecond.id());
+
+        List<AdminOrderDto> createdOrders = service.adminOrders(null).stream()
+                .filter(order -> createdOrderIds.contains(order.id()))
+                .toList();
+
+        assertEquals(4, createdOrders.size());
+        assertEquals(otherDoor.id(), createdOrders.get(0).id());
+        assertEquals(sameBuildingFirst.id(), createdOrders.get(1).id());
+        assertEquals(sameBuildingSecond.id(), createdOrders.get(2).id());
+        assertEquals(secondBuilding.id(), createdOrders.get(3).id());
+        assertEquals(createdOrders.get(0).deliveryGroupKey(), createdOrders.get(2).deliveryGroupKey());
+        assertEquals(3, createdOrders.get(0).buildingOrderCount());
+        assertEquals(1, createdOrders.get(0).buildingOrderPosition());
+        assertEquals(2, createdOrders.get(1).buildingOrderPosition());
+        assertEquals(3, createdOrders.get(2).buildingOrderPosition());
+        assertEquals(2, createdOrders.get(1).sameAddressOrderCount());
+        assertEquals(2, createdOrders.get(2).sameAddressOrderCount());
+        LocalDate deliveryDate = LocalDate.parse(createdOrders.get(0).deliveryDate());
+        assertEquals(4, service.adminOrders(null, deliveryDate).stream()
+                .filter(order -> createdOrderIds.contains(order.id()))
+                .count());
+    }
+
     private StorefrontService newService() {
         return new StorefrontService(tempDir.resolve("storefront-state.json").toString(), true);
     }
 
+    private OrderDetailDto createOrder(StorefrontService service, Long addressId, Long deliverySlotId) {
+        service.addCartItem(106L, BigDecimal.ONE);
+        CartDto cart = service.cart();
+        return service.createOrder(new CreateOrderRequest(
+                addressId,
+                deliverySlotId,
+                "",
+                cart.items().stream().map(item -> item.id()).toList()
+        ));
+    }
+
     private CreateAddressRequest addressRequest() {
         return new CreateAddressRequest("Zhang San", "13800000000", "Shanghai test road 1", "Test location", 31.2304, 121.4737, true);
+    }
+
+    private ProductSaveRequest multiSkuProductRequest(String name) {
+        List<ProductSpecGroupDto> groups = List.of(
+                new ProductSpecGroupDto(
+                        "weight",
+                        "重量",
+                        10,
+                        List.of(
+                                new ProductSpecOptionDto("weight-500", "500g", "", 10),
+                                new ProductSpecOptionDto("weight-1000", "1kg", "", 20)
+                        )
+                ),
+                new ProductSpecGroupDto(
+                        "package",
+                        "包装",
+                        20,
+                        List.of(
+                                new ProductSpecOptionDto("package-1", "1盒", "", 10),
+                                new ProductSpecOptionDto("package-2", "2盒", "", 20)
+                        )
+                )
+        );
+        List<ProductSkuDto> skus = List.of(
+                skuRequest("BLUEBERRY-500-1", List.of("weight-500", "package-1"), 1990, "5", true, 10),
+                skuRequest("BLUEBERRY-500-2", List.of("weight-500", "package-2"), 3690, "6", false, 20),
+                skuRequest("BLUEBERRY-1000-1", List.of("weight-1000", "package-1"), 3590, "7", false, 30),
+                skuRequest("BLUEBERRY-1000-2", List.of("weight-1000", "package-2"), 6790, "8", false, 40)
+        );
+        return new ProductSaveRequest(
+                5L,
+                name,
+                "颗颗饱满，新鲜到店",
+                "/assets/products/strawberry.png",
+                "盒",
+                1990,
+                BigDecimal.ONE,
+                BigDecimal.ONE,
+                BigDecimal.ZERO,
+                "多规格",
+                1,
+                false,
+                99,
+                true,
+                groups,
+                skus
+        );
+    }
+
+    private ProductSkuDto skuRequest(
+            String code,
+            List<String> optionIds,
+            int price,
+            String stock,
+            boolean defaultSku,
+            int sortOrder
+    ) {
+        return new ProductSkuDto(
+                null,
+                code,
+                "",
+                optionIds,
+                "",
+                "",
+                price,
+                new BigDecimal(stock),
+                "盒",
+                BigDecimal.ONE,
+                BigDecimal.ONE,
+                1,
+                defaultSku,
+                sortOrder
+        );
+    }
+
+    private ProductSkuDto sku(ProductDto product, Long skuId) {
+        return product.skus().stream().filter(item -> item.id().equals(skuId)).findFirst().orElseThrow();
     }
 }

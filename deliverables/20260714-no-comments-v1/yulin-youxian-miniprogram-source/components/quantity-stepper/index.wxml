@@ -1,0 +1,9 @@
+<view class="stepper {{glassMode ? 'glass-mode' : ''}}">
+  <button class="step-button" bindtap="handleMinus">
+    <image class="step-icon" src="/assets/icons/minus-green.svg" mode="aspectFit" />
+  </button>
+  <text class="step-value">{{displayText}}</text>
+  <button class="step-button plus" bindtap="handlePlus">
+    <image class="step-icon" src="/assets/icons/add-green.svg" mode="aspectFit" />
+  </button>
+</view>

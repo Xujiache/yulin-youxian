@@ -75,9 +75,9 @@ public class WxOrderController {
         return ApiResponse.ok(wechatPaymentService.createPayment(id));
     }
 
-    @PostMapping("/orders/{id}/pay/development-success")
-    public ApiResponse<OrderDetailDto> developmentPaySuccess(@PathVariable Long id) {
-        return ApiResponse.ok(wechatPaymentService.confirmDevelopmentPayment(id));
+    @PostMapping("/orders/{id}/payment-status")
+    public ApiResponse<OrderDetailDto> paymentStatus(@PathVariable Long id) {
+        return ApiResponse.ok(wechatPaymentService.refreshPaymentStatus(id));
     }
 
     @PostMapping("/refunds")

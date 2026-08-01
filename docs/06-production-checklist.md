@@ -5,10 +5,8 @@
 - `SERVER_PORT`：后端监听端口。
 - `ADMIN_USERNAME`：管理后台账号。
 - `ADMIN_PASSWORD`：管理后台密码，禁止使用弱密码。
-- `WECHAT_MINIAPP_DEVELOPMENT_MODE=false`。
 - `WECHAT_MINIAPP_APP_ID`：小程序 AppID。
 - `WECHAT_MINIAPP_APP_SECRET`：小程序 AppSecret。
-- `WECHAT_PAY_DEVELOPMENT_MODE=false`。
 - `WECHAT_PAY_APP_ID`：微信支付 AppID。
 - `WECHAT_PAY_MCH_ID`：微信支付商户号。
 - `WECHAT_PAY_API_V3_KEY`：微信支付 API v3 密钥。
@@ -30,7 +28,7 @@
 - 在 `client-wechat/app.js` 配置正式 HTTPS 后端域名。
 - 在微信公众平台配置 request/uploadFile/downloadFile 合法域名。
 - 保持 `project.config.json` 的 `urlCheck=true`。
-- 发布前不要开启模拟支付或开发登录模式。
+- 发布前确认已配置真实微信登录和微信支付凭证，并使用回调验签完成支付确认。
 
 ## 管理后台发布
 

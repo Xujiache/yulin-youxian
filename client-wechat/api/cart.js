@@ -11,14 +11,24 @@ async function getCart() {
   };
 }
 
-async function addCartItem(productId, quantity) {
+async function addCartItem(productId, quantity, skuId) {
   const item = await request({
     url: "/api/wx/cart/items",
     method: "POST",
     data: {
       productId,
+      ...(skuId === null || skuId === undefined ? {} : { skuId }),
       quantity
     }
+  });
+  return normalizeCartItem(item);
+}
+
+async function replaceCartItemSku(id, skuId, quantity) {
+  const item = await request({
+    url: `/api/wx/cart/items/${id}/sku`,
+    method: "PUT",
+    data: { skuId, quantity }
   });
   return normalizeCartItem(item);
 }
@@ -58,6 +68,7 @@ function clearSelectedCartItems() {
 module.exports = {
   getCart,
   addCartItem,
+  replaceCartItemSku,
   updateCartItem,
   setCartItemSelected,
   deleteCartItem,

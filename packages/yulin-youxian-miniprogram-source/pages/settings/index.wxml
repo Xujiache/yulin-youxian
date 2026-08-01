@@ -1,0 +1,30 @@
+<view class="settings-page">
+  <skeleton wx:if="{{loading}}" type="list" />
+  <view class="page-header">
+    <image class="back-icon" src="/assets/icons/back-green.svg" mode="aspectFit" bindtap="goBack" />
+    <text class="page-title">设置</text>
+    <view class="header-space"></view>
+  </view>
+
+  <view class="settings-content">
+    <view class="settings-panel">
+      <view
+        wx:for="{{items}}"
+        wx:key="key"
+        class="settings-item"
+        data-key="{{item.key}}"
+        bindtap="handleItem"
+      >
+        <view class="item-copy">
+          <text class="item-title">{{item.label}}</text>
+          <text class="item-desc">{{item.desc}}</text>
+        </view>
+        <image class="arrow" src="/assets/icons/chevron-right-gray.svg" mode="aspectFit" />
+      </view>
+    </view>
+
+    <button class="logout-button {{isLoggedIn ? '' : 'disabled'}}" bindtap="handleLogout">
+      {{isLoggedIn ? '退出登录' : '当前未登录'}}
+    </button>
+  </view>
+</view>

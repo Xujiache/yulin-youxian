@@ -10,6 +10,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
@@ -33,15 +35,27 @@ public class MysqlStateStore implements StateStore {
     private final JdbcTemplate jdbcTemplate;
     private final boolean shadowWriteLegacyJson;
     private final boolean rejectSuspiciousQuestionMarks;
+    private final ApplicationEventPublisher eventPublisher;
 
     public MysqlStateStore(
             JdbcTemplate jdbcTemplate,
             @Value("${persistence.mysql.shadow-write-legacy-json:true}") boolean shadowWriteLegacyJson,
             @Value("${persistence.mysql.reject-suspicious-question-marks:true}") boolean rejectSuspiciousQuestionMarks
     ) {
+        this(jdbcTemplate, shadowWriteLegacyJson, rejectSuspiciousQuestionMarks, null);
+    }
+
+    @Autowired
+    public MysqlStateStore(
+            JdbcTemplate jdbcTemplate,
+            @Value("${persistence.mysql.shadow-write-legacy-json:true}") boolean shadowWriteLegacyJson,
+            @Value("${persistence.mysql.reject-suspicious-question-marks:true}") boolean rejectSuspiciousQuestionMarks,
+            ApplicationEventPublisher eventPublisher
+    ) {
         this.jdbcTemplate = jdbcTemplate;
         this.shadowWriteLegacyJson = shadowWriteLegacyJson;
         this.rejectSuspiciousQuestionMarks = rejectSuspiciousQuestionMarks;
+        this.eventPublisher = eventPublisher;
     }
 
     @Override
@@ -77,6 +91,9 @@ public class MysqlStateStore implements StateStore {
             } catch (RuntimeException exception) {
                 LOGGER.error("MySQL state saved but legacy shadow write failed: {}", legacyPath, exception);
             }
+        }
+        if (eventPublisher != null) {
+            eventPublisher.publishEvent(new StateChangedEvent(stateKey));
         }
     }
 

@@ -26,6 +26,37 @@ export interface Category {
   iconUrl: string
 }
 
+export interface ProductSpecOption {
+  id: string
+  name: string
+  imageUrl: string
+  sortOrder: number
+}
+
+export interface ProductSpecGroup {
+  id: string
+  name: string
+  sortOrder: number
+  options: ProductSpecOption[]
+}
+
+export interface ProductSku {
+  id?: number
+  skuCode: string
+  barcode: string
+  optionValueIds: string[]
+  specificationText: string
+  imageUrl: string
+  unitPrice: number
+  stockQty: number
+  saleUnit: string
+  minPurchaseQty: number
+  stepQty: number
+  status: number
+  defaultSku: boolean
+  sortOrder: number
+}
+
 export interface Product {
   id?: number
   categoryId: number | null
@@ -40,6 +71,13 @@ export interface Product {
   badge: string
   status: number
   recommended: boolean
+  sortOrder: number | null
+  skuEnabled: boolean
+  minUnitPrice: number
+  maxUnitPrice: number
+  availableSkuCount: number
+  specGroups: ProductSpecGroup[]
+  skus: ProductSku[]
 }
 
 export interface OrderSummary {
@@ -50,6 +88,20 @@ export interface OrderSummary {
   deliverySlot: string
   summary: string
   images: string[]
+  createdAt?: string
+  latestRefundStatus?: string
+  latestRefundReason?: string
+  address: Address
+  deliveryDate: string
+  deliveryArea: string
+  deliveryBuilding: string
+  deliveryGroupKey: string
+  deliverySequence: number
+  buildingOrderCount: number
+  buildingOrderPosition: number
+  sameAddressOrderCount: number
+  printStatus?: 'NONE' | 'PENDING' | 'SUCCESS' | 'FAILED'
+  printJobId?: number | null
 }
 
 export interface Address {
@@ -72,6 +124,9 @@ export interface OrderItem {
   unitPrice: number
   quantity: number
   amount: number
+  skuId?: number | null
+  skuCode?: string
+  specificationText?: string
 }
 
 export interface OrderDetail {
@@ -93,6 +148,19 @@ export interface OrderDetail {
   latestRefundReason?: string
   userId: number
   refunds: Refund[]
+  transactionId: string
+}
+
+export interface BatchOrderActionResult {
+  requested: number
+  success: number
+  skipped: number
+  processedOrderIds: number[]
+  errors: Array<{
+    orderId: number
+    orderNo: string
+    reason: string
+  }>
 }
 
 export interface Refund {
@@ -132,6 +200,7 @@ export interface StoreSettings {
   businessHours: string
   contactPhone: string
   firstOrderFreeDelivery: boolean
+  autoDeliveryEnabled: boolean
   freeDeliveryCampaigns: FreeDeliveryCampaign[]
 }
 
@@ -165,13 +234,94 @@ export interface Banner {
   enabled: boolean
 }
 
+export interface PrinterConfig {
+  enabled: boolean
+  autoPrintOnPaid: boolean
+  retryLimit: number
+  printerModel: string
+  accessKeyConfigured: boolean
+  agentOnline: boolean
+  agentName: string
+  agentConnection: string
+  agentVersion: string
+  agentLastSeen: string
+  pendingJobCount: number
+  failedJobCount: number
+}
+
+export interface PrintReceiptItem {
+  name: string
+  quantity: string
+  unitPrice: string
+  amount: string
+}
+
+export interface PrintReceipt {
+  storeName: string
+  title: string
+  orderNo: string
+  createdAt: string
+  deliverySlot: string
+  customerName: string
+  customerPhone: string
+  address: string
+  items: PrintReceiptItem[]
+  productAmount: string
+  deliveryFee: string
+  packageFee: string
+  payableAmount: string
+  remark: string
+}
+
+export interface PrintJob {
+  id: number
+  orderId?: number | null
+  type: string
+  orderNo: string
+  status: string
+  attemptCount: number
+  retryLimit: number
+  createdAt: string
+  nextAttemptAt?: string | null
+  printedAt?: string | null
+  lastError?: string | null
+  leaseToken?: string | null
+  receipt: PrintReceipt
+}
+
+export interface BatchPrintRequest {
+  orderIds: number[]
+}
+
+export interface BatchPrintResult {
+  success: number
+  failed: number
+  jobs: PrintJob[]
+  errors: BatchPrintError[]
+}
+
+export interface BackupMetadata {
+  fileName: string
+  type: string
+  createdAt: string
+  sizeBytes: number
+  sha256: string
+}
+
+export interface BatchPrintError {
+  orderId: number
+  reason: string
+}
+
 const productPayload = (data: Product) => {
-  const { id: _id, ...payload } = data
+  const payload = { ...data }
+  delete payload.id
   return payload
 }
 
 const deliverySlotPayload = (data: DeliverySlot) => {
-  const { id: _id, ...payload } = data
+  const payload = { ...data }
+  delete payload.id
   return payload
 }
 
@@ -234,6 +384,12 @@ export function getProducts(params?: { categoryId?: number | null }) {
   })
 }
 
+export function getProduct(id: number) {
+  return request.get<Product>({
+    url: `/api/admin/products/${id}`
+  })
+}
+
 export function createProduct(data: Product) {
   return request.post<Product>({
     url: '/api/admin/products',
@@ -268,6 +424,13 @@ export function updateProductStock(id: number, stockQty: number) {
   })
 }
 
+export function updateProductSortOrder(id: number, sortOrder: number) {
+  return request.put<Product>({
+    url: `/api/admin/products/${id}/sort-order`,
+    data: { sortOrder }
+  })
+}
+
 export function uploadProductImage(file: File) {
   const data = new FormData()
   data.append('file', file)
@@ -277,10 +440,14 @@ export function uploadProductImage(file: File) {
   })
 }
 
-export function getOrders(status?: string) {
+export function getOrders(status?: string, deliveryDate?: string, printStatus?: string) {
+  const params: Record<string, string> = {}
+  if (status && status !== '全部') params.status = status
+  if (deliveryDate) params.deliveryDate = deliveryDate
+  if (printStatus && printStatus !== '全部') params.printStatus = printStatus
   return request.get<PageResult<OrderSummary>>({
     url: '/api/admin/orders',
-    params: status && status !== '全部' ? { status } : undefined
+    params: Object.keys(params).length ? params : undefined
   })
 }
 
@@ -308,6 +475,12 @@ export function deliverOrder(id: number) {
   })
 }
 
+export function refreshOrderPaymentTransaction(id: number) {
+  return request.post<OrderDetail>({
+    url: `/api/admin/orders/${id}/payment-transaction/refresh`
+  })
+}
+
 export function completeOrder(id: number) {
   return request.post<OrderDetail>({
     url: `/api/admin/orders/${id}/complete`
@@ -317,6 +490,20 @@ export function completeOrder(id: number) {
 export function cancelOrder(id: number) {
   return request.post<OrderDetail>({
     url: `/api/admin/orders/${id}/cancel`
+  })
+}
+
+export function batchPrepareOrders(orderIds: number[]) {
+  return request.post<BatchOrderActionResult>({
+    url: '/api/admin/orders/batch/prepare',
+    data: { orderIds }
+  })
+}
+
+export function batchDeliverOrders(orderIds: number[]) {
+  return request.post<BatchOrderActionResult>({
+    url: '/api/admin/orders/batch/deliver',
+    data: { orderIds }
   })
 }
 
@@ -459,5 +646,69 @@ export function uploadLogoImage(file: File) {
 export function seedDemoData() {
   return request.post<Record<string, number>>({
     url: '/api/admin/settings/demo-data/seed'
+  })
+}
+
+export function getPrinterConfig() {
+  return request.get<PrinterConfig>({
+    url: '/api/admin/printing/config'
+  })
+}
+
+export function updatePrinterConfig(
+  data: Pick<PrinterConfig, 'enabled' | 'autoPrintOnPaid' | 'retryLimit' | 'printerModel'>
+) {
+  return request.put<PrinterConfig>({
+    url: '/api/admin/printing/config',
+    data
+  })
+}
+
+export function regeneratePrinterAccessKey() {
+  return request.post<{ accessKey: string }>({
+    url: '/api/admin/printing/access-key'
+  })
+}
+
+export function createPrinterTest() {
+  return request.post<PrintJob>({
+    url: '/api/admin/printing/test'
+  })
+}
+
+export function getPrintJobs() {
+  return request.get<PrintJob[]>({
+    url: '/api/admin/printing/jobs'
+  })
+}
+
+export function retryPrintJob(id: number) {
+  return request.post<PrintJob>({
+    url: `/api/admin/printing/jobs/${id}/retry`
+  })
+}
+
+export function batchPrintOrders(orderIds: number[]) {
+  return request.post<BatchPrintResult>({
+    url: '/api/admin/printing/orders/batch',
+    data: { orderIds }
+  })
+}
+
+export function getBackups() {
+  return request.get<BackupMetadata[]>({
+    url: '/api/admin/backups'
+  })
+}
+
+export function createBackup() {
+  return request.post<BackupMetadata>({
+    url: '/api/admin/backups'
+  })
+}
+
+export function restoreBackup(fileName: string) {
+  return request.post<{ restoredBackup: BackupMetadata; preRestoreBackup: BackupMetadata }>({
+    url: `/api/admin/backups/${encodeURIComponent(fileName)}/restore`
   })
 }

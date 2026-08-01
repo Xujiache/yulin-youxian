@@ -1,5 +1,6 @@
 {
   "usingComponents": {
-    "quantity-stepper": "../../components/quantity-stepper/index"
+    "quantity-stepper": "../../components/quantity-stepper/index",
+    "cart-add-sheet": "../../components/cart-add-sheet/index"
   }
 }

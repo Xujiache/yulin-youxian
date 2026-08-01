@@ -8,7 +8,6 @@ public record PaymentDto(
         String nonceStr,
         String packageValue,
         String signType,
-        String paySign,
-        boolean developmentMode
+        String paySign
 ) {
 }

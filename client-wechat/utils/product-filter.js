@@ -4,6 +4,7 @@ const SORT_OPTIONS = [
   { label: "价格最高", value: "priceDesc" },
   { label: "库存优先", value: "stockDesc" }
 ];
+const { isUnavailable } = require("./product-availability");
 
 const PRICE_OPTIONS = [
   { label: "全部价格", value: "all" },
@@ -17,7 +18,7 @@ function getNumber(value) {
 }
 
 function matchPrice(product, priceRange) {
-  const price = getNumber(product.unitPrice);
+  const price = getNumber(product.skuEnabled ? product.minUnitPrice : product.unitPrice);
   if (priceRange === "lt1000") {
     return price < 1000;
   }
@@ -35,22 +36,30 @@ function applyProductFilters(products, filters) {
   const priceRange = filters.priceRange || "all";
   const onlyStock = Boolean(filters.onlyStock);
   const list = (products || []).filter((product) => {
-    if (onlyStock && getNumber(product.stockQty) <= 0) {
+    if (onlyStock && isUnavailable(product)) {
       return false;
     }
     return matchPrice(product, priceRange);
   });
 
-  if (sortMode === "priceAsc") {
-    return list.sort((a, b) => getNumber(a.unitPrice) - getNumber(b.unitPrice));
-  }
-  if (sortMode === "priceDesc") {
-    return list.sort((a, b) => getNumber(b.unitPrice) - getNumber(a.unitPrice));
-  }
-  if (sortMode === "stockDesc") {
-    return list.sort((a, b) => getNumber(b.stockQty) - getNumber(a.stockQty));
-  }
-  return list;
+  return list.sort((left, right) => {
+    const availabilityOrder = Number(isUnavailable(left)) - Number(isUnavailable(right));
+    if (availabilityOrder) {
+      return availabilityOrder;
+    }
+    const leftPrice = getNumber(left.skuEnabled ? left.minUnitPrice : left.unitPrice);
+    const rightPrice = getNumber(right.skuEnabled ? right.minUnitPrice : right.unitPrice);
+    if (sortMode === "priceAsc") {
+      return leftPrice - rightPrice;
+    }
+    if (sortMode === "priceDesc") {
+      return rightPrice - leftPrice;
+    }
+    if (sortMode === "stockDesc") {
+      return getNumber(right.stockQty) - getNumber(left.stockQty);
+    }
+    return 0;
+  });
 }
 
 function getOptionLabel(options, value) {
