@@ -1,0 +1,7 @@
+{
+  "navigationStyle": "custom",
+  "usingComponents": {
+    "feedback-nav": "../../components/nav-bar/index",
+    "image-uploader": "../../components/image-uploader/index"
+  }
+}

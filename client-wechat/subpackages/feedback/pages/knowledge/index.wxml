@@ -1,0 +1,15 @@
+<view class="page" style="{{themeStyle}}">
+  <feedback-nav title="已修复问题库" theme-style="{{themeStyle}}"></feedback-nav>
+  <view class="body">
+    <state-view state="{{state}}" error-text="{{errorText}}" empty-text="本项目暂无已修复问题" bindretry="load">
+      <view class="list">
+        <view wx:for="{{items}}" wx:key="id" class="card item">
+          <view class="row"><text class="title">{{item.summary || item.content}}</text><text class="date">{{item.resolvedAtText}}</text></view>
+          <text class="content">{{item.content}}</text>
+          <text wx:if="{{item.resolution}}" class="resolution">解决结果：{{item.resolution}}</text>
+        </view>
+        <view wx:if="{{loadingMore}}" class="more">加载中…</view>
+      </view>
+    </state-view>
+  </view>
+</view>

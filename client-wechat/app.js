@@ -1,4 +1,4 @@
-const { API_BASE_URL } = require("./utils/config");
+const { API_BASE_URL, FEEDBACK_BASE_URL, FEEDBACK_PROJECT_KEY } = require("./utils/config");
 const { preloadStaticImages } = require("./utils/image-cache");
 
 function currentRoute() {
@@ -20,7 +20,14 @@ App({
     cartCount: 0,
     authToken: "",
     user: null,
-    glassMode: false
+    glassMode: false,
+    // 仅公开接入配置；反馈分包首次进入时自行读取。
+    // 主包不得 require 分包代码，AppSecret 始终只保存在服务端。
+    feedbackConfig: {
+      feedbackBaseUrl: FEEDBACK_BASE_URL,
+      projectKey: FEEDBACK_PROJECT_KEY,
+      subpackageRoot: "/subpackages/feedback"
+    }
   },
 
   onLaunch() {

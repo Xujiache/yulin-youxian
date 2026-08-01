@@ -1,0 +1,13 @@
+<view class="uploader">
+  <view class="grid">
+    <view wx:for="{{images}}" wx:key="localId" class="image-wrap">
+      <image class="image" src="{{item.path}}" mode="aspectFill" data-path="{{item.path}}" bindtap="preview"></image>
+      <button class="remove" data-index="{{index}}" bindtap="remove" aria-label="删除图片">×</button>
+      <view wx:if="{{item.state === 'uploading'}}" class="mask"><text>{{item.progress}}%</text></view>
+      <view wx:elif="{{item.state === 'failed'}}" class="mask failed" data-index="{{index}}" bindtap="retry"><text>上传失败</text><text>点此重试</text></view>
+      <view wx:elif="{{item.state === 'uploaded'}}" class="done">✓</view>
+    </view>
+    <button wx:if="{{images.length < max}}" class="choose" disabled="{{disabled}}" bindtap="choose"><text class="plus">＋</text><text>{{images.length}}/{{max}}</text></button>
+  </view>
+  <text class="hint">支持 JPEG、PNG、WebP，单张不超过 10MB；全部上传成功后才会提交。</text>
+</view>

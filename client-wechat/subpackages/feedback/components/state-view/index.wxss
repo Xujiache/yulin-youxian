@@ -1,0 +1,5 @@
+.state{min-height:360rpx;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20rpx;color:var(--feedback-muted,#667085);font-size:28rpx}
+.icon{font-size:70rpx}.danger{color:var(--feedback-danger,#d92d20)}
+.spinner{width:44rpx;height:44rpx;border:5rpx solid #e4e7ec;border-top-color:var(--feedback-primary,#2563eb);border-radius:50%;animation:spin .8s linear infinite}
+.retry{margin-top:10rpx;padding:12rpx 32rpx;background:var(--feedback-primary,#2563eb);color:#fff;border-radius:12rpx;font-size:26rpx;line-height:1.6}.retry::after{border:0}
+@keyframes spin{to{transform:rotate(360deg)}}

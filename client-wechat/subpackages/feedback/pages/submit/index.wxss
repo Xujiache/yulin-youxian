@@ -1,0 +1,2 @@
+@import "../../styles/common.wxss";
+.counter{text-align:right;color:#98a2b3;font-size:22rpx;margin-top:8rpx}.image-title{margin-top:30rpx}.submit{margin-top:28rpx;height:92rpx}.privacy{display:block;margin:20rpx 10rpx;color:#98a2b3;font-size:22rpx;line-height:1.6;text-align:center}

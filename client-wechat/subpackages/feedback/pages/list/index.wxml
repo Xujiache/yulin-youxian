@@ -1,0 +1,17 @@
+<view class="page" style="{{themeStyle}}">
+  <feedback-nav title="我的反馈" back="{{showBack}}" theme-style="{{themeStyle}}"></feedback-nav>
+  <view class="body">
+    <view class="actions"><button class="primary-button" bindtap="create">提交反馈</button><button class="secondary-button" bindtap="knowledge">已修复问题库</button></view>
+    <state-view state="{{state}}" error-text="{{errorText}}" empty-text="还没有提交过反馈" bindretry="load">
+      <view class="list">
+        <view wx:for="{{items}}" wx:key="id" class="card item" data-id="{{item.id}}" bindtap="open">
+          <view class="row"><status-pill label="{{item.statusLabel}}" tone="{{item.statusTone}}"></status-pill><text class="time">{{item.createdAtText}}</text></view>
+          <text class="summary">{{item.summary || item.content}}</text>
+          <text wx:if="{{item.category}}" class="category">{{item.category}}</text>
+        </view>
+        <view wx:if="{{loadingMore}}" class="more">加载中…</view>
+        <view wx:elif="{{items.length && items.length >= total}}" class="more">没有更多了</view>
+      </view>
+    </state-view>
+  </view>
+</view>

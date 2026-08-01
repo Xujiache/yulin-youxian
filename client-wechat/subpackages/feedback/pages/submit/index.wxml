@@ -1,0 +1,14 @@
+<view class="page" style="{{themeStyle}}">
+  <feedback-nav title="提交反馈" theme-style="{{themeStyle}}"></feedback-nav>
+  <view class="body">
+    <view class="card">
+      <text class="section-title">问题描述</text>
+      <textarea class="textarea" maxlength="2000" value="{{content}}" bindinput="onInput" placeholder="请说明发生了什么、期望结果和复现步骤"></textarea>
+      <view class="counter">{{content.length}}/2000</view>
+      <text class="section-title image-title">截图（可选）</text>
+      <image-uploader images="{{images}}" max="6" disabled="{{submitting}}" bindchoose="chooseImages" bindremove="removeImage" bindretry="retryImage"></image-uploader>
+    </view>
+    <button class="primary-button submit" disabled="{{submitting}}" loading="{{submitting}}" bindtap="submit">{{submitting ? '正在提交' : '提交反馈'}}</button>
+    <text class="privacy">提交时会自动附带设备型号、系统、网络、当前页面及小程序版本，帮助定位问题。</text>
+  </view>
+</view>

@@ -1,0 +1,2 @@
+.pill{display:inline-flex;padding:6rpx 14rpx;border-radius:999rpx;font-size:22rpx;font-weight:500;background:#f2f4f7;color:#667085}
+.warning{background:#fffaeb;color:#b54708}.danger{background:#fef3f2;color:#b42318}.info{background:#eff8ff;color:#175cd3}.primary{background:#eef4ff;color:#3538cd}.success{background:#ecfdf3;color:#027a48}.muted{background:#f2f4f7;color:#667085}

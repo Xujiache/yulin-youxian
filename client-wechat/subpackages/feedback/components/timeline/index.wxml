@@ -1,0 +1,9 @@
+<view class="timeline">
+  <view wx:for="{{items}}" wx:key="id" class="entry">
+    <view class="rail"><view class="dot"></view><view wx:if="{{index < items.length - 1}}" class="line"></view></view>
+    <view class="content">
+      <view class="meta"><text class="sender">{{item.senderLabel}}</text><text>{{item.createdAtText}}</text></view>
+      <text class="message">{{item.content}}</text>
+    </view>
+  </view>
+</view>

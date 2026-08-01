@@ -1,0 +1,29 @@
+<view class="page" style="{{themeStyle}}">
+  <feedback-nav title="反馈详情" theme-style="{{themeStyle}}"></feedback-nav>
+  <view class="body">
+    <state-view state="{{state}}" error-text="{{errorText}}" bindretry="load">
+      <view class="card header">
+        <view class="row"><status-pill label="{{feedback.statusLabel}}" tone="{{feedback.statusTone}}"></status-pill><text class="time">{{feedback.createdAtText}}</text></view>
+        <text wx:if="{{feedback.summary}}" class="title">{{feedback.summary}}</text>
+        <text class="description">{{feedback.content}}</text>
+        <view wx:if="{{feedback.attachments.length}}" class="attachments">
+          <image wx:for="{{feedback.attachments}}" wx:key="id" class="attachment" src="{{item.url}}" mode="aspectFill" data-url="{{item.url}}" bindtap="preview"></image>
+        </view>
+      </view>
+      <view wx:if="{{feedback.canonicalFeedback}}" class="card canonical-card">
+        <text class="section-title">已关联主工单</text>
+        <view class="canonical-row"><status-pill label="{{feedback.canonicalFeedback.statusLabel}}" tone="{{feedback.canonicalFeedback.statusTone}}"></status-pill><text class="time">{{feedback.canonicalFeedback.updatedAtText}}</text></view>
+        <text class="canonical-title">{{feedback.canonicalFeedback.summary || '主工单正在处理'}}</text>
+        <text wx:if="{{feedback.canonicalFeedback.resolution}}" class="canonical-resolution">解决结果：{{feedback.canonicalFeedback.resolution}}</text>
+        <text wx:if="{{feedback.canonicalFeedback.resolvedAtText}}" class="canonical-resolved-at">修复时间：{{feedback.canonicalFeedback.resolvedAtText}}</text>
+      </view>
+      <view wx:if="{{feedback.status === 'NEEDS_MORE_INFO'}}" class="card supplement-card">
+        <text class="section-title">补充信息</text>
+        <textarea class="textarea" maxlength="2000" value="{{supplement}}" bindinput="onSupplement" placeholder="请在原反馈中补充管理员要求的信息"></textarea>
+        <image-uploader images="{{images}}" max="{{attachmentMax}}" disabled="{{submitting}}" bindchoose="chooseImages" bindremove="removeImage" bindretry="retryImage"></image-uploader>
+        <button class="primary-button supplement-button" loading="{{submitting}}" disabled="{{submitting}}" bindtap="submitSupplement">提交补充</button>
+      </view>
+      <view class="card timeline-card"><text class="section-title">处理记录</text><feedback-timeline items="{{messages}}"></feedback-timeline><text wx:if="{{!messages.length}}" class="muted empty-message">暂无处理消息</text></view>
+    </state-view>
+  </view>
+</view>

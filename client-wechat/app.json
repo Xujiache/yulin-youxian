@@ -39,5 +39,17 @@
     "skeleton": "/components/skeleton/index"
   },
   "style": "v2",
-  "sitemapLocation": "sitemap.json"
+  "sitemapLocation": "sitemap.json",
+  "subPackages": [
+    {
+      "root": "subpackages/feedback",
+      "name": "feedback",
+      "pages": [
+        "pages/list/index",
+        "pages/submit/index",
+        "pages/detail/index",
+        "pages/knowledge/index"
+      ]
+    }
+  ]
 }

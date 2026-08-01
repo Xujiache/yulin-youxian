@@ -1,0 +1,4 @@
+<view wx:if="{{state === 'loading'}}" class="state"><view class="spinner"></view><text>{{loadingText}}</text></view>
+<view wx:elif="{{state === 'empty'}}" class="state"><text class="icon">◇</text><text>{{emptyText}}</text></view>
+<view wx:elif="{{state === 'error'}}" class="state"><text class="icon danger">!</text><text>{{errorText}}</text><button class="retry" bindtap="retry">重新加载</button></view>
+<slot wx:else></slot>

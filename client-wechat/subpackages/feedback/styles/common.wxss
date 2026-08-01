@@ -1,0 +1,7 @@
+page{background:var(--feedback-page-bg,#f5f7fb);color:var(--feedback-text,#172033);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+.page{min-height:100vh;background:var(--feedback-page-bg,#f5f7fb);padding-bottom:calc(40rpx + env(safe-area-inset-bottom))}
+.body{padding:28rpx}.card{background:var(--feedback-card-bg,#fff);border-radius:20rpx;padding:28rpx;box-shadow:0 4rpx 16rpx rgba(16,24,40,.05)}
+.section-title{display:block;margin-bottom:18rpx;font-size:28rpx;font-weight:600}.muted{color:var(--feedback-muted,#667085)}
+.primary-button{display:flex;align-items:center;justify-content:center;background:var(--feedback-primary,#2563eb);color:var(--feedback-primary-text,#fff);border-radius:14rpx;font-size:30rpx;font-weight:600}.primary-button::after{border:0}.primary-button[disabled]{opacity:.5}
+.secondary-button{display:flex;align-items:center;justify-content:center;background:#fff;color:var(--feedback-primary,#2563eb);border:2rpx solid var(--feedback-primary,#2563eb);border-radius:14rpx}.secondary-button::after{border:0}
+.textarea{box-sizing:border-box;width:100%;min-height:220rpx;padding:22rpx;background:#f9fafb;border:2rpx solid #eaecf0;border-radius:14rpx;font-size:28rpx;line-height:1.6}

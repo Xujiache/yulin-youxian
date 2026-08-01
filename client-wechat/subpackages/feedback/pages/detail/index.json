@@ -1,0 +1,10 @@
+{
+  "navigationStyle": "custom",
+  "usingComponents": {
+    "feedback-nav": "../../components/nav-bar/index",
+    "state-view": "../../components/state-view/index",
+    "status-pill": "../../components/status-pill/index",
+    "image-uploader": "../../components/image-uploader/index",
+    "feedback-timeline": "../../components/timeline/index"
+  }
+}

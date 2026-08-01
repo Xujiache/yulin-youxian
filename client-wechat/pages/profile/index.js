@@ -49,6 +49,7 @@ Page({
     menus: [
       { label: "地址管理", url: "/pages/address/index", icon: "/assets/icons/profile-menu-location.png" },
       { label: "售后退款", url: "/pages/orders/index", icon: "/assets/icons/profile-menu-refund.png" },
+      { label: "问题反馈", url: "/subpackages/feedback/pages/list/index", icon: "/assets/icons/profile-menu-service.png" },
       { label: "联系客服", url: "", icon: "/assets/icons/profile-menu-service.png" },
       { label: "关于门店", url: "", icon: "/assets/icons/profile-menu-store.png" },
       { label: "设置", url: "/pages/settings/index", icon: "/assets/icons/profile-menu-settings.png" }
@@ -265,7 +266,8 @@ Page({
     const url = event.currentTarget.dataset.url;
     const label = event.currentTarget.dataset.label;
     if (url) {
-      if (url !== "/pages/settings/index" && !requireCompleteProfile("/pages/profile/index")) {
+      const isFeedbackEntry = url.startsWith("/subpackages/feedback/");
+      if (!isFeedbackEntry && url !== "/pages/settings/index" && !requireCompleteProfile("/pages/profile/index")) {
         return;
       }
       wx.navigateTo({ url });

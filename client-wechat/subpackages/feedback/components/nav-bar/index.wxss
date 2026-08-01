@@ -1,0 +1,6 @@
+.nav{position:sticky;top:0;z-index:20;background:var(--feedback-card-bg,#fff);color:var(--feedback-text,#172033);box-shadow:0 1rpx 0 rgba(16,24,40,.08)}
+.bar{display:flex;align-items:center;padding:0 24rpx}
+.title{flex:1;text-align:center;font-size:34rpx;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.back,.spacer{width:72rpx;height:64rpx}
+.back{display:flex;align-items:center;justify-content:flex-start;padding:0;border:0;background:transparent;color:var(--feedback-text,#172033);font-size:56rpx;line-height:1}
+.back::after{border:0}
