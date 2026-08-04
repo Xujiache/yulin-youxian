@@ -165,6 +165,23 @@ function enqueueDownload(task) {
   });
 }
 
+function saveDownloadedFile(tempFilePath, success, fail) {
+  const fileSystemManager = typeof wx.getFileSystemManager === "function"
+    ? wx.getFileSystemManager()
+    : null;
+  if (fileSystemManager && typeof fileSystemManager.saveFile === "function") {
+    fileSystemManager.saveFile({ tempFilePath, success, fail });
+    return;
+  }
+  if (typeof wx.saveFile === "function") {
+    wx.saveFile({ tempFilePath, success, fail });
+    return;
+  }
+  if (typeof fail === "function") {
+    fail({ errMsg: "saveFile is not available" });
+  }
+}
+
 function downloadImage(normalized, map) {
   return new Promise((resolve) => {
     try {
@@ -177,9 +194,9 @@ function downloadImage(normalized, map) {
             return;
           }
           try {
-            wx.saveFile({
-              tempFilePath: downloadResult.tempFilePath,
-              success(saveResult) {
+            saveDownloadedFile(
+              downloadResult.tempFilePath,
+              (saveResult) => {
                 try {
                   if (map[normalized] && map[normalized] !== saveResult.savedFilePath) {
                     removeSavedFile(map[normalized]);
@@ -196,10 +213,10 @@ function downloadImage(normalized, map) {
                   resolve(downloadResult.tempFilePath);
                 }
               },
-              fail() {
+              () => {
                 resolve(downloadResult.tempFilePath);
               }
-            });
+            );
           } catch {
             resolve(downloadResult.tempFilePath);
           }

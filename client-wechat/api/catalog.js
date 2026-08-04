@@ -1,13 +1,29 @@
 const request = require("../utils/request");
 const { normalizeAssetUrl, normalizeProduct } = require("./normalize");
 
+const MISSING_CATEGORY_ASSET_PATHS = new Set([
+  "/assets/products/category-fruit-3d.png",
+  "/assets/products/category-vegetable-3d.png"
+]);
+
+function categoryAssetPath(url) {
+  if (!url) {
+    return "";
+  }
+  return String(url).replace(/^https?:\/\/[^/]+/i, "");
+}
+
 function normalizeCategory(category) {
   if (!category) {
     return category;
   }
+  const sourceIconUrl = category.iconUrl || category.imageUrl || "";
+  const iconUrl = MISSING_CATEGORY_ASSET_PATHS.has(categoryAssetPath(sourceIconUrl))
+    ? "/assets/icons/category-default.svg"
+    : normalizeAssetUrl(sourceIconUrl);
   return {
     ...category,
-    iconUrl: normalizeAssetUrl(category.iconUrl || category.imageUrl)
+    iconUrl
   };
 }
 
