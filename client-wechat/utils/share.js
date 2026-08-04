@@ -4,14 +4,29 @@ const SHARE_IMAGES = {
   store: "/assets/share/share-store.jpg"
 };
 
-function enableShareToFriend() {
+function enableShareMenus() {
   if (typeof wx.showShareMenu !== "function") {
     return;
   }
   wx.showShareMenu({
-    menus: ["shareAppMessage"],
-    fail() {}
+    menus: ["shareAppMessage", "shareTimeline"],
+    fail() {
+      wx.showShareMenu({
+        menus: ["shareAppMessage"],
+        fail() {}
+      });
+    }
   });
+}
+
+function timelineShare(share) {
+  const path = String(share.path || "");
+  const queryIndex = path.indexOf("?");
+  return {
+    title: share.title,
+    query: queryIndex >= 0 ? path.slice(queryIndex + 1) : "",
+    imageUrl: share.imageUrl
+  };
 }
 
 function homeShare(storeName) {
@@ -41,7 +56,8 @@ function storeShare(storeName) {
 }
 
 module.exports = {
-  enableShareToFriend,
+  enableShareMenus,
+  timelineShare,
   homeShare,
   categoryShare,
   storeShare

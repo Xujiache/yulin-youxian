@@ -4,7 +4,7 @@ const { getHome } = require("../../api/catalog");
 const { requireCompleteProfile, requireLogin } = require("../../utils/auth-guard");
 const { cachedAssetUrl, cacheImage } = require("../../utils/image-cache");
 const { syncTheme } = require("../../utils/theme");
-const { enableShareToFriend, storeShare } = require("../../utils/share");
+const { enableShareMenus, storeShare, timelineShare } = require("../../utils/share");
 
 const DEFAULT_AVATAR_PATH = "/assets/products/avatar.png";
 const PROFILE_HERO_BG_PATH = "/assets/products/profile-hero-bg.jpg";
@@ -57,14 +57,19 @@ Page({
   },
 
   onLoad() {
-    enableShareToFriend();
+    enableShareMenus();
   },
 
   onShareAppMessage() {
     return storeShare(this.data.storeName);
   },
 
+  onShareTimeline() {
+    return timelineShare(storeShare(this.data.storeName));
+  },
+
   onShow() {
+    enableShareMenus();
     syncTheme(this);
     this.refreshStaticAssets();
     this.loadStoreInfo();

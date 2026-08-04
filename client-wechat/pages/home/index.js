@@ -4,7 +4,7 @@ const { requireCompleteProfile } = require("../../utils/auth-guard");
 const { cachedAssetUrl } = require("../../utils/image-cache");
 const { syncTheme } = require("../../utils/theme");
 const { sortAvailableFirst } = require("../../utils/product-availability");
-const { enableShareToFriend, homeShare } = require("../../utils/share");
+const { enableShareMenus, homeShare, timelineShare } = require("../../utils/share");
 
 Page({
   data: {
@@ -22,7 +22,7 @@ Page({
   },
 
   onLoad() {
-    enableShareToFriend();
+    enableShareMenus();
     this.loadHome();
   },
 
@@ -30,7 +30,12 @@ Page({
     return homeShare(this.data.storeName);
   },
 
+  onShareTimeline() {
+    return timelineShare(homeShare(this.data.storeName));
+  },
+
   onShow() {
+    enableShareMenus();
     syncTheme(this);
     this.loadCartCount();
   },
