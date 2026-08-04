@@ -43,11 +43,17 @@ Page({
   },
 
   async onLoad(options) {
-    const activeCategoryId = Number(options.categoryId || 1);
-    this.setData({ activeCategoryId });
     try {
-      await this.loadCategories();
-      await this.updateProducts(activeCategoryId);
+      const categories = await this.loadCategories();
+      const requestedCategoryId = Number(options.categoryId || 0);
+      const requestedCategory = categories.find((category) => Number(category.id) === requestedCategoryId);
+      const activeCategoryId = Number((requestedCategory || categories[0] || {}).id || 0);
+      this.setData({ activeCategoryId });
+      if (activeCategoryId) {
+        await this.updateProducts(activeCategoryId);
+      } else {
+        this.setData({ rawProducts: [], filteredProducts: [], products: [], hasMoreProducts: false });
+      }
     } finally {
       this.setData({ loading: false });
     }
@@ -60,9 +66,13 @@ Page({
 
   async loadCategories() {
     try {
-      this.setData({ categories: await getCategories() });
+      const categories = await getCategories();
+      this.setData({ categories });
+      return categories;
     } catch {
+      this.setData({ categories: [] });
       wx.showToast({ title: "分类加载失败", icon: "none" });
+      return [];
     }
   },
 

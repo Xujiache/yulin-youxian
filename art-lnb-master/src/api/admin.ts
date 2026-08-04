@@ -246,6 +246,14 @@ export interface BatchPrintResult {
   errors: BatchPrintError[]
 }
 
+export interface BackupMetadata {
+  fileName: string
+  type: string
+  createdAt: string
+  sizeBytes: number
+  sha256: string
+}
+
 export interface BatchPrintError {
   orderId: number
   reason: string
@@ -602,5 +610,23 @@ export function batchPrintOrders(orderIds: number[]) {
   return request.post<BatchPrintResult>({
     url: '/api/admin/printing/orders/batch',
     data: { orderIds }
+  })
+}
+
+export function getBackups() {
+  return request.get<BackupMetadata[]>({
+    url: '/api/admin/backups'
+  })
+}
+
+export function createBackup() {
+  return request.post<BackupMetadata>({
+    url: '/api/admin/backups'
+  })
+}
+
+export function restoreBackup(fileName: string) {
+  return request.post<{ restoredBackup: BackupMetadata; preRestoreBackup: BackupMetadata }>({
+    url: `/api/admin/backups/${encodeURIComponent(fileName)}/restore`
   })
 }

@@ -1,8 +1,9 @@
 const { yuan, lineAmount } = require("../../utils/format");
 const { getProduct } = require("../../api/catalog");
-const { addCartItem } = require("../../api/cart");
+const { addCartItem, getCart } = require("../../api/cart");
 const { requireCompleteProfile } = require("../../utils/auth-guard");
 const { syncTheme } = require("../../utils/theme");
+const { getProductAvailability } = require("../../utils/product-availability");
 
 Page({
   data: {
@@ -21,7 +22,11 @@ Page({
       saleUnit: ""
     },
     quantity: 1,
-    amountText: "0.00"
+    amountText: "0.00",
+    cartCount: 0,
+    unavailable: false,
+    availabilityLabel: "",
+    availabilityMessage: ""
   },
 
   async onLoad(options) {
@@ -35,12 +40,33 @@ Page({
       return;
     }
     const quantity = Number(product.minPurchaseQty || 1);
+    const availability = getProductAvailability(product);
     this.setData({
       product,
       quantity,
       amountText: yuan(lineAmount(product.unitPrice, quantity)),
+      unavailable: Boolean(availability.label),
+      availabilityLabel: availability.label,
+      availabilityMessage: availability.message,
       loading: false
     });
+  },
+
+  onShow() {
+    syncTheme(this);
+    this.loadCartCount();
+  },
+
+  async loadCartCount() {
+    const app = getApp();
+    if (!app.globalData.authToken && !wx.getStorageSync("authToken")) {
+      this.setData({ cartCount: 0 });
+      return;
+    }
+    try {
+      const cart = await getCart();
+      this.setData({ cartCount: (cart.items || []).length });
+    } catch {}
   },
 
   onShareAppMessage() {
@@ -79,12 +105,22 @@ Page({
     });
   },
 
+  goCart() {
+    wx.redirectTo({ url: "/pages/cart/index" });
+  },
+
   async handleAddCart() {
+    const availability = getProductAvailability(this.data.product);
+    if (availability.label) {
+      wx.showToast({ title: availability.message, icon: "none" });
+      return;
+    }
     if (!requireCompleteProfile()) {
       return;
     }
     try {
       await addCartItem(this.data.product.id, this.data.quantity);
+      await this.loadCartCount();
       wx.showToast({ title: "已加入购物车", icon: "success" });
     } catch {
       wx.showToast({ title: "加入失败，请重试", icon: "none" });
@@ -92,11 +128,17 @@ Page({
   },
 
   async handleBuyNow() {
+    const availability = getProductAvailability(this.data.product);
+    if (availability.label) {
+      wx.showToast({ title: availability.message, icon: "none" });
+      return;
+    }
     if (!requireCompleteProfile()) {
       return;
     }
     try {
       await addCartItem(this.data.product.id, this.data.quantity);
+      await this.loadCartCount();
       wx.navigateTo({ url: "/pages/checkout/index" });
     } catch {
       wx.showToast({ title: "购买失败，请重试", icon: "none" });

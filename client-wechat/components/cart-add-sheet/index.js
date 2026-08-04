@@ -1,5 +1,6 @@
 const { yuan, lineAmount } = require("../../utils/format");
 const { isGlassModeEnabled } = require("../../utils/theme");
+const { getProductAvailability } = require("../../utils/product-availability");
 
 Component({
   properties: {
@@ -17,7 +18,10 @@ Component({
     quantity: 1,
     unitPriceText: "0.00",
     amountText: "0.00",
-    glassMode: false
+    glassMode: false,
+    unavailable: false,
+    availabilityLabel: "",
+    availabilityMessage: ""
   },
 
   lifetimes: {
@@ -40,10 +44,14 @@ Component({
 
       const quantity = Number(product.minPurchaseQty || 1);
       const amount = lineAmount(product.unitPrice, quantity);
+      const availability = getProductAvailability(product);
       this.setData({
         quantity,
         unitPriceText: yuan(product.unitPrice),
-        amountText: yuan(amount)
+        amountText: yuan(amount),
+        unavailable: Boolean(availability.label),
+        availabilityLabel: availability.label,
+        availabilityMessage: availability.message
       });
     }
   },
@@ -63,6 +71,10 @@ Component({
     },
 
     handleConfirm() {
+      if (this.data.unavailable) {
+        wx.showToast({ title: this.data.availabilityMessage, icon: "none" });
+        return;
+      }
       this.triggerEvent("confirm", {
         product: this.properties.product,
         quantity: this.data.quantity

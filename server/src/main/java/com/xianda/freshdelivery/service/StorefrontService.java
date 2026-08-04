@@ -1055,6 +1055,12 @@ public class StorefrontService {
         }
     }
 
+    public synchronized void reloadFromPersistence() {
+        if (!loadState()) {
+            throw new IllegalStateException("恢复后的业务数据不存在: " + storagePath);
+        }
+    }
+
     private void persist() {
         StorefrontSnapshot snapshot = new StorefrontSnapshot(
                 new ArrayList<>(banners),
@@ -1399,6 +1405,7 @@ public class StorefrontService {
                 product.minPurchaseQty(),
                 product.stepQty(),
                 product.stockQty(),
+                product.status(),
                 item.selected(),
                 amount(product.unitPrice(), item.quantity())
         );
@@ -1502,7 +1509,6 @@ public class StorefrontService {
 
     private List<ProductDto> recommendedProducts() {
         return products.values().stream()
-                .filter(product -> product.status() == 1)
                 .filter(product -> Boolean.TRUE.equals(product.recommended()))
                 .sorted(productOrder())
                 .toList();

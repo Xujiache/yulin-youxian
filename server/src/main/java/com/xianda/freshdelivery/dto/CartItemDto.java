@@ -14,6 +14,7 @@ public record CartItemDto(
         BigDecimal minPurchaseQty,
         BigDecimal stepQty,
         BigDecimal stockQty,
+        Integer productStatus,
         boolean selected,
         Integer amount
 ) {

@@ -110,6 +110,16 @@ export const freshRoutes: AppRouteRecord = {
         icon: 'ri:printer-line',
         keepAlive: true
       }
+    },
+    {
+      path: 'backups',
+      name: 'FreshBackups',
+      component: '/fresh/backups',
+      meta: {
+        title: '数据备份',
+        icon: 'ri:database-2-line',
+        keepAlive: false
+      }
     }
   ]
 }

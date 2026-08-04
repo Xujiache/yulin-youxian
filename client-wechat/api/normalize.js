@@ -48,6 +48,8 @@ function normalizeCartItem(item) {
     quantity: numberOr(item.quantity, 1),
     minPurchaseQty: numberOr(item.minPurchaseQty, 1),
     stockQty: numberOr(item.stockQty, 9999),
+    productStatus: numberOr(item.productStatus !== undefined ? item.productStatus : item.status, 1),
+    status: numberOr(item.productStatus !== undefined ? item.productStatus : item.status, 1),
     stepQty: numberOr(item.stepQty, 1),
     saleUnit: item.saleUnit || "",
     imageUrl,

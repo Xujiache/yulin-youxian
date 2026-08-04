@@ -1,5 +1,6 @@
 const { yuan } = require("../../utils/format");
 const { isGlassModeEnabled } = require("../../utils/theme");
+const { getProductAvailability } = require("../../utils/product-availability");
 
 Component({
   properties: {
@@ -15,7 +16,11 @@ Component({
 
   data: {
     priceText: "0.00",
-    glassMode: false
+    glassMode: false,
+    unavailable: false,
+    availabilityLabel: "",
+    availabilityShortLabel: "",
+    availabilityMessage: ""
   },
 
   lifetimes: {
@@ -32,7 +37,14 @@ Component({
 
   observers: {
     product(product) {
-      this.setData({ priceText: yuan(product.unitPrice) });
+      const availability = getProductAvailability(product);
+      this.setData({
+        priceText: yuan(product.unitPrice),
+        unavailable: Boolean(availability.label),
+        availabilityLabel: availability.label,
+        availabilityShortLabel: availability.shortLabel,
+        availabilityMessage: availability.message
+      });
     }
   },
 
@@ -43,6 +55,10 @@ Component({
     },
 
     handleAdd() {
+      if (this.data.unavailable) {
+        wx.showToast({ title: this.data.availabilityMessage, icon: "none" });
+        return;
+      }
       this.triggerEvent("add", { product: this.properties.product });
     }
   }

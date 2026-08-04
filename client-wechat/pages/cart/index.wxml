@@ -32,28 +32,33 @@
   </view>
 
   <view wx:else class="cart-list">
-    <view wx:for="{{items}}" wx:key="id" class="cart-item card">
+    <view wx:for="{{items}}" wx:key="id" class="cart-item card {{item.unavailable ? 'is-unavailable' : ''}}">
       <view class="cart-main">
         <view class="check {{item.selected ? 'checked' : ''}}" data-id="{{item.id}}" bindtap="handleToggle">
           <image wx:if="{{item.selected}}" class="check-icon" src="/assets/icons/check-white.svg" mode="aspectFit" />
         </view>
-        <image class="item-image" src="{{item.image}}" mode="aspectFill" lazy-load="{{true}}" />
+        <view class="item-image-wrap">
+          <image class="item-image" src="{{item.image}}" mode="aspectFill" lazy-load="{{true}}" />
+          <text wx:if="{{item.unavailable}}" class="item-status-cover">{{item.availabilityLabel}}</text>
+        </view>
         <view class="item-info">
           <text class="item-name">{{item.name}}</text>
           <text class="item-subtitle">{{item.subtitle}}</text>
+          <text wx:if="{{item.unavailable}}" class="item-unavailable-tip">{{item.availabilityLabel}}，请删除后再结算</text>
           <view class="item-bottom">
             <text class="item-price">￥{{item.amountText}}</text>
-            <view class="cart-stepper-shell">
+            <view wx:if="{{!item.unavailable}}" class="cart-stepper-shell">
               <quantity-stepper
                 data-id="{{item.id}}"
                 value="{{item.quantity}}"
                 min="{{item.minPurchaseQty || 1}}"
-                max="{{item.stockQty || 9999}}"
+                max="{{item.stockQty}}"
                 step="{{item.stepQty || 1}}"
                 unit="{{item.saleUnit || ''}}"
                 bind:change="handleQuantityChange"
               />
             </view>
+            <text wx:else class="item-unavailable-action">暂不可购买</text>
           </view>
         </view>
       </view>
@@ -73,7 +78,7 @@
         <text class="total-price">￥{{totalText}}</text>
       </view>
     </view>
-    <button class="primary-button checkout-button {{selectedCount ? '' : 'disabled'}}" disabled="{{!selectedCount}}" bindtap="handleCheckout">
+    <button class="primary-button checkout-button {{selectedCount && !checkoutPreparing ? '' : 'disabled'}}" disabled="{{!selectedCount || checkoutPreparing}}" bindtap="handleCheckout">
       <text>去结算</text>
       <image class="checkout-arrow" src="/assets/icons/chevron-right-white.svg" mode="aspectFit" />
     </button>

@@ -1,14 +1,29 @@
 const { yuan, lineAmount } = require("../../utils/format");
 const { getHome } = require("../../api/catalog");
-const { addCartItem, clearSelectedCartItems, getCart, setCartItemSelected, updateCartItem } = require("../../api/cart");
+const { addCartItem, clearSelectedCartItems, deleteCartItem, getCart, setCartItemSelected, updateCartItem } = require("../../api/cart");
 const { requireCompleteProfile } = require("../../utils/auth-guard");
 const { syncTheme } = require("../../utils/theme");
+const { getProductAvailability } = require("../../utils/product-availability");
 
 function decorateItems(items) {
-  return items.map((item) => ({
-    ...item,
-    amountText: yuan(lineAmount(item.unitPrice, item.quantity))
-  }));
+  return items.map((item) => {
+    const availability = getProductAvailability(item);
+    return {
+      ...item,
+      amountText: yuan(lineAmount(item.unitPrice, item.quantity)),
+      unavailable: Boolean(availability.label),
+      availabilityLabel: availability.label,
+      availabilityMessage: availability.message
+    };
+  });
+}
+
+function unavailableNames(items) {
+  const names = (items || []).map((item) => item.name).filter(Boolean);
+  if (names.length <= 3) {
+    return names.join("、");
+  }
+  return names.slice(0, 3).join("、") + "等 " + names.length + " 件商品";
 }
 
 Page({
@@ -18,7 +33,8 @@ Page({
     items: [],
     recommendedProducts: [],
     selectedCount: 0,
-    totalText: "0.00"
+    totalText: "0.00",
+    checkoutPreparing: false
   },
 
   onShow() {
@@ -100,6 +116,11 @@ Page({
   async handleQuantityChange(event) {
     const id = Number(event.currentTarget.dataset.id);
     const quantity = event.detail.value;
+    const current = this.data.items.find((item) => item.id === id);
+    if (current && current.unavailable) {
+      wx.showToast({ title: current.availabilityMessage, icon: "none" });
+      return;
+    }
     try {
       await updateCartItem(id, quantity);
       await this.loadCart();
@@ -138,15 +159,59 @@ Page({
     }
   },
 
-  handleCheckout() {
+  async handleCheckout() {
     if (!requireCompleteProfile("/pages/cart/index")) {
       return;
     }
-    if (!this.data.selectedCount) {
-      wx.showToast({ title: "请先选择商品", icon: "none" });
+    if (!this.data.selectedCount || this.data.checkoutPreparing) {
+      if (!this.data.checkoutPreparing && !this.data.selectedCount) {
+        wx.showToast({ title: "请先选择商品", icon: "none" });
+      }
       return;
     }
-    wx.navigateTo({ url: "/pages/checkout/index" });
+    this.setData({ checkoutPreparing: true });
+    try {
+      const cart = await getCart();
+      const items = decorateItems(cart.items || []);
+      const selectedItems = items.filter((item) => item.selected);
+      this.setData({
+        items,
+        selectedCount: selectedItems.length,
+        totalText: yuan(cart.totalAmount || 0)
+      });
+      if (!selectedItems.length) {
+        wx.showToast({ title: "请先选择商品", icon: "none" });
+        return;
+      }
+      const unavailableItems = selectedItems.filter((item) => item.unavailable);
+      if (!unavailableItems.length) {
+        wx.navigateTo({ url: "/pages/checkout/index" });
+        return;
+      }
+      const result = await new Promise((resolve) => {
+        wx.showModal({
+          title: "部分商品暂不可结算",
+          content: unavailableNames(unavailableItems) + "存在库存不足或已下架情况。是否去除这些商品后继续结算？",
+          cancelText: "否",
+          confirmText: "去除该商品",
+          success: resolve
+        });
+      });
+      if (!result.confirm) {
+        return;
+      }
+      await Promise.all(unavailableItems.map((item) => deleteCartItem(item.id)));
+      await this.loadCart();
+      if (!this.data.selectedCount) {
+        wx.showToast({ title: "异常商品已去除，请重新选择商品", icon: "none" });
+        return;
+      }
+      wx.navigateTo({ url: "/pages/checkout/index" });
+    } catch (error) {
+      wx.showToast({ title: error.message || "结算检查失败，请重试", icon: "none" });
+    } finally {
+      this.setData({ checkoutPreparing: false });
+    }
   },
 
   goHome() {

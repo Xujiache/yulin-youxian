@@ -410,6 +410,12 @@ public class PrintJobService {
         }
     }
 
+    public synchronized void reloadFromPersistence() {
+        jobs.clear();
+        config = defaultConfig();
+        loadState();
+    }
+
     private void persist() {
         try {
             stateStore.save(STATE_KEY, storagePath, objectMapper.writeValueAsBytes(new PrintSnapshot(config, new ArrayList<>(jobs.values()))));

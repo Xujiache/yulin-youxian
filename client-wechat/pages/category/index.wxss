@@ -1,6 +1,8 @@
 .category-page {
   min-height: 100vh;
-  background: #f5f6f7;
+  background:
+    radial-gradient(circle at 94% 14%, rgba(194, 230, 208, 0.42), transparent 26%),
+    linear-gradient(180deg, #edf4ef 0%, #eaf1ed 46%, #f5f7f6 100%);
   padding-top: 176rpx;
 }
 
@@ -16,7 +18,9 @@
   right: 0;
   z-index: 40;
   padding: 0 22rpx 18rpx;
-  background: #f5f6f7;
+  background: rgba(234, 241, 237, 0.94);
+  backdrop-filter: blur(18rpx);
+  -webkit-backdrop-filter: blur(18rpx);
 }
 
 .search-card {
@@ -70,14 +74,15 @@
   right: 0;
   bottom: 0;
   display: flex;
-  background: #f5f6f7;
+  background: transparent;
 }
 
 .sidebar {
   width: 168rpx;
   height: 100%;
   padding-bottom: 160rpx;
-  background: #eef1f2;
+  background: rgba(225, 235, 229, 0.88);
+  border-right: 1rpx solid rgba(117, 151, 131, 0.14);
 }
 
 .category-item {
@@ -96,13 +101,18 @@
   font-weight: 700;
   background: #ffffff;
   border-left-color: #007a3d;
+  box-shadow: 0 10rpx 22rpx rgba(27, 83, 49, 0.08);
 }
 
 .product-panel {
   flex: 1;
   height: 100%;
-  padding: 16rpx 14rpx 182rpx;
-  background: #ffffff;
+  margin: 14rpx 14rpx 0 12rpx;
+  padding: 18rpx 14rpx 182rpx;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1rpx solid rgba(255, 255, 255, 0.92);
+  border-radius: 28rpx 28rpx 0 0;
+  box-shadow: 0 16rpx 34rpx rgba(20, 62, 38, 0.08);
 }
 
 .category-page .panel-head {
