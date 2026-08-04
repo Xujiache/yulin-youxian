@@ -4,6 +4,7 @@ const { getHome } = require("../../api/catalog");
 const { requireCompleteProfile, requireLogin } = require("../../utils/auth-guard");
 const { cachedAssetUrl, cacheImage } = require("../../utils/image-cache");
 const { syncTheme } = require("../../utils/theme");
+const { enableShareToFriend, storeShare } = require("../../utils/share");
 
 const DEFAULT_AVATAR_PATH = "/assets/products/avatar.png";
 const PROFILE_HERO_BG_PATH = "/assets/products/profile-hero-bg.jpg";
@@ -53,6 +54,14 @@ Page({
       { label: "关于门店", url: "", icon: "/assets/icons/profile-menu-store.png" },
       { label: "设置", url: "/pages/settings/index", icon: "/assets/icons/profile-menu-settings.png" }
     ]
+  },
+
+  onLoad() {
+    enableShareToFriend();
+  },
+
+  onShareAppMessage() {
+    return storeShare(this.data.storeName);
   },
 
   onShow() {

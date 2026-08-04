@@ -93,6 +93,25 @@ class StorefrontServiceTests {
     }
 
     @Test
+    void storefrontHidesOffShelfProductWhileCartKeepsUnavailableItem() {
+        StorefrontService service = newService();
+        CurrentUserContext.setUserId(1000L);
+        service.addCartItem(101L, BigDecimal.ONE);
+
+        service.updateProductStatus(101L, 0);
+
+        assertTrue(service.products(null, null).stream().anyMatch(product -> product.id().equals(101L)));
+        assertTrue(service.storefrontProducts(null, null).stream().noneMatch(product -> product.id().equals(101L)));
+        assertTrue(service.home().recommendedProducts().stream().noneMatch(product -> product.id().equals(101L)));
+        assertThrows(BusinessException.class, () -> service.storefrontProduct(101L));
+
+        CartDto cart = service.cart();
+        assertEquals(1, cart.items().size());
+        assertEquals("PRODUCT_OFF_SHELF", cart.items().get(0).availabilityCode());
+        assertEquals(0, cart.selectedCount());
+    }
+
+    @Test
     void multiSkuCartSeparatesVariantsAndOrderFreezesSkuSnapshot() {
         StorefrontService service = newService();
         ProductDto product = service.createProduct(multiSkuProductRequest("多规格蓝莓"));
@@ -222,6 +241,7 @@ class StorefrontServiceTests {
         assertEquals(0, product.availableSkuCount());
         assertTrue(product.skus().stream().allMatch(sku -> sku.status() == 0));
         assertEquals(1, product.skus().stream().filter(ProductSkuDto::defaultSku).count());
+        assertTrue(service.storefrontProducts(null, null).stream().noneMatch(item -> item.id().equals(product.id())));
     }
 
     @Test

@@ -183,6 +183,19 @@
           </ElForm>
 
           <div v-else class="multi-sku-workspace">
+            <ElForm label-position="top" class="multi-sku-unit-form">
+              <div class="form-grid form-grid--four">
+                <ElFormItem label="销售单位" required>
+                  <ElInput
+                    :model-value="form.saleUnit"
+                    placeholder="斤、份、盒"
+                    @update:model-value="updateMultiSkuSaleUnit"
+                  />
+                  <span class="multi-sku-unit-hint">修改后将同步到全部 SKU，无需切回单规格。</span>
+                </ElFormItem>
+              </div>
+            </ElForm>
+
             <div class="spec-builder">
               <div class="subsection-head">
                 <div>
@@ -772,6 +785,13 @@
     form.unitPrice = yuanToCent(Number(value || 0))
   }
 
+  const updateMultiSkuSaleUnit = (value: string) => {
+    form.saleUnit = value
+    form.skus.forEach((sku) => {
+      sku.saleUnit = value
+    })
+  }
+
   const loadData = async () => {
     loading.value = true
     initializing.value = true
@@ -1111,8 +1131,8 @@
     if (!form.categoryId) return '请选择商品分类'
     if (!form.name.trim()) return '请填写商品名称'
     if (!form.imageUrl) return '请上传商品主图'
+    if (!form.saleUnit.trim()) return '请填写销售单位'
     if (!form.skuEnabled) {
-      if (!form.saleUnit.trim()) return '请填写销售单位'
       if (form.unitPrice < 1) return '商品单价必须大于 0'
       if (Number(form.minPurchaseQty) <= 0) return '起购数量必须大于 0'
       if (Number(form.stepQty) <= 0) return '每次增加数量必须大于 0'
@@ -1394,6 +1414,21 @@
     display: flex;
     flex-direction: column;
     gap: 16px;
+  }
+
+  .multi-sku-unit-form {
+    padding: 14px 16px 0;
+    background: #f7faf8;
+    border: 1px solid var(--sku-border);
+    border-radius: 8px;
+  }
+
+  .multi-sku-unit-hint {
+    display: block;
+    margin-top: 6px;
+    color: var(--art-gray-500);
+    font-size: 12px;
+    line-height: 18px;
   }
 
   .spec-builder {

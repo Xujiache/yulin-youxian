@@ -10,6 +10,7 @@ const {
 const { requireCompleteProfile } = require("../../utils/auth-guard");
 const { syncTheme } = require("../../utils/theme");
 const { cacheImage, getCachedImageUrl } = require("../../utils/image-cache");
+const { enableShareToFriend, categoryShare } = require("../../utils/share");
 
 const PRELOAD_IMAGE_COUNT = 4;
 
@@ -43,6 +44,7 @@ Page({
   },
 
   async onLoad(options) {
+    enableShareToFriend();
     try {
       const categories = await this.loadCategories();
       const requestedCategoryId = Number(options.categoryId || 0);
@@ -57,6 +59,13 @@ Page({
     } finally {
       this.setData({ loading: false });
     }
+  },
+
+  onShareAppMessage() {
+    const activeCategory = this.data.categories.find(
+      (category) => Number(category.id) === Number(this.data.activeCategoryId)
+    );
+    return categoryShare(activeCategory);
   },
 
   onShow() {

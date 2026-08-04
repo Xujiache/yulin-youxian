@@ -1,5 +1,6 @@
 const request = require("../utils/request");
 const { normalizeAssetUrl, normalizeProduct } = require("./normalize");
+const { filterListedProducts, isProductListed } = require("../utils/product-availability");
 
 const MISSING_CATEGORY_ASSET_PATHS = new Set([
   "/assets/products/category-fruit-3d.png",
@@ -40,7 +41,7 @@ async function getHome() {
       imageUrl: normalizeAssetUrl(banner.imageUrl)
     })),
     categories: (home.categories || []).map(normalizeCategory),
-    recommendedProducts: (home.recommendedProducts || []).map(normalizeProduct)
+    recommendedProducts: filterListedProducts((home.recommendedProducts || []).map(normalizeProduct))
   };
 }
 
@@ -58,7 +59,7 @@ async function getProducts(params = {}) {
     data: params,
     skipAuth: true
   });
-  return products.map(normalizeProduct);
+  return filterListedProducts(products.map(normalizeProduct));
 }
 
 async function getProduct(id) {
@@ -66,7 +67,13 @@ async function getProduct(id) {
     url: `/api/wx/products/${id}`,
     skipAuth: true
   });
-  return normalizeProduct(product);
+  const normalized = normalizeProduct(product);
+  if (!isProductListed(normalized)) {
+    const error = new Error("商品已下架");
+    error.statusCode = 404;
+    throw error;
+  }
+  return normalized;
 }
 
 module.exports = {

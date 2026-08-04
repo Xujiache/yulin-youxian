@@ -22,7 +22,7 @@ function decorateItems(items) {
       unavailable: Boolean(availability.label),
       availabilityLabel: availability.label,
       availabilityMessage: availability.message,
-      canReselectSku: Boolean(item.skuId || item.reselectionRequired)
+      canReselectSku: Boolean(item.skuId || item.skuSelectionRequired || item.reselectionRequired)
         && item.availabilityCode !== "PRODUCT_OFF_SHELF"
     };
   });
@@ -43,8 +43,13 @@ Page({
     items: [],
     recommendedProducts: [],
     selectedCount: 0,
+    availableCount: 0,
+    unavailableCount: 0,
+    allAvailableSelected: false,
     totalText: "0.00",
     checkoutPreparing: false,
+    deletingItemId: 0,
+    clearingUnavailable: false,
     sheetVisible: false,
     selectedProduct: null,
     replacingCartItem: null,
@@ -70,7 +75,14 @@ Page({
         this.loadRecommendations();
       }
     } catch {
-      this.setData({ items: [], selectedCount: 0, totalText: "0.00" });
+      this.setData({
+        items: [],
+        availableCount: 0,
+        unavailableCount: 0,
+        selectedCount: 0,
+        allAvailableSelected: false,
+        totalText: "0.00"
+      });
       wx.showToast({ title: "购物车加载失败", icon: "none" });
     } finally {
       this.setData({ loading: false });
@@ -79,13 +91,17 @@ Page({
 
   updateCart(items) {
     const decoratedItems = decorateItems(items);
-    const selectedItems = decoratedItems.filter((item) => item.selected);
+    const availableItems = decoratedItems.filter((item) => !item.unavailable);
+    const unavailableItems = decoratedItems.filter((item) => item.unavailable);
+    const selectedItems = availableItems.filter((item) => item.selected);
     const total = selectedItems
-      .filter((item) => !item.unavailable)
       .reduce((sum, item) => sum + lineAmount(item.unitPrice, item.quantity), 0);
     this.setData({
       items: decoratedItems,
+      availableCount: availableItems.length,
+      unavailableCount: unavailableItems.length,
       selectedCount: selectedItems.length,
+      allAvailableSelected: availableItems.length > 0 && selectedItems.length === availableItems.length,
       totalText: yuan(total)
     });
   },
@@ -159,6 +175,10 @@ Page({
   async handleToggle(event) {
     const id = Number(event.currentTarget.dataset.id);
     const current = this.data.items.find((item) => item.id === id);
+    if (current && current.unavailable) {
+      wx.showToast({ title: current.availabilityMessage || "该商品暂不可结算", icon: "none" });
+      return;
+    }
     if (current) {
       try {
         await setCartItemSelected(id, !current.selected);
@@ -170,6 +190,20 @@ Page({
       item.id === id ? { ...item, selected: !item.selected } : item
     ));
     this.updateCart(items);
+  },
+
+  async handleToggleAll() {
+    const availableItems = this.data.items.filter((item) => !item.unavailable);
+    if (!availableItems.length) {
+      return;
+    }
+    const selected = !this.data.allAvailableSelected;
+    try {
+      await Promise.all(availableItems.map((item) => setCartItemSelected(item.id, selected)));
+      await this.loadCart();
+    } catch {
+      wx.showToast({ title: "全选状态更新失败", icon: "none" });
+    }
   },
 
   async handleQuantityChange(event) {
@@ -210,11 +244,76 @@ Page({
       return;
     }
     try {
+      const selectedUnavailableItems = this.data.items.filter((item) => item.unavailable && item.selected);
+      if (selectedUnavailableItems.length) {
+        await Promise.all(selectedUnavailableItems.map((item) => setCartItemSelected(item.id, false)));
+      }
       await clearSelectedCartItems();
       await this.loadCart();
       wx.showToast({ title: "已清空", icon: "success" });
     } catch {
       wx.showToast({ title: "清空失败", icon: "none" });
+    }
+  },
+
+  async handleDeleteItem(event) {
+    const id = Number(event.currentTarget.dataset.id);
+    const item = this.data.items.find((candidate) => candidate.id === id);
+    if (!item || this.data.deletingItemId) {
+      return;
+    }
+    const result = await new Promise((resolve) => {
+      wx.showModal({
+        title: "删除商品",
+        content: `确认从购物车删除“${item.name}”吗？`,
+        confirmText: "删除",
+        confirmColor: "#B54735",
+        cancelText: "取消",
+        success: resolve
+      });
+    });
+    if (!result.confirm) {
+      return;
+    }
+    this.setData({ deletingItemId: id });
+    try {
+      await deleteCartItem(id);
+      await this.loadCart();
+      wx.showToast({ title: "已删除", icon: "success" });
+    } catch (error) {
+      wx.showToast({ title: error.message || "删除失败，请重试", icon: "none" });
+    } finally {
+      this.setData({ deletingItemId: 0 });
+    }
+  },
+
+  async handleClearUnavailable() {
+    const unavailableItems = this.data.items.filter((item) => item.unavailable);
+    if (!unavailableItems.length || this.data.clearingUnavailable) {
+      return;
+    }
+    const result = await new Promise((resolve) => {
+      wx.showModal({
+        title: "清理失效商品",
+        content: `确认删除这 ${unavailableItems.length} 件已下架、库存不足或规格变化的商品吗？`,
+        confirmText: "全部删除",
+        confirmColor: "#B54735",
+        cancelText: "取消",
+        success: resolve
+      });
+    });
+    if (!result.confirm) {
+      return;
+    }
+    this.setData({ clearingUnavailable: true });
+    try {
+      await Promise.all(unavailableItems.map((item) => deleteCartItem(item.id)));
+      await this.loadCart();
+      wx.showToast({ title: "失效商品已清理", icon: "success" });
+    } catch (error) {
+      wx.showToast({ title: error.message || "清理失败，请重试", icon: "none" });
+    } finally {
+      this.setData({ clearingUnavailable: false });
     }
   },
 

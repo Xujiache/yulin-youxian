@@ -135,8 +135,14 @@
   align-items: center;
   justify-content: center;
   width: 56rpx;
+  min-width: 56rpx;
+  max-width: 56rpx;
   height: 56rpx;
   min-height: 56rpx;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  line-height: 1;
   background: #f2f6f3;
   border-radius: 50%;
 }
@@ -144,6 +150,10 @@
 .close-icon {
   width: 26rpx;
   height: 26rpx;
+}
+
+.close::after {
+  border: 0;
 }
 
 .spec-scroll {
@@ -166,22 +176,35 @@
 .spec-option-grid {
   display: flex;
   flex-wrap: wrap;
-  gap: 14rpx 12rpx;
+  justify-content: space-between;
+  margin-bottom: -14rpx;
 }
 
 .spec-chip {
   position: relative;
   display: flex;
+  flex: 0 0 calc(50% - 7rpx);
   align-items: center;
   justify-content: center;
-  min-width: 132rpx;
-  min-height: 68rpx;
-  padding: 0 24rpx;
+  width: calc(50% - 7rpx);
+  min-width: 0;
+  max-width: calc(50% - 7rpx);
+  min-height: 72rpx;
+  margin: 0 0 14rpx;
+  padding: 12rpx 16rpx;
+  box-sizing: border-box;
   color: #32443a;
   font-size: 24rpx;
+  line-height: 30rpx;
+  white-space: normal;
+  word-break: break-all;
   background: #ffffff;
   border: 1rpx solid #cfdad3;
   border-radius: 14rpx;
+}
+
+.spec-chip::after {
+  border: 0;
 }
 
 .spec-chip.is-selected {
@@ -327,15 +350,24 @@
   align-items: center;
   justify-content: center;
   width: 100%;
+  min-width: 100%;
+  max-width: none;
   height: 86rpx;
   min-height: 86rpx;
-  margin-top: 8rpx;
+  margin: 8rpx 0 0;
+  padding: 0;
+  box-sizing: border-box;
   color: #ffffff;
   font-size: 29rpx;
   font-weight: 800;
+  line-height: 1;
   background: #008a52;
   border-radius: 999rpx;
   box-shadow: 0 12rpx 26rpx rgba(0, 109, 66, 0.2);
+}
+
+.confirm::after {
+  border: 0;
 }
 
 .confirm.is-disabled {

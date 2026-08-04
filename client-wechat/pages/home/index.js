@@ -4,12 +4,14 @@ const { requireCompleteProfile } = require("../../utils/auth-guard");
 const { cachedAssetUrl } = require("../../utils/image-cache");
 const { syncTheme } = require("../../utils/theme");
 const { sortAvailableFirst } = require("../../utils/product-availability");
+const { enableShareToFriend, homeShare } = require("../../utils/share");
 
 Page({
   data: {
     glassMode: false,
     loading: true,
     storeLogoUrl: "",
+    storeName: "禹邻优鲜",
     banners: [],
     categories: [],
     products: [],
@@ -20,7 +22,12 @@ Page({
   },
 
   onLoad() {
+    enableShareToFriend();
     this.loadHome();
+  },
+
+  onShareAppMessage() {
+    return homeShare(this.data.storeName);
   },
 
   onShow() {
@@ -63,6 +70,7 @@ Page({
         product && !recommendedIds.has(product.id)
       )));
       this.setData({
+        storeName: home.storeName || "禹邻优鲜",
         storeLogoUrl: home.logoUrl || cachedAssetUrl("/assets/products/store-logo.png"),
         banners,
         categories: (home.categories || []).slice(0, 5).map((item) => ({

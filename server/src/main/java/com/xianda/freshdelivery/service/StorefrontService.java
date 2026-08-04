@@ -238,10 +238,27 @@ public class StorefrontService {
                 .toList();
     }
 
+    public synchronized List<ProductDto> storefrontProducts(Long categoryId, String keyword) {
+        return products.values().stream()
+                .filter(this::isStorefrontVisible)
+                .filter(product -> categoryId == null || product.categoryId().equals(categoryId))
+                .filter(product -> keyword == null || keyword.isBlank() || product.name().contains(keyword))
+                .sorted(productOrder())
+                .toList();
+    }
+
     public synchronized ProductDto product(Long id) {
         ProductDto product = products.get(id);
         if (product == null) {
             throw new BusinessException(404, "商品不存在");
+        }
+        return product;
+    }
+
+    public synchronized ProductDto storefrontProduct(Long id) {
+        ProductDto product = product(id);
+        if (!isStorefrontVisible(product)) {
+            throw new BusinessException(404, "商品已下架");
         }
         return product;
     }
@@ -1799,6 +1816,14 @@ public class StorefrontService {
                 .thenComparing(ProductDto::id);
     }
 
+    private boolean isStorefrontVisible(ProductDto product) {
+        if (product == null || product.status() == null || product.status() != 1) {
+            return false;
+        }
+        return !Boolean.TRUE.equals(product.skuEnabled())
+                || product.skus().stream().anyMatch(sku -> sku.status() != null && sku.status() == 1);
+    }
+
     private int nextProductSortOrder() {
         return products.values().stream()
                 .map(ProductDto::sortOrder)
@@ -2356,6 +2381,7 @@ public class StorefrontService {
 
     private List<ProductDto> recommendedProducts() {
         return products.values().stream()
+                .filter(this::isStorefrontVisible)
                 .filter(product -> Boolean.TRUE.equals(product.recommended()))
                 .sorted(productOrder())
                 .toList();

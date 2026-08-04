@@ -36,11 +36,11 @@ public class WxCatalogController {
             @RequestParam(required = false) Long categoryId,
             @RequestParam(required = false) String keyword
     ) {
-        return ApiResponse.ok(storefrontService.products(categoryId, keyword));
+        return ApiResponse.ok(storefrontService.storefrontProducts(categoryId, keyword));
     }
 
     @GetMapping("/products/{id}")
     public ApiResponse<ProductDto> product(@PathVariable Long id) {
-        return ApiResponse.ok(storefrontService.product(id));
+        return ApiResponse.ok(storefrontService.storefrontProduct(id));
     }
 }
