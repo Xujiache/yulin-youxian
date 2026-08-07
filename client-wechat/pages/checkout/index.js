@@ -1,10 +1,12 @@
-const { yuan, lineAmount } = require("../../utils/format");
+const { yuan } = require("../../utils/format");
 const { getAddresses } = require("../../api/addresses");
 const { getCart } = require("../../api/cart");
+const { getHome } = require("../../api/catalog");
 const { getDeliverySlots } = require("../../api/delivery");
 const { createOrder, payOrder, previewOrder } = require("../../api/orders");
 const { requireCompleteProfile } = require("../../utils/auth-guard");
 const { syncTheme } = require("../../utils/theme");
+const { buildMinOrderState, normalizeMinOrderAmount } = require("../../utils/min-order");
 const {
   isPaidOrder,
   isPaymentCancelled,
@@ -48,8 +50,34 @@ const EMPTY_AMOUNT = {
   deliveryFeeText: "0.00",
   packageFeeText: "0.00",
   totalText: "0.00",
-  deliveryFeeNotice: ""
+  deliveryFeeNotice: "",
+  minOrderAmount: 0,
+  minOrderText: "",
+  minOrderTip: "",
+  minOrderMet: true,
+  shortfallText: "",
+  payLabel: "微信支付"
 };
+
+function applyPreviewAmounts(preview, fallbackMinOrderAmount = 0) {
+  const minOrderAmount = normalizeMinOrderAmount(
+    preview && preview.minOrderAmount != null ? preview.minOrderAmount : fallbackMinOrderAmount
+  );
+  const minOrder = buildMinOrderState(preview ? preview.productAmount : 0, minOrderAmount);
+  return {
+    productAmountText: yuan(preview ? preview.productAmount : 0),
+    deliveryFeeText: yuan(preview ? preview.deliveryFee : 0),
+    packageFeeText: yuan(preview ? preview.packageFee : 0),
+    totalText: yuan(preview ? preview.payableAmount : 0),
+    deliveryFeeNotice: preview && preview.deliveryFeeNotice ? preview.deliveryFeeNotice : "",
+    minOrderAmount: minOrder.minOrderAmount,
+    minOrderText: minOrder.minOrderText,
+    minOrderTip: minOrder.minOrderTip,
+    minOrderMet: minOrder.minOrderMet,
+    shortfallText: minOrder.shortfallText,
+    payLabel: minOrder.payLabel
+  };
+}
 
 function orderSourcePayload(page) {
   if (page.data.buyNowRequest) {
@@ -75,6 +103,12 @@ Page({
     packageFeeText: "1.00",
     totalText: "0.00",
     deliveryFeeNotice: "",
+    minOrderAmount: 0,
+    minOrderText: "",
+    minOrderTip: "",
+    minOrderMet: true,
+    shortfallText: "",
+    payLabel: "微信支付",
     cartItemIds: [],
     buyNowRequest: null,
     loadError: "",
@@ -132,11 +166,13 @@ Page({
       ...EMPTY_AMOUNT
     });
     try {
-      const [remoteAddresses, remoteSlots, cart] = await Promise.all([
+      const [remoteAddresses, remoteSlots, cart, home] = await Promise.all([
         getAddresses(),
         getDeliverySlots(),
-        getCart()
+        getCart(),
+        getHome().catch(() => null)
       ]);
+      const fallbackMinOrderAmount = normalizeMinOrderAmount(home && home.minOrderAmount);
       const selectedItems = buyNowRequest
         ? []
         : (cart.items || []).filter((item) => item.selected);
@@ -194,6 +230,7 @@ Page({
         deliverySlotId: slot.id,
         ...(buyNowRequest || { cartItemIds })
       });
+      const amounts = applyPreviewAmounts(preview, fallbackMinOrderAmount);
       this.setData({
         address: preview.address,
         slots: availableSlots,
@@ -204,12 +241,8 @@ Page({
         })),
         cartItemIds,
         buyNowRequest,
-        productAmountText: yuan(preview.productAmount),
-        deliveryFeeText: yuan(preview.deliveryFee),
-        packageFeeText: yuan(preview.packageFee),
-        totalText: yuan(preview.payableAmount),
-        deliveryFeeNotice: preview.deliveryFeeNotice || "",
-        payDisabled: false,
+        ...amounts,
+        payDisabled: !amounts.minOrderMet,
         loadError: ""
       });
       return;
@@ -247,18 +280,15 @@ Page({
         deliverySlotId: activeSlotId,
         ...orderSourcePayload(this)
       });
+      const amounts = applyPreviewAmounts(preview, this.data.minOrderAmount);
       this.setData({
         address: preview.address,
         items: preview.items.map((item) => ({
           ...item,
           amountText: yuan(item.amount)
         })),
-        productAmountText: yuan(preview.productAmount),
-        deliveryFeeText: yuan(preview.deliveryFee),
-        packageFeeText: yuan(preview.packageFee),
-        totalText: yuan(preview.payableAmount),
-        deliveryFeeNotice: preview.deliveryFeeNotice || "",
-        payDisabled: false,
+        ...amounts,
+        payDisabled: !amounts.minOrderMet,
         loadError: ""
       });
     } catch (error) {
@@ -293,6 +323,13 @@ Page({
       return;
     }
     if (this.data.paying) {
+      return;
+    }
+    if (!this.data.minOrderMet) {
+      wx.showToast({
+        title: this.data.minOrderTip || "未满起送价",
+        icon: "none"
+      });
       return;
     }
     const canPay = !this.data.payDisabled && this.data.address && this.data.activeSlotId && hasOrderSource(this);
@@ -335,13 +372,22 @@ Page({
         showPaymentCancelled(this, orderId);
         return;
       }
+      const message = paymentErrorMessage(error, "支付失败，请重试");
+      if (String(message || "").indexOf("起送") >= 0) {
+        wx.showToast({ title: message, icon: "none" });
+        this.setData({ paying: false, payDisabled: true });
+        return;
+      }
       wx.showModal({
         title: "支付失败",
-        content: paymentErrorMessage(error, "支付失败，请重试"),
+        content: message,
         showCancel: false
       });
     } finally {
-      this.setData({ paying: false, payDisabled: false });
+      this.setData({
+        paying: false,
+        payDisabled: !this.data.minOrderMet
+      });
     }
   }
 });

@@ -178,6 +178,22 @@
   margin-top: 22rpx;
 }
 
+.min-order-hint {
+  display: block;
+  margin-top: 10rpx;
+  color: #7a8680;
+  font-size: 22rpx;
+  line-height: 30rpx;
+}
+
+.min-order-hint {
+  display: block;
+  margin-top: 12rpx;
+  color: #7a8680;
+  font-size: 22rpx;
+  line-height: 30rpx;
+}
+
 .price {
   color: #007a3d;
   font-size: 58rpx;

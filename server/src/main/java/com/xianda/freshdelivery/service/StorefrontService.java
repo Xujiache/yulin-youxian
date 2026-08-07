@@ -146,6 +146,7 @@ public class StorefrontService {
                 "今日新鲜到店",
                 "蔬菜水果 · 门店自配送",
                 settings.contactPhone(),
+                settings.minOrderAmount(),
                 banners.stream()
                         .filter(banner -> Boolean.TRUE.equals(banner.enabled()))
                         .sorted(Comparator.comparing(BannerDto::sortOrder))
@@ -638,6 +639,7 @@ public class StorefrontService {
                 deliveryFee,
                 settings.packageFee(),
                 productAmount + deliveryFee + settings.packageFee(),
+                settings.minOrderAmount(),
                 deliveryDiscount.waived(),
                 deliveryDiscount.notice()
         );
@@ -655,8 +657,10 @@ public class StorefrontService {
                 request.quantity(),
                 cartCheckout ? -1L : cartId.incrementAndGet()
         );
-        if (preview.payableAmount() < settings.minOrderAmount()) {
-            throw new BusinessException(400, "订单金额低于起送价");
+        int minOrderAmount = settings.minOrderAmount() == null ? 0 : settings.minOrderAmount();
+        if (minOrderAmount > 0 && preview.productAmount() < minOrderAmount) {
+            int shortfall = minOrderAmount - preview.productAmount();
+            throw new BusinessException(400, "未满起送价¥" + yuan(minOrderAmount) + "，还差¥" + yuan(shortfall));
         }
         preview.items().forEach(this::decreaseStock);
         long id = orderId.incrementAndGet();

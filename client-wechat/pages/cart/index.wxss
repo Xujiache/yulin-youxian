@@ -643,6 +643,18 @@
   white-space: nowrap;
 }
 
+.min-order-tip {
+  margin-top: 2rpx;
+  color: #7a8680;
+  font-size: 20rpx;
+  line-height: 28rpx;
+  white-space: nowrap;
+}
+
+.min-order-tip.is-short {
+  color: #b54735;
+}
+
 .checkout-button {
   display: flex;
   align-items: center;
@@ -655,6 +667,13 @@
   min-height: 78rpx;
   padding: 0;
   font-size: 26rpx;
+}
+
+.checkout-button.is-min-order {
+  width: 240rpx;
+  min-width: 240rpx;
+  max-width: 240rpx;
+  font-size: 22rpx;
 }
 
 .checkout-button.disabled {

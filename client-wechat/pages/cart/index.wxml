@@ -135,11 +135,16 @@
       <view class="total">
         <text class="total-label">已选 {{selectedCount}} 件 · 合计</text>
         <text class="total-price">￥{{totalText}}</text>
+        <text wx:if="{{minOrderTip}}" class="min-order-tip {{minOrderMet ? '' : 'is-short'}}">{{minOrderTip}}</text>
       </view>
     </view>
-    <button class="primary-button checkout-button {{selectedCount && !checkoutPreparing ? '' : 'disabled'}}" disabled="{{!selectedCount || checkoutPreparing}}" bindtap="handleCheckout">
-      <text>{{checkoutPreparing ? '核对中' : '去结算'}}</text>
-      <image class="checkout-arrow" src="/assets/icons/chevron-right-white.svg" mode="aspectFit" />
+    <button
+      class="primary-button checkout-button {{selectedCount && minOrderMet && !checkoutPreparing ? '' : 'disabled'}} {{minOrderTip && !minOrderMet ? 'is-min-order' : ''}}"
+      disabled="{{!selectedCount || !minOrderMet || checkoutPreparing}}"
+      bindtap="handleCheckout"
+    >
+      <text>{{checkoutPreparing ? '核对中' : checkoutLabel}}</text>
+      <image wx:if="{{minOrderMet}}" class="checkout-arrow" src="/assets/icons/chevron-right-white.svg" mode="aspectFit" />
     </button>
   </view>
 

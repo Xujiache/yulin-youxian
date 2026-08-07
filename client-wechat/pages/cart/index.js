@@ -12,6 +12,7 @@ const {
 const { requireCompleteProfile } = require("../../utils/auth-guard");
 const { syncTheme } = require("../../utils/theme");
 const { getProductAvailability } = require("../../utils/product-availability");
+const { buildMinOrderState, normalizeMinOrderAmount } = require("../../utils/min-order");
 
 function decorateItems(items) {
   return items.map((item) => {
@@ -47,6 +48,11 @@ Page({
     unavailableCount: 0,
     allAvailableSelected: false,
     totalText: "0.00",
+    minOrderAmount: 0,
+    minOrderText: "",
+    minOrderTip: "",
+    minOrderMet: true,
+    checkoutLabel: "去结算",
     checkoutPreparing: false,
     deletingItemId: 0,
     clearingUnavailable: false,
@@ -69,48 +75,54 @@ Page({
 
   async loadCart() {
     try {
-      const cart = await getCart();
-      this.updateCart(cart.items || []);
+      const [cart, home] = await Promise.all([
+        getCart(),
+        getHome().catch(() => null)
+      ]);
+      const minOrderAmount = home
+        ? normalizeMinOrderAmount(home.minOrderAmount)
+        : this.data.minOrderAmount;
+      this.updateCart(cart.items || [], minOrderAmount);
       if (!(cart.items || []).length) {
-        this.loadRecommendations();
+        this.loadRecommendations(home);
       }
     } catch {
-      this.setData({
-        items: [],
-        availableCount: 0,
-        unavailableCount: 0,
-        selectedCount: 0,
-        allAvailableSelected: false,
-        totalText: "0.00"
-      });
+      this.updateCart([], this.data.minOrderAmount);
       wx.showToast({ title: "购物车加载失败", icon: "none" });
     } finally {
       this.setData({ loading: false });
     }
   },
 
-  updateCart(items) {
+  updateCart(items, minOrderAmount = this.data.minOrderAmount) {
     const decoratedItems = decorateItems(items);
     const availableItems = decoratedItems.filter((item) => !item.unavailable);
     const unavailableItems = decoratedItems.filter((item) => item.unavailable);
     const selectedItems = availableItems.filter((item) => item.selected);
     const total = selectedItems
       .reduce((sum, item) => sum + lineAmount(item.unitPrice, item.quantity), 0);
+    const minOrder = buildMinOrderState(total, minOrderAmount);
     this.setData({
       items: decoratedItems,
       availableCount: availableItems.length,
       unavailableCount: unavailableItems.length,
       selectedCount: selectedItems.length,
       allAvailableSelected: availableItems.length > 0 && selectedItems.length === availableItems.length,
-      totalText: yuan(total)
+      totalText: yuan(total),
+      minOrderAmount: minOrder.minOrderAmount,
+      minOrderText: minOrder.minOrderText,
+      minOrderTip: minOrder.minOrderTip,
+      minOrderMet: minOrder.minOrderMet,
+      checkoutLabel: minOrder.checkoutLabel
     });
   },
 
-  async loadRecommendations() {
+  async loadRecommendations(homeData) {
     try {
-      const home = await getHome();
+      const home = homeData || await getHome();
       this.setData({
-        recommendedProducts: (home.recommendedProducts || []).slice(0, 4)
+        recommendedProducts: (home.recommendedProducts || []).slice(0, 4),
+        minOrderAmount: normalizeMinOrderAmount(home.minOrderAmount)
       });
     } catch {
       this.setData({ recommendedProducts: [] });
@@ -327,6 +339,13 @@ Page({
       }
       return;
     }
+    if (!this.data.minOrderMet) {
+      wx.showToast({
+        title: this.data.minOrderTip || "未满起送价",
+        icon: "none"
+      });
+      return;
+    }
     this.setData({ checkoutPreparing: true });
     try {
       const cart = await getCart();
@@ -335,6 +354,13 @@ Page({
       this.updateCart(cart.items || []);
       if (!selectedItems.length) {
         wx.showToast({ title: "请先选择商品", icon: "none" });
+        return;
+      }
+      if (!this.data.minOrderMet) {
+        wx.showToast({
+          title: this.data.minOrderTip || "未满起送价",
+          icon: "none"
+        });
         return;
       }
       const unavailableItems = selectedItems.filter((item) => item.unavailable);

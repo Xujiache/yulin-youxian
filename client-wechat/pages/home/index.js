@@ -5,6 +5,7 @@ const { cachedAssetUrl } = require("../../utils/image-cache");
 const { syncTheme } = require("../../utils/theme");
 const { sortAvailableFirst } = require("../../utils/product-availability");
 const { enableShareMenus, homeShare, timelineShare } = require("../../utils/share");
+const { buildMinOrderState } = require("../../utils/min-order");
 
 Page({
   data: {
@@ -12,6 +13,7 @@ Page({
     loading: true,
     storeLogoUrl: "",
     storeName: "禹邻优鲜",
+    brandSubtitle: "禹邻优鲜 · 门店配送",
     banners: [],
     categories: [],
     products: [],
@@ -74,9 +76,13 @@ Page({
       const otherProducts = sortAvailableFirst(allProducts.filter((product) => (
         product && !recommendedIds.has(product.id)
       )));
+      const minOrder = buildMinOrderState(0, home.minOrderAmount);
       this.setData({
         storeName: home.storeName || "禹邻优鲜",
         storeLogoUrl: home.logoUrl || cachedAssetUrl("/assets/products/store-logo.png"),
+        brandSubtitle: minOrder.minOrderAmount
+          ? `满¥${minOrder.minOrderText}起送 · 门店配送`
+          : "禹邻优鲜 · 门店配送",
         banners,
         categories: (home.categories || []).slice(0, 5).map((item) => ({
           ...item,
