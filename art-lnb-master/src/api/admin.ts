@@ -212,6 +212,15 @@ export interface FreeDeliveryCampaign {
   enabled: boolean
 }
 
+export interface StockOverviewSpecItem {
+  skuId?: number | null
+  specificationText: string
+  quantity: number
+  saleUnit: string
+  orderCount: number
+  amount: number
+}
+
 export interface StockOverviewItem {
   productId: number
   productName: string
@@ -221,6 +230,7 @@ export interface StockOverviewItem {
   orderCount: number
   amount: number
   orderNos: string[]
+  specDetails?: StockOverviewSpecItem[]
 }
 
 export interface Banner {

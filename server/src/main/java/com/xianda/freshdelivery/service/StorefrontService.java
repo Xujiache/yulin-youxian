@@ -37,6 +37,7 @@ import com.xianda.freshdelivery.dto.RefundNotifyRequest;
 import com.xianda.freshdelivery.dto.RefundRequest;
 import com.xianda.freshdelivery.dto.SettingsDto;
 import com.xianda.freshdelivery.dto.StockOverviewItemDto;
+import com.xianda.freshdelivery.dto.StockOverviewSpecItemDto;
 import com.xianda.freshdelivery.persistence.FileStateStore;
 import com.xianda.freshdelivery.persistence.StateStore;
 import java.io.IOException;
@@ -2956,6 +2957,7 @@ public class StorefrontService {
         private BigDecimal quantity = BigDecimal.ZERO;
         private int amount = 0;
         private final Set<String> orderNos = new HashSet<>();
+        private final Map<String, SpecAccumulator> specMap = new LinkedHashMap<>();
 
         StockAccumulator(OrderItemDto item) {
             this.productId = item.productId();
@@ -2968,9 +2970,18 @@ public class StorefrontService {
             quantity = quantity.add(item.quantity());
             amount += item.amount();
             orderNos.add(orderNo);
+
+            String specKey = (item.specificationText() != null && !item.specificationText().isBlank())
+                    ? item.specificationText().trim()
+                    : "默认规格";
+            specMap.computeIfAbsent(specKey, key -> new SpecAccumulator(item.skuId(), key, item.saleUnit()))
+                    .add(orderNo, item);
         }
 
         StockOverviewItemDto toDto() {
+            List<StockOverviewSpecItemDto> specDetails = specMap.values().stream()
+                    .map(SpecAccumulator::toDto)
+                    .toList();
             return new StockOverviewItemDto(
                     productId,
                     productName,
@@ -2979,7 +2990,40 @@ public class StorefrontService {
                     quantity,
                     orderNos.size(),
                     amount,
-                    new ArrayList<>(orderNos)
+                    new ArrayList<>(orderNos),
+                    specDetails
+            );
+        }
+    }
+
+    private static class SpecAccumulator {
+        private final Long skuId;
+        private final String specificationText;
+        private final String saleUnit;
+        private BigDecimal quantity = BigDecimal.ZERO;
+        private int amount = 0;
+        private final Set<String> orderNos = new HashSet<>();
+
+        SpecAccumulator(Long skuId, String specificationText, String saleUnit) {
+            this.skuId = skuId;
+            this.specificationText = specificationText;
+            this.saleUnit = saleUnit;
+        }
+
+        void add(String orderNo, OrderItemDto item) {
+            quantity = quantity.add(item.quantity());
+            amount += item.amount();
+            orderNos.add(orderNo);
+        }
+
+        StockOverviewSpecItemDto toDto() {
+            return new StockOverviewSpecItemDto(
+                    skuId,
+                    specificationText,
+                    quantity,
+                    saleUnit,
+                    orderNos.size(),
+                    amount
             );
         }
     }

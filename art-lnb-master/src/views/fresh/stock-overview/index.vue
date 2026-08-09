@@ -58,9 +58,37 @@
           </template>
         </ElTableColumn>
         <ElTableColumn prop="productName" label="商品" min-width="180" />
-        <ElTableColumn label="需备数量" width="150">
+        <ElTableColumn label="需备数量" min-width="190">
           <template #default="{ row }">
-            <strong class="stock-quantity">{{ row.quantity }}{{ row.saleUnit }}</strong>
+            <div class="quantity-cell">
+              <strong class="stock-quantity">{{ row.quantity }}{{ row.saleUnit }}</strong>
+              <ElPopover
+                v-if="row.specDetails && row.specDetails.length > 0"
+                placement="bottom-start"
+                :width="320"
+                trigger="click"
+              >
+                <template #reference>
+                  <ElButton size="small" type="primary" plain class="spec-detail-btn">
+                    详情
+                  </ElButton>
+                </template>
+                <div class="spec-popover-content">
+                  <div class="spec-popover-header">
+                    <span class="spec-popover-title">{{ row.productName }}</span>
+                    <ElTag type="success" size="small" effect="light">规格明细</ElTag>
+                  </div>
+                  <ElTable :data="row.specDetails" size="small" border class="spec-table">
+                    <ElTableColumn prop="specificationText" label="规格" min-width="140" />
+                    <ElTableColumn label="需备数量" width="110" align="right">
+                      <template #default="spec">
+                        <strong class="spec-quantity">{{ spec.row.quantity }}{{ spec.row.saleUnit || row.saleUnit }}</strong>
+                      </template>
+                    </ElTableColumn>
+                  </ElTable>
+                </div>
+              </ElPopover>
+            </div>
           </template>
         </ElTableColumn>
         <ElTableColumn prop="orderCount" label="订单数" width="110" />
@@ -133,9 +161,47 @@
     gap: 10px;
   }
 
+  .quantity-cell {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
   .stock-quantity {
     color: #007a39;
     font-size: 16px;
+  }
+
+  .spec-detail-btn {
+    padding: 2px 8px;
+    height: 24px;
+    font-size: 12px;
+  }
+
+  .spec-popover-content {
+    padding: 4px 0;
+  }
+
+  .spec-popover-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+
+    .spec-popover-title {
+      font-weight: 600;
+      color: #1a1a1a;
+      font-size: 14px;
+    }
+  }
+
+  .spec-table {
+    margin-top: 6px;
+  }
+
+  .spec-quantity {
+    color: #007a39;
+    font-size: 14px;
   }
 
   .date-value {
