@@ -36,10 +36,11 @@
 
   <view wx:else class="cart-content">
     <view class="cart-overview">
-      <view class="overview-icon"><text>鲜</text></view>
+      <image wx:if="{{storeLogoUrl}}" class="overview-logo-img" src="{{storeLogoUrl}}" mode="aspectFit" />
+      <view wx:else class="overview-icon"><text>鲜</text></view>
       <view class="overview-copy">
-        <text class="overview-title">门店直送，新鲜到家</text>
-        <text class="overview-desc">价格与库存以结算时为准</text>
+        <text class="overview-title">门店直送 · 新鲜到家</text>
+        <text class="overview-desc">禹邻优鲜正品保障 · 结算以下列价格为准</text>
       </view>
       <view class="overview-count">
         <text class="overview-count-value">{{availableCount}}</text>
@@ -50,9 +51,7 @@
     <view wx:if="{{unavailableCount}}" class="availability-notice">
       <view class="notice-mark">!</view>
       <text class="notice-copy">有 {{unavailableCount}} 件商品状态发生变化，已为你标记</text>
-      <text class="notice-action {{clearingUnavailable ? 'disabled' : ''}}" bindtap="handleClearUnavailable">
-        {{clearingUnavailable ? '清理中' : '清理失效'}}
-      </text>
+      <text class="notice-action {{clearingUnavailable ? 'disabled' : ''}}" bindtap="handleClearUnavailable">{{clearingUnavailable ? '清理中' : '清理失效'}}</text>
     </view>
 
     <view class="cart-list">
@@ -133,9 +132,15 @@
         <text class="select-all">全选</text>
       </view>
       <view class="total">
-        <text class="total-label">已选 {{selectedCount}} 件 · 合计</text>
-        <text class="total-price">￥{{totalText}}</text>
-        <text wx:if="{{minOrderTip}}" class="min-order-tip {{minOrderMet ? '' : 'is-short'}}">{{minOrderTip}}</text>
+        <view class="total-main">
+          <text class="total-label">合计</text>
+          <text class="total-symbol">￥</text>
+          <text class="total-price-integer">{{totalText}}</text>
+        </view>
+        <view class="total-sub">
+          <text class="total-count">已选{{selectedCount}}件</text>
+          <text wx:if="{{minOrderTip}}" class="min-order-tip {{minOrderMet ? '' : 'is-short'}}">· {{minOrderTip}}</text>
+        </view>
       </view>
     </view>
     <button

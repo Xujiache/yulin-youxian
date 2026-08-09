@@ -2301,14 +2301,17 @@ public class StorefrontService {
 
     private OrderDto toOrderDto(OrderState order) {
         RefundDto latestRefund = latestRefund(order.id());
+        int totalItemCount = order.items().stream()
+                .mapToInt(item -> item.quantity() == null ? 1 : item.quantity().intValue())
+                .sum();
         return new OrderDto(
                 order.id(),
                 order.orderNo(),
                 order.status(),
                 order.payableAmount(),
                 deliverySlotDisplay(order),
-                "共 " + order.items().size() + " 件商品",
-                order.items().stream().map(OrderItemDto::imageUrl).limit(3).toList(),
+                "共 " + totalItemCount + " 件",
+                order.items().stream().map(OrderItemDto::imageUrl).toList(),
                 orderDateTimeText(order),
                 latestRefund == null ? "" : latestRefund.status(),
                 latestRefund == null ? "" : latestRefund.reason()

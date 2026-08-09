@@ -41,6 +41,7 @@ Page({
   data: {
     glassMode: false,
     loading: true,
+    storeLogoUrl: "",
     items: [],
     recommendedProducts: [],
     selectedCount: 0,
@@ -82,6 +83,9 @@ Page({
       const minOrderAmount = home
         ? normalizeMinOrderAmount(home.minOrderAmount)
         : this.data.minOrderAmount;
+      if (home && home.logoUrl) {
+        this.setData({ storeLogoUrl: home.logoUrl });
+      }
       this.updateCart(cart.items || [], minOrderAmount);
       if (!(cart.items || []).length) {
         this.loadRecommendations(home);

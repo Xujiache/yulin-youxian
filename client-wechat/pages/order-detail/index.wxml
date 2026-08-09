@@ -8,21 +8,43 @@
     <view class="placeholder"></view>
   </view>
 
-  <view class="status-card card">
-    <text class="status">{{statusText}}</text>
-    <text class="status-desc">订单 ID：{{orderId}}</text>
-    <text class="status-desc">订单编号：{{orderNo}}</text>
+  <view class="status-banner {{statusConfig.themeClass}}">
+    <view class="status-banner-main">
+      <view class="status-banner-text">
+        <text class="status-title">{{statusConfig.title || statusText}}</text>
+        <text class="status-subtitle">{{statusConfig.desc}}</text>
+      </view>
+      <image class="status-banner-icon" src="{{statusConfig.iconPath}}" mode="aspectFit" />
+    </view>
+    <view class="order-no-bar">
+      <text class="order-no-label">订单编号：{{orderNo}}</text>
+      <view class="copy-btn" bindtap="copyOrderNo">
+        <text>复制</text>
+      </view>
+    </view>
   </view>
 
   <view wx:if="{{refundNotice}}" class="refund-notice card">
-    <text>{{refundNotice}}</text>
+    <view class="notice-icon-dot">!</view>
+    <text class="notice-text">{{refundNotice}}</text>
   </view>
 
-  <view class="card">
-    <text class="module-title">收货信息</text>
-    <text class="line">{{address.name}} {{address.phone}}</text>
-    <text class="line muted">{{address.detail}}</text>
-    <text class="line muted">期望送达时间：{{deliverySlotText}}</text>
+  <view class="card address-card">
+    <view class="card-head">
+      <image class="card-icon" src="/assets/icons/location-green.svg" mode="aspectFit" />
+      <text class="card-title">配送地址</text>
+    </view>
+    <view class="address-main">
+      <text class="address-detail">{{address.detail}}</text>
+      <view class="address-contact-row">
+        <text class="address-name">{{address.name}}</text>
+        <text class="address-phone">{{address.phone}}</text>
+      </view>
+      <view wx:if="{{deliverySlotText}}" class="delivery-slot-pill">
+        <text class="slot-label">期望送达时间</text>
+        <text class="slot-value">{{deliverySlotText}}</text>
+      </view>
+    </view>
   </view>
 
   <view wx:if="{{refundRecords.length}}" class="card refund-history">
@@ -43,39 +65,48 @@
     </view>
   </view>
 
-  <view class="card">
-    <text class="module-title">商品明细</text>
+  <view class="card goods-card">
+    <view class="store-bar">
+      <view class="store-info">
+        <text class="store-name">禹邻优鲜门店</text>
+        <text class="store-tag">自营直送</text>
+      </view>
+    </view>
     <view wx:for="{{items}}" wx:key="id" class="goods-item">
       <image class="goods-image" src="{{item.image}}" mode="aspectFill" lazy-load="{{true}}" />
       <view class="goods-info">
         <text class="goods-name">{{item.name || item.productName}}</text>
         <text wx:if="{{item.specificationText}}" class="goods-spec">{{item.specificationText}}</text>
-        <text class="goods-spec">数量：{{item.quantity}}{{item.saleUnit}}</text>
+        <text class="goods-count">数量 x{{item.quantity}}</text>
       </view>
       <text class="goods-price">￥{{item.amountText}}</text>
     </view>
   </view>
 
-  <view class="card">
+  <view class="card price-card">
     <view class="amount-row">
-      <text>商品总额</text>
-      <text>￥{{productAmountText}}</text>
+      <text class="amount-label">商品总额</text>
+      <text class="amount-value">￥{{productAmountText}}</text>
     </view>
     <view class="amount-row">
-      <text>配送费</text>
-      <text>￥{{deliveryFeeText}}</text>
+      <text class="amount-label">配送费</text>
+      <text class="amount-value">￥{{deliveryFeeText}}</text>
     </view>
     <view class="amount-row">
-      <text>包装费</text>
-      <text>￥{{packageFeeText}}</text>
+      <text class="amount-label">包装费</text>
+      <text class="amount-value">￥{{packageFeeText}}</text>
     </view>
     <view wx:if="{{hasRefundedAmount}}" class="amount-row">
-      <text>已退款</text>
-      <text>-￥{{refundedText}}</text>
+      <text class="amount-label">已退款</text>
+      <text class="amount-value refund-color">-￥{{refundedText}}</text>
     </view>
-    <view class="amount-row strong">
-      <text>实付款</text>
-      <text>￥{{payableText}}</text>
+    <view class="amount-divider"></view>
+    <view class="amount-row strong-row">
+      <text class="total-pay-label">实付款</text>
+      <view class="total-pay-val">
+        <text class="pay-symbol">￥</text>
+        <text class="pay-num">{{payableText}}</text>
+      </view>
     </view>
   </view>
 
@@ -84,8 +115,8 @@
   </view>
 
   <view class="detail-actions">
-    <button wx:if="{{isPendingPayment}}" class="primary-button detail-action-button" disabled="{{paying}}" bindtap="handlePay">{{paying ? '支付处理中' : '继续支付'}}</button>
-    <button class="ghost-button detail-action-button" bindtap="handleService">联系客服</button>
-    <button wx:if="{{!isPendingPayment}}" class="primary-button detail-action-button" bindtap="handleRefund">申请退款</button>
+    <button class="action-btn btn-service" bindtap="handleService">联系客服</button>
+    <button wx:if="{{!isPendingPayment}}" class="action-btn btn-ghost" bindtap="handleRefund">申请退款</button>
+    <button wx:if="{{isPendingPayment}}" class="action-btn btn-primary" disabled="{{paying}}" bindtap="handlePay">{{paying ? '支付处理中' : '继续支付'}}</button>
   </view>
 </view>

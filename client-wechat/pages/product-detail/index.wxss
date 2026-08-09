@@ -137,21 +137,31 @@
 .name-row {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 14rpx;
 }
 
 .name {
+  flex: 1;
+  min-width: 0;
   color: #101815;
   font-size: 40rpx;
   font-weight: 800;
 }
 
 .badge {
-  padding: 5rpx 12rpx;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  white-space: nowrap;
+  padding: 6rpx 14rpx;
   color: #1e5b2b;
   font-size: 22rpx;
+  font-weight: 700;
+  line-height: 1;
   background: #e8f4df;
-  border-radius: 8rpx;
+  border-radius: 10rpx;
 }
 
 .subtitle,

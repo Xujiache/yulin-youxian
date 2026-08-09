@@ -1,6 +1,6 @@
 const { yuan } = require("../../utils/format");
 const { getCart } = require("../../api/cart");
-const { getOrders } = require("../../api/orders");
+const { getOrders, getOrder } = require("../../api/orders");
 const { syncTheme } = require("../../utils/theme");
 
 const TABS = ["全部", "待支付", "待接单", "备货中", "配送中", "已完成", "售后"];
@@ -36,12 +36,15 @@ function secondaryActionText(order) {
     return "联系客服";
   }
   if (isAfterSaleStatus(order.status)) {
-    return "订单详情";
+    return "";
   }
   if (order.status === "已完成") {
     return "再来一单";
   }
-  return "订单详情";
+  if (order.status === "已取消") {
+    return "查看详情";
+  }
+  return "";
 }
 
 function refundNotice(order) {
@@ -101,16 +104,53 @@ Page({
     }
     try {
       const remoteOrders = await getOrders({ status });
+      const detailedOrders = await Promise.all(
+        remoteOrders.map(async (item) => {
+          try {
+            const detail = await getOrder(item.id);
+            return { ...item, ...detail };
+          } catch {
+            return item;
+          }
+        })
+      );
+
       this.setData({
         loading: false,
         needsLogin: false,
-        orders: remoteOrders.map((item) => ({
-          ...item,
-          totalText: yuan(item.totalAmount),
-          refundNotice: refundNotice(item),
-          primaryActionText: primaryActionText(item),
-          secondaryActionText: secondaryActionText(item)
-        })),
+        orders: detailedOrders.map((item) => {
+          const itemsList = item.items || [];
+          const images = itemsList.length
+            ? itemsList.map((i) => i.imageUrl || i.image).filter(Boolean)
+            : (item.images || []);
+
+          let calculatedCount = 0;
+          if (itemsList.length > 0) {
+            calculatedCount = itemsList.reduce((sum, i) => sum + Number(i.quantity || 1), 0);
+          } else if (item.summary) {
+            const match = item.summary.match(/\d+/);
+            if (match) {
+              calculatedCount = parseInt(match[0], 10);
+            }
+          }
+          const totalItemCount = calculatedCount || images.length || 1;
+          const isSingleProduct = totalItemCount === 1 || (itemsList.length === 1 && Number(itemsList[0].quantity) === 1);
+          const firstItemName = itemsList.length ? (itemsList[0].name || itemsList[0].productName) : (item.summary || "");
+
+          return {
+            ...item,
+            images,
+            totalText: yuan(item.totalAmount),
+            refundNotice: refundNotice(item),
+            primaryActionText: primaryActionText(item),
+            secondaryActionText: secondaryActionText(item),
+            isSingleProduct,
+            singleProductName: firstItemName,
+            singleProductSpec: itemsList.length ? (itemsList[0].specificationText || "") : "",
+            singleProductQuantity: itemsList.length ? itemsList[0].quantity : 1,
+            totalItemCount
+          };
+        }),
         emptyTitle: status === "全部" ? "还没有下过单" : `暂无${status}订单`,
         emptyDesc: status === "全部"
           ? "去首页挑选一些新鲜食材，提交订单后这里会自动记录。"

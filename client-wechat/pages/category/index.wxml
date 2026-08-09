@@ -58,8 +58,10 @@
           wx:for="{{products}}"
           wx:key="id"
           product="{{item}}"
+          cart-quantity="{{cartMap[item.id] || 0}}"
           eager-image="{{true}}"
           bind:add="handleAdd"
+          bind:minus="handleMinus"
         />
       </view>
 

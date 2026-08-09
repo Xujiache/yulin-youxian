@@ -1,4 +1,4 @@
-const { addCartItem, getCart } = require("../../api/cart");
+const { addCartItem, deleteCartItem, getCart, updateCartItem } = require("../../api/cart");
 const { getCategories, getProducts } = require("../../api/catalog");
 const {
   SORT_OPTIONS,
@@ -40,7 +40,9 @@ Page({
     activeFilterText: "综合排序",
     sheetVisible: false,
     selectedProduct: null,
-    cartCount: 0
+    cartCount: 0,
+    cartMap: {},
+    cartItemMap: {}
   },
 
   async onLoad(options) {
@@ -120,12 +122,22 @@ Page({
   async loadCartCount() {
     const app = getApp();
     if (!app.globalData.authToken && !wx.getStorageSync("authToken")) {
-      this.setData({ cartCount: 0 });
+      this.setData({ cartCount: 0, cartMap: {}, cartItemMap: {} });
       return;
     }
     try {
       const cart = await getCart();
-      this.setData({ cartCount: (cart.items || []).length });
+      const cartItems = cart.items || [];
+      const cartMap = {};
+      const cartItemMap = {};
+      cartItems.forEach((item) => {
+        const pid = item.productId;
+        cartMap[pid] = (cartMap[pid] || 0) + (item.quantity || 1);
+        if (!cartItemMap[pid]) {
+          cartItemMap[pid] = item;
+        }
+      });
+      this.setData({ cartCount: cartItems.length, cartMap, cartItemMap });
     } catch {}
   },
 
@@ -312,14 +324,56 @@ Page({
     });
   },
 
-  handleAdd(event) {
+  async handleAdd(event) {
     if (!requireCompleteProfile()) {
       return;
     }
-    this.setData({
-      selectedProduct: event.detail.product,
-      sheetVisible: true
-    });
+    const product = event.detail.product;
+    if (product.skuEnabled) {
+      this.setData({
+        selectedProduct: product,
+        sheetVisible: true
+      });
+      return;
+    }
+    // 无规格商品直接+1（美团同款快捷步进）
+    const currentQty = this.data.cartMap[product.id] || 0;
+    const cartItem = this.data.cartItemMap[product.id];
+    try {
+      if (cartItem && currentQty > 0) {
+        await updateCartItem(cartItem.id, currentQty + (product.stepQty || 1));
+      } else {
+        await addCartItem(product.id, product.minPurchaseQty || 1);
+      }
+      await this.loadCartCount();
+    } catch (error) {
+      wx.showToast({ title: error.message || "添加失败，请重试", icon: "none" });
+    }
+  },
+
+  async handleMinus(event) {
+    if (!requireCompleteProfile()) {
+      return;
+    }
+    const product = event.detail.product;
+    const currentQty = this.data.cartMap[product.id] || 0;
+    const cartItem = this.data.cartItemMap[product.id];
+    if (!cartItem || currentQty <= 0) {
+      return;
+    }
+    const minPurchase = product.minPurchaseQty || 1;
+    const step = product.stepQty || 1;
+    const newQty = currentQty - step;
+    try {
+      if (newQty < minPurchase) {
+        await deleteCartItem(cartItem.id);
+      } else {
+        await updateCartItem(cartItem.id, newQty);
+      }
+      await this.loadCartCount();
+    } catch (error) {
+      wx.showToast({ title: error.message || "操作失败，请重试", icon: "none" });
+    }
   },
 
   handleCloseSheet() {

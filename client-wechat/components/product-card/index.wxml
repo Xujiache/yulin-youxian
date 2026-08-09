@@ -16,9 +16,22 @@
         <text wx:if="{{priceFrom}}" class="price-from">起</text>
         <text class="unit">/{{priceSaleUnit}}</text>
       </view>
-      <button class="add-button {{unavailable ? 'is-disabled' : ''}}" catchtap="handleAdd">
-        <image wx:if="{{!unavailable}}" class="add-icon" src="/assets/icons/add-white.svg" mode="aspectFit" />
+      <!-- 大厂同款：如果已选数量 > 0，且非选规格/无货，展示 [- 数量 +] 步进器；选规格仍展示选规格按钮 -->
+      <view wx:if="{{!unavailable && cartQuantity > 0 && !product.skuEnabled}}" class="stepper-group">
+        <button class="stepper-btn minus-btn" catchtap="handleMinus">
+          <image class="stepper-icon" src="/assets/icons/minus-green.svg" mode="aspectFit" />
+        </button>
+        <text class="stepper-count">{{cartQuantity}}</text>
+        <button class="stepper-btn add-btn" catchtap="handleAdd">
+          <image class="stepper-icon" src="/assets/icons/add-white.svg" mode="aspectFit" />
+        </button>
+      </view>
+
+      <button wx:else class="add-button {{unavailable ? 'is-disabled' : ''}} {{product.skuEnabled && !unavailable ? 'is-sku-btn' : ''}}" catchtap="handleAdd">
+        <text wx:if="{{!unavailable && product.skuEnabled}}" class="sku-button-text">选规格</text>
+        <image wx:elif="{{!unavailable}}" class="add-icon" src="/assets/icons/add-white.svg" mode="aspectFit" />
         <text wx:else class="sold-out-button-text">{{availabilityShortLabel}}</text>
+        <text wx:if="{{!unavailable && product.skuEnabled && cartQuantity > 0}}" class="sku-badge">{{cartQuantity}}</text>
       </button>
     </view>
   </view>

@@ -1,7 +1,8 @@
 .order-detail-page {
   min-height: 100vh;
-  padding: 196rpx 24rpx 190rpx;
+  padding: 180rpx 24rpx 170rpx;
   background: #f5f6f7;
+  box-sizing: border-box;
 }
 
 .detail-header {
@@ -16,7 +17,6 @@
   height: 176rpx;
   padding: 88rpx 24rpx 0;
   background: #f5f6f7;
-  box-shadow: 0 1rpx 0 rgba(16, 24, 21, 0.04);
 }
 
 .back,
@@ -51,84 +51,202 @@
   font-weight: 700;
 }
 
+/* Status Banner - High End Meituan Style */
+.status-banner {
+  margin-bottom: 24rpx;
+  padding: 36rpx 32rpx 28rpx;
+  color: #ffffff;
+  background: linear-gradient(135deg, #00ab58 0%, #007a3d 100%);
+  border-radius: 32rpx;
+  box-shadow: 0 16rpx 36rpx rgba(0, 122, 61, 0.22);
+}
+
+.status-banner.is-completed {
+  background: linear-gradient(135deg, #34495e 0%, #2c3e50 100%);
+  box-shadow: 0 16rpx 36rpx rgba(44, 62, 80, 0.18);
+}
+
+.status-banner.is-cancelled {
+  background: linear-gradient(135deg, #7f8c8d 0%, #5d6d7e 100%);
+  box-shadow: 0 16rpx 36rpx rgba(93, 109, 126, 0.15);
+}
+
+.status-banner.is-refund {
+  background: linear-gradient(135deg, #e67e22 0%, #d35400 100%);
+  box-shadow: 0 16rpx 36rpx rgba(230, 126, 34, 0.22);
+}
+
+.status-banner-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20rpx;
+}
+
+.status-banner-text {
+  display: flex;
+  flex-direction: column;
+  gap: 10rpx;
+  flex: 1;
+  min-width: 0;
+}
+
+.status-title {
+  font-size: 40rpx;
+  font-weight: 900;
+  line-height: 50rpx;
+  letter-spacing: 0.5rpx;
+}
+
+.status-subtitle {
+  font-size: 24rpx;
+  line-height: 34rpx;
+  opacity: 0.92;
+}
+
+.status-banner-icon {
+  width: 80rpx;
+  height: 80rpx;
+  flex-shrink: 0;
+  opacity: 0.95;
+}
+
+.order-no-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 24rpx;
+  padding-top: 20rpx;
+  border-top: 1rpx solid rgba(255, 255, 255, 0.22);
+  font-size: 23rpx;
+  opacity: 0.92;
+}
+
+.order-no-label {
+  letter-spacing: 0.5rpx;
+}
+
+.copy-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6rpx 20rpx;
+  background: rgba(255, 255, 255, 0.24);
+  border-radius: 999rpx;
+  font-size: 22rpx;
+  font-weight: 700;
+}
+
+/* Card Styles */
 .card {
   margin-bottom: 24rpx;
-  padding: 28rpx;
+  padding: 30rpx 32rpx;
+  background: #ffffff;
+  border-radius: 28rpx;
+  box-shadow: 0 6rpx 20rpx rgba(0, 0, 0, 0.035);
 }
 
-.status-card {
-  color: #ffffff;
-  background: linear-gradient(135deg, #007a3d 0%, #55bd3c 100%);
-  box-shadow: 0 16rpx 34rpx rgba(0, 122, 61, 0.18);
+/* Address Card */
+.address-card .card-head {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  margin-bottom: 20rpx;
 }
 
-.glass-mode .status-card {
-  color: #ffffff;
-  background: linear-gradient(135deg, #006d42 0%, #18a861 100%);
-  border-color: rgba(255, 255, 255, 0.3);
-  box-shadow: 0 18rpx 38rpx rgba(0, 109, 66, 0.24), inset 0 1rpx 0 rgba(255, 255, 255, 0.24);
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
+.card-icon {
+  width: 34rpx;
+  height: 34rpx;
 }
 
-.glass-mode .status-card .status {
-  color: #ffffff;
-}
-
-.glass-mode .status-card .status-desc {
-  color: rgba(255, 255, 255, 0.9);
-}
-
-.status {
-  display: block;
-  color: #ffffff;
-  font-size: 42rpx;
+.card-title {
+  color: #1a1a1a;
+  font-size: 28rpx;
   font-weight: 800;
-  line-height: 52rpx;
 }
 
-.status-desc,
-.line {
-  display: block;
-  margin-top: 12rpx;
-  color: #5b665f;
+.address-main {
+  display: flex;
+  flex-direction: column;
+  gap: 12rpx;
+}
+
+.address-detail {
+  color: #1a1a1a;
+  font-size: 32rpx;
+  font-weight: 800;
+  line-height: 44rpx;
+}
+
+.address-contact-row {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  color: #666666;
   font-size: 26rpx;
-  line-height: 38rpx;
 }
 
-.status-desc {
-  color: rgba(255, 255, 255, 0.86);
+.address-name {
+  font-weight: 600;
 }
 
-.refund-notice {
-  color: #9a4a00;
-  font-size: 26rpx;
-  line-height: 38rpx;
-  background: #fff7ed;
-  border: 1rpx solid #ffd8ad;
+.delivery-slot-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 12rpx;
+  margin-top: 8rpx;
+  padding: 14rpx 20rpx;
+  background: #f7f9f8;
+  border-radius: 16rpx;
 }
 
-.payment-notice {
-  color: #6d5200;
-  font-size: 26rpx;
-  line-height: 38rpx;
-  background: #fff9e6;
-  border: 1rpx solid #f3d889;
+.slot-label {
+  color: #666666;
+  font-size: 24rpx;
+  white-space: nowrap;
 }
 
-.module-title {
-  display: block;
-  color: #101815;
-  font-size: 30rpx;
+.slot-value {
+  color: #007a3d;
+  font-size: 24rpx;
   font-weight: 700;
+  white-space: nowrap;
+}
+
+/* Goods Card */
+.store-bar {
+  padding-bottom: 22rpx;
+  border-bottom: 1rpx solid #f2f4f3;
+}
+
+.store-info {
+  display: flex;
+  align-items: center;
+  gap: 14rpx;
+}
+
+.store-name {
+  color: #1a1a1a;
+  font-size: 30rpx;
+  font-weight: 800;
+}
+
+.store-tag {
+  padding: 4rpx 12rpx;
+  color: #007a3d;
+  font-size: 20rpx;
+  font-weight: 700;
+  background: #e8f7ee;
+  border-radius: 8rpx;
 }
 
 .goods-item {
   display: flex;
   align-items: center;
-  gap: 20rpx;
+  gap: 24rpx;
   padding: 24rpx 0;
-  border-bottom: 1rpx solid #eef1ef;
+  border-bottom: 1rpx solid #f7f9f8;
 }
 
 .goods-item:last-child {
@@ -140,147 +258,174 @@
   flex-shrink: 0;
   width: 120rpx;
   height: 120rpx;
-  background: #eef3ed;
-  border-radius: 18rpx;
+  background: #f7f9f8;
+  border-radius: 20rpx;
 }
 
 .goods-info {
   flex: 1;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
 }
 
 .goods-name {
-  display: block;
   font-size: 28rpx;
   font-weight: 700;
-  color: #101815;
+  color: #1a1a1a;
+  line-height: 38rpx;
 }
 
 .goods-spec {
-  display: block;
-  margin-top: 8rpx;
-  color: #5b665f;
-  font-size: 24rpx;
+  color: #888888;
+  font-size: 23rpx;
+}
+
+.goods-count {
+  color: #888888;
+  font-size: 23rpx;
 }
 
 .goods-price {
-  font-size: 28rpx;
-  color: #007a3d;
-  font-weight: 700;
-}
-
-.refund-history {
-  padding-bottom: 10rpx;
-}
-
-.refund-record {
-  padding: 24rpx 0;
-  border-bottom: 1rpx solid #eef1ef;
-}
-
-.refund-record:last-child {
-  border-bottom: 0;
-}
-
-.refund-record-head,
-.refund-status-group {
-  display: flex;
-  justify-content: space-between;
-  gap: 12rpx;
-}
-
-.refund-status-group {
-  align-items: flex-end;
-  flex-direction: column;
-}
-
-.refund-source,
-.refund-no,
-.refund-reason,
-.refund-time {
-  display: block;
-}
-
-.refund-source {
-  color: #101815;
-  font-size: 27rpx;
-  font-weight: 700;
-}
-
-.refund-no,
-.refund-time {
-  margin-top: 6rpx;
-  color: #87918c;
-  font-size: 21rpx;
-}
-
-.refund-amount {
-  color: #007a3d;
-  font-size: 28rpx;
+  font-size: 30rpx;
+  color: #1a1a1a;
   font-weight: 800;
 }
 
-.refund-status {
-  color: #49705c;
-  font-size: 22rpx;
-}
-
-.refund-reason {
-  margin-top: 16rpx;
-  color: #4f5c55;
-  font-size: 24rpx;
-  line-height: 36rpx;
+/* Price Breakdown Card */
+.price-card {
+  display: flex;
+  flex-direction: column;
+  gap: 18rpx;
 }
 
 .amount-row {
   display: flex;
   justify-content: space-between;
-  padding: 14rpx 0;
-  color: #5b665f;
+  align-items: center;
+}
+
+.amount-label {
+  color: #666666;
   font-size: 26rpx;
 }
 
-.amount-row.strong {
-  margin-top: 6rpx;
-  padding-top: 20rpx;
-  color: #007a3d;
-  font-size: 32rpx;
-  font-weight: 800;
-  border-top: 1rpx solid #eef1ef;
+.amount-value {
+  color: #333333;
+  font-size: 26rpx;
+  font-weight: 600;
 }
 
-.detail-actions {
-  position: fixed;
-  left: 24rpx;
-  right: auto;
-  bottom: calc(20rpx + env(safe-area-inset-bottom));
+.refund-color {
+  color: #e74c3c;
+}
+
+.amount-divider {
+  height: 1rpx;
+  background: #f2f4f3;
+  margin: 8rpx 0;
+}
+
+.strong-row {
+  margin-top: 4rpx;
+}
+
+.total-pay-label {
+  color: #1a1a1a;
+  font-size: 30rpx;
+  font-weight: 800;
+}
+
+.total-pay-val {
+  display: flex;
+  align-items: baseline;
+}
+
+.pay-symbol {
+  color: #007a3d;
+  font-size: 26rpx;
+  font-weight: 800;
+}
+
+.pay-num {
+  color: #007a3d;
+  font-size: 44rpx;
+  font-weight: 900;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+/* Notices */
+.refund-notice {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  box-sizing: border-box;
-  width: calc(100% - 48rpx);
-  gap: 16rpx;
-  padding: 14rpx 16rpx;
-  overflow: hidden;
-  background: rgba(255, 255, 255, 0.98);
-  border: 1rpx solid rgba(0, 122, 61, 0.08);
-  border-radius: 30rpx;
-  box-shadow: 0 18rpx 44rpx rgba(8, 34, 20, 0.14);
+  gap: 14rpx;
+  color: #9a4a00;
+  font-size: 24rpx;
+  line-height: 34rpx;
+  background: #fff7ed;
+  border-radius: 20rpx;
 }
 
-.detail-action-button {
-  flex: 1;
-  width: auto;
-  min-width: 0;
-  height: 82rpx;
-  min-height: 82rpx;
+.payment-notice {
+  color: #6d5200;
+  font-size: 24rpx;
+  line-height: 34rpx;
+  background: #fff9e6;
+  border-radius: 20rpx;
+}
+
+/* Bottom Action Bar - Premium Floating Glass Bar */
+.detail-actions {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 70;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 20rpx;
+  padding: 20rpx 32rpx calc(24rpx + env(safe-area-inset-bottom));
   box-sizing: border-box;
-  padding: 0;
+  background: #ffffff;
+  box-shadow: 0 -8rpx 30rpx rgba(0, 0, 0, 0.06);
+}
+
+.action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 180rpx;
+  height: 76rpx;
+  padding: 0 36rpx;
   margin: 0;
-  font-size: 28rpx;
-  line-height: 82rpx;
+  box-sizing: border-box;
+  font-size: 27rpx;
+  font-weight: 700;
+  line-height: 1;
+  border-radius: 999rpx;
 }
 
-.detail-actions .primary-button {
-  box-shadow: 0 12rpx 24rpx rgba(0, 122, 61, 0.16);
+.action-btn::after {
+  border: 0;
+}
+
+.btn-service {
+  color: #444444;
+  background: #ffffff;
+  border: 1.5rpx solid #dcdcdc;
+}
+
+.btn-ghost {
+  color: #444444;
+  background: #ffffff;
+  border: 1.5rpx solid #dcdcdc;
+}
+
+.btn-primary {
+  color: #ffffff;
+  background: linear-gradient(135deg, #00b05b 0%, #007a3d 100%);
+  border: 0;
+  box-shadow: 0 8rpx 24rpx rgba(0, 122, 61, 0.3);
 }
