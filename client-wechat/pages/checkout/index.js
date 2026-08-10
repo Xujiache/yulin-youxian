@@ -64,13 +64,13 @@ const PAYMENT_METHODS = [
     code: "WECHAT",
     title: "微信支付",
     desc: "使用当前微信账号付款",
-    icon: "微"
+    icon: "/assets/payment/wechat-pay.png"
   },
   {
-    code: "OTHER",
+    code: "FRIEND",
     title: "请好友付款",
     desc: "生成代付链接，好友使用自己的微信付款",
-    icon: "付"
+    icon: "/assets/payment/friend-pay.png"
   }
 ];
 
@@ -78,7 +78,7 @@ function paymentButtonLabel(paymentMethod, minOrderMet, shortfallText) {
   if (!minOrderMet) {
     return `还差¥${shortfallText}起送`;
   }
-  return paymentMethod === "OTHER" ? "提交订单并分享" : "微信支付";
+  return paymentMethod === "FRIEND" ? "提交订单并分享" : "微信支付";
 }
 
 function applyPreviewAmounts(preview, fallbackMinOrderAmount = 0) {
@@ -334,7 +334,7 @@ Page({
 
   handlePaymentMethod(event) {
     if (this.data.paying) return;
-    const paymentMethod = event.currentTarget.dataset.method === "OTHER" ? "OTHER" : "WECHAT";
+    const paymentMethod = event.currentTarget.dataset.method === "FRIEND" ? "FRIEND" : "WECHAT";
     this.setData({
       paymentMethod,
       payLabel: paymentButtonLabel(paymentMethod, this.data.minOrderMet, this.data.shortfallText)
@@ -385,7 +385,7 @@ Page({
         remark: (this.data.remark || "").trim()
       });
       orderId = order.id;
-      if (paymentMethod === "OTHER") {
+      if (paymentMethod === "FRIEND") {
         const share = await createPaymentShare(order.id);
         wx.redirectTo({
           url: `/pages/pay-for-other/index?token=${encodeURIComponent(share.token)}&owner=1&orderId=${order.id}`

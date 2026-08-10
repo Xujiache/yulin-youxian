@@ -7,6 +7,7 @@ import com.xianda.freshdelivery.dto.AdminRefundCreateRequest;
 import com.xianda.freshdelivery.dto.PaymentConfirmationResult;
 import com.xianda.freshdelivery.dto.PaymentDto;
 import com.xianda.freshdelivery.dto.PaymentNotifyRequest;
+import com.xianda.freshdelivery.dto.PaymentShareDto;
 import com.xianda.freshdelivery.dto.SharedPaymentDto;
 import com.xianda.freshdelivery.dto.BatchOrderActionResult;
 import java.util.ArrayList;
@@ -31,7 +32,7 @@ public class WechatPaymentService {
         this.printJobService = printJobService;
     }
 
-    public PaymentDto createPayment(Long orderId) {
+    public synchronized PaymentDto createPayment(Long orderId) {
         OrderDetailDto order = storefrontService.preparePayment(orderId);
         if (wechatPayClient.isPaymentConfigured()) {
             wechatPayClient.closePayment(order);
@@ -41,7 +42,21 @@ public class WechatPaymentService {
         return wechatPayClient.createJsapiPayment(order, openId);
     }
 
-    public SharedPaymentDto createSharedPayment(String token) {
+    public synchronized PaymentDto changeToSelfPayment(Long orderId) {
+        OrderDetailDto currentOrder = storefrontService.preparePendingPayment(orderId);
+        closeActivePayment(currentOrder);
+        OrderDetailDto order = storefrontService.activateSelfPayment(orderId);
+        String openId = authService.openIdForUser(CurrentUserContext.userId());
+        return wechatPayClient.createJsapiPayment(order, openId);
+    }
+
+    public synchronized PaymentShareDto createPaymentShare(Long orderId) {
+        OrderDetailDto order = storefrontService.preparePendingPayment(orderId);
+        closeActivePayment(order);
+        return storefrontService.createPaymentShare(orderId);
+    }
+
+    public synchronized SharedPaymentDto createSharedPayment(String token) {
         StorefrontService.PaymentSharePaymentContext context = storefrontService.preparePaymentShare(token);
         Long payerUserId = CurrentUserContext.userId();
         if (payerUserId.equals(context.creatorUserId())) {
@@ -63,7 +78,7 @@ public class WechatPaymentService {
         );
     }
 
-    public OrderDetailDto confirmPayment(PaymentNotifyRequest request) {
+    public synchronized OrderDetailDto confirmPayment(PaymentNotifyRequest request) {
         validatePaymentNotificationIdentity(request);
         PaymentConfirmationResult result = storefrontService.confirmPayment(request);
         if (result.newlyPaid()) {
@@ -72,7 +87,7 @@ public class WechatPaymentService {
         return result.order();
     }
 
-    public OrderDetailDto refreshPaymentStatus(Long orderId) {
+    public synchronized OrderDetailDto refreshPaymentStatus(Long orderId) {
         OrderDetailDto order = storefrontService.order(orderId);
         if (!"待支付".equals(order.status())) {
             return order;
@@ -84,12 +99,16 @@ public class WechatPaymentService {
         return confirmPayment(payment);
     }
 
-    public OrderDetailDto cancelOrder(Long orderId, boolean returnToCart) {
-        OrderDetailDto order = storefrontService.preparePayment(orderId);
+    public synchronized OrderDetailDto cancelOrder(Long orderId, boolean returnToCart) {
+        OrderDetailDto order = storefrontService.preparePendingPayment(orderId);
+        closeActivePayment(order);
+        return storefrontService.cancelOrder(orderId, returnToCart);
+    }
+
+    private void closeActivePayment(OrderDetailDto order) {
         if (wechatPayClient.isPaymentConfigured()) {
             wechatPayClient.closePayment(order);
         }
-        return storefrontService.cancelOrder(orderId, returnToCart);
     }
 
     public OrderDetailDto deliverAdminOrder(Long orderId) {

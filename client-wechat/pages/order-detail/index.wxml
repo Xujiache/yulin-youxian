@@ -114,6 +114,20 @@
     <text>{{paymentNotice}}</text>
   </view>
 
+  <view wx:if="{{isPendingPayment}}" class="payment-route-card card" bindtap="handlePay">
+    <image
+      class="payment-route-icon"
+      src="{{paymentMethod === 'FRIEND' ? '/assets/payment/friend-pay.png' : '/assets/payment/wechat-pay.png'}}"
+      mode="aspectFit"
+    />
+    <view class="payment-route-copy">
+      <text class="payment-route-eyebrow">当前付款方式</text>
+      <text class="payment-route-title">{{paymentMethod === 'FRIEND' ? '好友代付' : '微信支付'}}</text>
+      <text class="payment-route-desc">仅此入口可付款，切换后原入口立即失效</text>
+    </view>
+    <view class="payment-route-change">更改</view>
+  </view>
+
   <view class="detail-actions">
     <button class="action-btn btn-service" bindtap="handleService">联系客服</button>
     <view wx:if="{{canCancel}}" class="action-btn btn-cancel {{cancelling || paying ? 'is-disabled' : ''}}" catchtap="handleCancelOrder">
@@ -122,6 +136,55 @@
     <button wx:if="{{canRefund}}" class="action-btn btn-ghost" bindtap="handleRefund">申请退款</button>
     <button wx:if="{{canRestartPayment}}" class="action-btn btn-primary" disabled="{{restarting || paying}}" bindtap="handleRestartPayment">{{restarting ? '重启中' : '重启支付'}}</button>
     <button wx:if="{{isPendingPayment}}" class="action-btn btn-primary" disabled="{{paying}}" bindtap="handlePay">{{paying ? '支付处理中' : '继续支付'}}</button>
+  </view>
+
+  <view wx:if="{{showPaymentMethodModal}}" class="payment-method-mask" catchtap="closePaymentMethodModal">
+    <view class="payment-method-sheet" catchtap="stopPaymentMethodModalTap">
+      <view class="sheet-handle"></view>
+      <view class="payment-sheet-head">
+        <view>
+          <text class="payment-sheet-title">选择支付方式</text>
+          <text class="payment-sheet-subtitle">随时更改，但同一时间只能保留一种付款方式</text>
+        </view>
+        <view class="sheet-close" catchtap="closePaymentMethodModal">×</view>
+      </view>
+
+      <view class="payment-lock-tip">
+        <view class="lock-dot"></view>
+        <text>切换后，原付款入口会立即失效，避免重复付款</text>
+      </view>
+
+      <view wx:if="{{paymentMethodLoading}}" class="payment-method-loading">正在读取当前支付方式…</view>
+      <view wx:else class="payment-method-list">
+        <view
+          wx:for="{{paymentMethods}}"
+          wx:key="code"
+          class="payment-method-option {{selectedPaymentMethod === item.code ? 'is-selected' : ''}}"
+          data-method="{{item.code}}"
+          catchtap="handleSelectPaymentMethod"
+        >
+          <image class="payment-method-icon" src="{{item.icon}}" mode="aspectFit" />
+          <view class="payment-method-copy">
+            <view class="payment-method-title-row">
+              <text class="payment-method-title">{{item.title}}</text>
+              <text wx:if="{{item.code === 'WECHAT' && paymentMethod !== 'WECHAT'}}" class="default-badge">默认</text>
+              <text wx:if="{{paymentMethod === item.code}}" class="current-badge">当前</text>
+            </view>
+            <text class="payment-method-desc">{{item.desc}}</text>
+          </view>
+          <view class="payment-method-radio {{selectedPaymentMethod === item.code ? 'is-checked' : ''}}">
+            <view wx:if="{{selectedPaymentMethod === item.code}}" class="radio-core"></view>
+          </view>
+        </view>
+      </view>
+
+      <button
+        class="payment-method-confirm {{paymentMethodLoading || paymentMethodSubmitting ? 'is-disabled' : ''}}"
+        disabled="{{paymentMethodLoading || paymentMethodSubmitting}}"
+        catchtap="confirmPaymentMethod"
+      >{{paymentMethodSubmitting ? '正在切换…' : (selectedPaymentMethod === 'FRIEND' ? '生成链接并邀请好友' : '使用微信支付')}}</button>
+      <text class="payment-method-footnote">支付结果以微信支付回调为准，成功后所有其他入口自动关闭</text>
+    </view>
   </view>
 
   <view wx:if="{{showCancelModal}}" class="cancel-modal-mask" catchtap="closeCancelModal">

@@ -25,6 +25,7 @@ import com.xianda.freshdelivery.dto.OrderPreviewDto;
 import com.xianda.freshdelivery.dto.OrderPreviewRequest;
 import com.xianda.freshdelivery.dto.OrderStatusCountDto;
 import com.xianda.freshdelivery.dto.PaymentConfirmationResult;
+import com.xianda.freshdelivery.dto.PaymentMethodDto;
 import com.xianda.freshdelivery.dto.PaymentNotifyRequest;
 import com.xianda.freshdelivery.dto.PaymentShareDto;
 import com.xianda.freshdelivery.dto.PrintModels;
@@ -69,6 +70,8 @@ import org.springframework.stereotype.Service;
 
 @Service
 public class StorefrontService {
+    private static final String PAYMENT_METHOD_WECHAT = "WECHAT";
+    private static final String PAYMENT_METHOD_FRIEND = "FRIEND";
     private static final String STATE_KEY = "storefront";
     private static final int DEFAULT_DELIVERY_FEE = 500;
     private static final int DEFAULT_PACKAGE_FEE = 100;
@@ -108,6 +111,7 @@ public class StorefrontService {
     private final Map<String, String> paymentTransactionIds = new LinkedHashMap<>();
     private final Map<Long, String> paymentOrderNos = new LinkedHashMap<>();
     private final Map<Long, String> paymentStartedAts = new LinkedHashMap<>();
+    private final Map<Long, String> paymentMethods = new LinkedHashMap<>();
     private final Map<String, PaymentShareState> paymentShares = new LinkedHashMap<>();
 
     private SettingsDto settings = new SettingsDto("禹邻优鲜", "/assets/products/store-logo.png", 0, DEFAULT_DELIVERY_FEE, DEFAULT_PACKAGE_FEE, "08:00-20:00", "400-800-1234", false, true, List.of());
@@ -697,6 +701,7 @@ public class StorefrontService {
         orders.put(id, state);
         paymentOrderNos.put(id, orderNo);
         paymentStartedAts.put(id, createdAt);
+        paymentMethods.put(id, PAYMENT_METHOD_WECHAT);
         if (cartCheckout) {
             request.cartItemIds().forEach(cartItems::remove);
         }
@@ -874,6 +879,7 @@ public class StorefrontService {
         paymentOrderNos.put(id, restartedPaymentOrderNo(restarted, now));
         paymentTransactionIds.remove(restarted.orderNo());
         invalidatePaymentShares(restarted.id());
+        paymentMethods.put(id, PAYMENT_METHOD_WECHAT);
         restarted = restarted.withStatus("待支付");
         orders.put(id, restarted);
         persist();
@@ -911,16 +917,53 @@ public class StorefrontService {
         if (!"待支付".equals(order.status())) {
             throw new BusinessException(409, "当前订单状态不可支付");
         }
+        if (!PAYMENT_METHOD_WECHAT.equals(paymentMethodCode(order.id()))) {
+            throw new BusinessException(409, "当前订单已切换为好友代付，请先更改支付方式");
+        }
         return toOrderDetailDto(order);
     }
 
-    public synchronized PaymentShareDto createPaymentShare(Long id) {
+    public synchronized OrderDetailDto preparePendingPayment(Long id) {
         closeExpiredOrders(LocalDateTime.now(STORE_ZONE));
+        OrderState order = orderState(id);
+        if (!"待支付".equals(order.status())) {
+            throw new BusinessException(409, "当前订单状态不可支付");
+        }
+        return toOrderDetailDto(order);
+    }
+
+    public synchronized PaymentMethodDto paymentMethod(Long id) {
+        closeExpiredOrders(LocalDateTime.now(STORE_ZONE));
+        OrderState order = orderState(id);
+        String code = paymentMethodCode(order.id());
+        return new PaymentMethodDto(
+                code,
+                PAYMENT_METHOD_FRIEND.equals(code) ? "好友代付" : "微信支付"
+        );
+    }
+
+    public synchronized OrderDetailDto activateSelfPayment(Long id) {
+        LocalDateTime now = LocalDateTime.now(STORE_ZONE);
+        closeExpiredOrders(now);
+        OrderState order = orderState(id);
+        if (!"待支付".equals(order.status())) {
+            throw new BusinessException(409, "当前订单状态不可支付");
+        }
+        invalidatePaymentShares(order.id());
+        paymentMethods.put(order.id(), PAYMENT_METHOD_WECHAT);
+        return rotatePaymentAttempt(order, now);
+    }
+
+    public synchronized PaymentShareDto createPaymentShare(Long id) {
+        LocalDateTime now = LocalDateTime.now(STORE_ZONE);
+        closeExpiredOrders(now);
         OrderState order = orderState(id);
         if (!"待支付".equals(order.status())) {
             throw new BusinessException(409, "当前订单不可发起好友代付");
         }
         invalidatePaymentShares(order.id());
+        paymentMethods.put(order.id(), PAYMENT_METHOD_FRIEND);
+        rotatePaymentAttempt(order, now);
         String token = UUID.randomUUID().toString().replace("-", "");
         paymentShares.put(token, new PaymentShareState(
                 token,
@@ -951,7 +994,11 @@ public class StorefrontService {
     public synchronized OrderDetailDto renewPaymentAttempt(Long id) {
         LocalDateTime now = LocalDateTime.now(STORE_ZONE);
         closeExpiredOrders(now);
-        return renewPaymentAttempt(orderState(id), now);
+        OrderState order = orderState(id);
+        if (!PAYMENT_METHOD_WECHAT.equals(paymentMethodCode(order.id()))) {
+            throw new BusinessException(409, "当前订单已切换为好友代付");
+        }
+        return renewPaymentAttempt(order, now);
     }
 
     public synchronized OrderDetailDto renewPaymentAttemptForShare(String token) {
@@ -964,6 +1011,10 @@ public class StorefrontService {
         if (!"待支付".equals(order.status())) {
             throw new BusinessException(409, "当前订单状态不可支付");
         }
+        return rotatePaymentAttempt(order, now);
+    }
+
+    private OrderDetailDto rotatePaymentAttempt(OrderState order, LocalDateTime now) {
         String nextPaymentOrderNo = restartedPaymentOrderNo(order, now);
         if (nextPaymentOrderNo.equals(paymentOrderNo(order))) {
             nextPaymentOrderNo = restartedPaymentOrderNo(order, now.plusNanos(1_000_000));
@@ -1387,6 +1438,8 @@ public class StorefrontService {
             paymentOrderNos.putAll(snapshot.paymentOrderNos() == null ? Map.of() : snapshot.paymentOrderNos());
             paymentStartedAts.clear();
             paymentStartedAts.putAll(snapshot.paymentStartedAts() == null ? Map.of() : snapshot.paymentStartedAts());
+            paymentMethods.clear();
+            paymentMethods.putAll(snapshot.paymentMethods() == null ? Map.of() : snapshot.paymentMethods());
             paymentShares.clear();
             paymentShares.putAll(snapshot.paymentShares() == null ? Map.of() : snapshot.paymentShares());
             settings = settingsOrDefault(snapshot.settings());
@@ -1416,6 +1469,7 @@ public class StorefrontService {
                 new LinkedHashMap<>(paymentTransactionIds),
                 new LinkedHashMap<>(paymentOrderNos),
                 new LinkedHashMap<>(paymentStartedAts),
+                new LinkedHashMap<>(paymentMethods),
                 new LinkedHashMap<>(paymentShares),
                 settings
         );
@@ -2256,7 +2310,9 @@ public class StorefrontService {
     private OrderState paymentShareOrder(String token) {
         PaymentShareState share = activePaymentShare(token);
         OrderState order = orders.get(share.orderId());
-        if (order == null || !"待支付".equals(order.status())) {
+        if (order == null
+                || !"待支付".equals(order.status())
+                || !PAYMENT_METHOD_FRIEND.equals(paymentMethodCode(order.id()))) {
             throw new BusinessException(404, "付款链接已失效");
         }
         return order;
@@ -2280,6 +2336,16 @@ public class StorefrontService {
 
     private boolean invalidatePaymentShares(Long orderId) {
         return paymentShares.entrySet().removeIf(entry -> Objects.equals(entry.getValue().orderId(), orderId));
+    }
+
+    private String paymentMethodCode(Long orderId) {
+        String code = paymentMethods.get(orderId);
+        if (PAYMENT_METHOD_WECHAT.equals(code) || PAYMENT_METHOD_FRIEND.equals(code)) {
+            return code;
+        }
+        boolean hasActiveShare = paymentShares.values().stream()
+                .anyMatch(share -> Objects.equals(share.orderId(), orderId));
+        return hasActiveShare ? PAYMENT_METHOD_FRIEND : PAYMENT_METHOD_WECHAT;
     }
 
     private OrderState adminOrderState(Long id) {
@@ -3204,6 +3270,7 @@ public class StorefrontService {
             Map<String, String> paymentTransactionIds,
             Map<Long, String> paymentOrderNos,
             Map<Long, String> paymentStartedAts,
+            Map<Long, String> paymentMethods,
             Map<String, PaymentShareState> paymentShares,
             SettingsDto settings
     ) {

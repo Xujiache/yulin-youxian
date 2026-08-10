@@ -112,7 +112,9 @@
         data-method="{{item.code}}"
         bindtap="handlePaymentMethod"
       >
-        <view class="payment-option-icon {{item.code === 'OTHER' ? 'is-other' : ''}}">{{item.icon}}</view>
+        <view class="payment-option-icon">
+          <image class="payment-option-icon-image" src="{{item.icon}}" mode="aspectFit" />
+        </view>
         <view class="payment-option-info">
           <text class="payment-option-title">{{item.title}}</text>
           <text class="payment-option-desc">{{item.desc}}</text>

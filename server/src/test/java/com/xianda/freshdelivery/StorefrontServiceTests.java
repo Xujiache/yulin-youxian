@@ -129,6 +129,7 @@ class StorefrontServiceTests {
         OrderDetailDto order = createOrder(service, addressId, 1L);
 
         PaymentShareDto created = service.createPaymentShare(order.id());
+        OrderDetailDto sharedOrder = service.order(order.id());
         assertEquals(32, created.token().length());
         assertEquals(order.payableAmount(), created.payableAmount());
         assertFalse(created.toString().contains(order.orderNo()));
@@ -140,7 +141,7 @@ class StorefrontServiceTests {
         assertFalse(publicSummary.toString().contains(order.orderNo()));
 
         service.confirmPayment(new PaymentNotifyRequest(
-                order.orderNo(),
+                sharedOrder.paymentOrderNo(),
                 "TX-PAYMENT-SHARE",
                 "SUCCESS",
                 "wx-test-app",
@@ -149,6 +150,45 @@ class StorefrontServiceTests {
         ));
 
         assertThrows(BusinessException.class, () -> service.paymentShare(created.token()));
+    }
+
+    @Test
+    void changingPaymentMethodInvalidatesTheOtherPaymentSide() {
+        StorefrontService service = newService();
+        CurrentUserContext.setUserId(1000L);
+        Long addressId = service.createAddress(addressRequest()).id();
+        OrderDetailDto order = createOrder(service, addressId, 1L);
+
+        assertEquals("WECHAT", service.paymentMethod(order.id()).code());
+        PaymentShareDto share = service.createPaymentShare(order.id());
+        OrderDetailDto friendAttempt = service.order(order.id());
+
+        assertEquals("FRIEND", service.paymentMethod(order.id()).code());
+        assertThrows(BusinessException.class, () -> service.preparePayment(order.id()));
+
+        OrderDetailDto selfAttempt = service.activateSelfPayment(order.id());
+        assertEquals("WECHAT", service.paymentMethod(order.id()).code());
+        assertNotEquals(friendAttempt.paymentOrderNo(), selfAttempt.paymentOrderNo());
+        assertThrows(BusinessException.class, () -> service.paymentShare(share.token()));
+        assertThrows(BusinessException.class, () -> service.confirmPayment(new PaymentNotifyRequest(
+                friendAttempt.paymentOrderNo(),
+                "TX-STALE-FRIEND-PAYMENT",
+                "SUCCESS",
+                "wx-test-app",
+                "test-mch",
+                order.payableAmount()
+        )));
+        assertEquals("待支付", service.order(order.id()).status());
+
+        OrderDetailDto paid = service.confirmPayment(new PaymentNotifyRequest(
+                selfAttempt.paymentOrderNo(),
+                "TX-ACTIVE-SELF-PAYMENT",
+                "SUCCESS",
+                "wx-test-app",
+                "test-mch",
+                order.payableAmount()
+        )).order();
+        assertTrue(paid.paidAmount() > 0);
     }
 
     @Test

@@ -1,7 +1,14 @@
 const { yuan } = require("../../utils/format");
 const { getHome } = require("../../api/catalog");
 const { getDeliverySlots } = require("../../api/delivery");
-const { cancelOrder, getOrder, payOrder, restartOrder } = require("../../api/orders");
+const {
+  cancelOrder,
+  changeToWechatPayment,
+  createPaymentShare,
+  getOrder,
+  getPaymentMethod,
+  restartOrder
+} = require("../../api/orders");
 const { syncTheme } = require("../../utils/theme");
 const {
   isPaidOrder,
@@ -13,6 +20,20 @@ const {
 } = require("../../utils/wechat-payment");
 
 const DEFAULT_CONTACT_PHONE = "400-800-1234";
+const PAYMENT_METHODS = [
+  {
+    code: "WECHAT",
+    title: "微信支付",
+    desc: "使用当前微信账号完成付款",
+    icon: "/assets/payment/wechat-pay.png"
+  },
+  {
+    code: "FRIEND",
+    title: "请好友付款",
+    desc: "生成代付链接并分享给好友",
+    icon: "/assets/payment/friend-pay.png"
+  }
+];
 
 function buildRefundNotice(order) {
   if (!order || order.latestRefundStatus !== "已拒绝") {
@@ -160,6 +181,12 @@ Page({
     restarting: false,
     cancelling: false,
     showCancelModal: false,
+    showPaymentMethodModal: false,
+    paymentMethodLoading: false,
+    paymentMethodSubmitting: false,
+    paymentMethods: PAYMENT_METHODS,
+    paymentMethod: "WECHAT",
+    selectedPaymentMethod: "WECHAT",
     paymentNotice: ""
   },
 
@@ -190,13 +217,14 @@ Page({
   },
 
   applyOrder(order) {
+    const isPendingPayment = isPendingPaymentOrder(order);
     this.setData({
       order,
       orderId: order.id,
       orderNo: order.orderNo,
       statusText: order.status,
       statusConfig: getStatusConfig(order),
-      isPendingPayment: isPendingPaymentOrder(order),
+      isPendingPayment,
       canCancel: isCancelableOrder(order),
       canRestartPayment: Boolean(order.canRestartPayment),
       canRefund: canApplyRefund(order),
@@ -220,6 +248,18 @@ Page({
         createdAtText: refund.createdAt ? refund.createdAt.replace("T", " ").slice(0, 19) : ""
       }))
     });
+    if (isPendingPayment) {
+      this.refreshPaymentMethod();
+    }
+  },
+
+  async refreshPaymentMethod() {
+    if (!this.data.orderId || !this.data.isPendingPayment) return;
+    try {
+      const method = await getPaymentMethod(this.data.orderId);
+      const paymentMethod = method && method.code === "FRIEND" ? "FRIEND" : "WECHAT";
+      this.setData({ paymentMethod });
+    } catch {}
   },
 
   async refreshOrder() {
@@ -234,9 +274,57 @@ Page({
     if (!this.data.orderId || this.data.paying || !this.data.isPendingPayment) {
       return;
     }
-    this.setData({ paying: true, paymentNotice: "" });
+    this.setData({
+      showPaymentMethodModal: true,
+      paymentMethodLoading: true,
+      selectedPaymentMethod: this.data.paymentMethod || "WECHAT",
+      paymentNotice: ""
+    });
     try {
-      const payment = await payOrder(this.data.orderId);
+      const method = await getPaymentMethod(this.data.orderId);
+      const code = method && method.code === "FRIEND" ? "FRIEND" : "WECHAT";
+      this.setData({ paymentMethod: code, selectedPaymentMethod: code });
+    } catch (error) {
+      this.setData({ showPaymentMethodModal: false });
+      wx.showToast({ title: error.message || "支付方式加载失败", icon: "none" });
+    } finally {
+      this.setData({ paymentMethodLoading: false });
+    }
+  },
+
+  stopPaymentMethodModalTap() {},
+
+  closePaymentMethodModal() {
+    if (!this.data.paymentMethodSubmitting && !this.data.paying) {
+      this.setData({ showPaymentMethodModal: false });
+    }
+  },
+
+  handleSelectPaymentMethod(event) {
+    if (this.data.paymentMethodSubmitting || this.data.paymentMethodLoading) return;
+    const selectedPaymentMethod = event.currentTarget.dataset.method === "FRIEND" ? "FRIEND" : "WECHAT";
+    this.setData({ selectedPaymentMethod });
+  },
+
+  async confirmPaymentMethod() {
+    if (this.data.paymentMethodSubmitting || this.data.paymentMethodLoading || !this.data.orderId) return;
+    const selectedPaymentMethod = this.data.selectedPaymentMethod;
+    this.setData({ paymentMethodSubmitting: true, paying: true, paymentNotice: "" });
+    try {
+      if (selectedPaymentMethod === "FRIEND") {
+        const share = await createPaymentShare(this.data.orderId);
+        this.setData({
+          paymentMethod: "FRIEND",
+          showPaymentMethodModal: false
+        });
+        wx.navigateTo({
+          url: `/pages/pay-for-other/index?token=${encodeURIComponent(share.token)}&owner=1&orderId=${this.data.orderId}`
+        });
+        return;
+      }
+
+      const payment = await changeToWechatPayment(this.data.orderId);
+      this.setData({ paymentMethod: "WECHAT", showPaymentMethodModal: false });
       await requestWechatPayment(payment);
       const order = await waitForPaymentResult(this.data.orderId);
       if (!isPaidOrder(order)) {
@@ -246,7 +334,7 @@ Page({
       this.applyOrder(order);
       wx.showToast({ title: "支付成功", icon: "success" });
     } catch (error) {
-      if (this.data.orderId && !isPaymentCancelled(error)) {
+      if (selectedPaymentMethod === "WECHAT" && this.data.orderId && !isPaymentCancelled(error)) {
         try {
           const order = await waitForPaymentResult(this.data.orderId, { attempts: 3, interval: 700 });
           if (isPaidOrder(order)) {
@@ -266,7 +354,7 @@ Page({
         showCancel: false
       });
     } finally {
-      this.setData({ paying: false });
+      this.setData({ paying: false, paymentMethodSubmitting: false });
     }
   },
 

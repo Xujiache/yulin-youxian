@@ -64,6 +64,19 @@ function payOrder(id) {
   });
 }
 
+function getPaymentMethod(id) {
+  return request({
+    url: `/api/wx/orders/${id}/payment-method`
+  });
+}
+
+function changeToWechatPayment(id) {
+  return request({
+    url: `/api/wx/orders/${id}/payment-method/wechat`,
+    method: "POST"
+  });
+}
+
 function createPaymentShare(id) {
   return request({
     url: `/api/wx/orders/${id}/payment-share`,
@@ -166,6 +179,8 @@ module.exports = {
   previewOrder,
   createOrder,
   payOrder,
+  getPaymentMethod,
+  changeToWechatPayment,
   createPaymentShare,
   getPaymentShare,
   payPaymentShare,

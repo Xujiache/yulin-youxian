@@ -399,15 +399,13 @@
   width: 52rpx;
   height: 52rpx;
   margin-right: 18rpx;
-  color: #ffffff;
-  font-size: 25rpx;
-  font-weight: 800;
-  background: linear-gradient(135deg, #12c66a 0%, #008a52 100%);
   border-radius: 14rpx;
+  overflow: hidden;
 }
 
-.payment-option-icon.is-other {
-  background: linear-gradient(135deg, #f6a44d 0%, #e77928 100%);
+.payment-option-icon-image {
+  width: 100%;
+  height: 100%;
 }
 
 .payment-option-info {
