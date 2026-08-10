@@ -59,8 +59,10 @@
           <image class="single-thumb" src="{{item.images[0]}}" mode="aspectFill" lazy-load="{{true}}" />
           <view class="single-info">
             <text class="single-name">{{item.singleProductName}}</text>
-            <text wx:if="{{item.singleProductSpec}}" class="single-spec">{{item.singleProductSpec}}</text>
-            <text class="single-count">x{{item.singleProductQuantity}}</text>
+            <view class="single-spec-row">
+              <text wx:if="{{item.singleProductSpec}}" class="single-spec">{{item.singleProductSpec}}</text>
+              <text class="single-count">x{{item.singleProductQuantity}}</text>
+            </view>
           </view>
           <view class="order-meta">
             <view class="total-price-wrap">
@@ -68,7 +70,6 @@
               <text class="total-currency">￥</text>
               <text class="total-amount">{{item.totalText}}</text>
             </view>
-            <text wx:if="{{item.deliverySlot}}" class="delivery-time-text">预约配送：{{item.deliverySlot}}</text>
           </view>
         </block>
 
@@ -82,14 +83,19 @@
             </scroll-view>
           </view>
           <view class="order-meta multi-meta">
-            <text class="total-count-text">共 {{item.totalItemCount}} 件</text>
             <view class="total-price-wrap">
               <text class="total-label-text">实付</text>
               <text class="total-currency">￥</text>
               <text class="total-amount">{{item.totalText}}</text>
             </view>
+            <text class="total-count-text">共 {{item.totalItemCount}} 件</text>
           </view>
         </block>
+      </view>
+
+      <view wx:if="{{item.deliverySlot}}" class="order-delivery-bar">
+        <image class="delivery-clock-icon" src="/assets/icons/clock-green.svg" mode="aspectFit" />
+        <text class="delivery-time-text">预约配送：{{item.deliverySlot}}</text>
       </view>
 
       <view wx:if="{{item.primaryActionText || item.secondaryActionText}}" class="order-actions">

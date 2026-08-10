@@ -17,16 +17,19 @@ function primaryActionText(order) {
     return "去支付";
   }
   if (order.status === "已关闭") {
-    return "重启支付";
+    return "查看详情";
   }
   if (isAfterSaleStatus(order.status)) {
     return "查看售后";
   }
   if (order.status === "已完成") {
-    return "申请售后";
+    return "再来一单";
   }
   if (["备货中", "配送中"].includes(order.status)) {
     return "查看进度";
+  }
+  if (order.status === "已取消") {
+    return "查看详情";
   }
   return "查看详情";
 }
@@ -38,17 +41,14 @@ function secondaryActionText(order) {
   if (["待接单", "备货中", "配送中"].includes(order.status)) {
     return "联系客服";
   }
+  if (order.status === "已完成") {
+    return "申请售后";
+  }
   if (isAfterSaleStatus(order.status)) {
     return "";
   }
-  if (order.status === "已完成") {
-    return "再来一单";
-  }
-  if (order.status === "已取消") {
-    return "查看详情";
-  }
-  if (order.status === "已关闭") {
-    return "查看详情";
+  if (order.status === "已取消" || order.status === "已关闭") {
+    return "";
   }
   return "";
 }

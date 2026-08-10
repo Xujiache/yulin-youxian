@@ -219,7 +219,7 @@
   min-width: 0;
   flex-direction: column;
   justify-content: center;
-  gap: 6rpx;
+  gap: 8rpx;
 }
 
 .single-name {
@@ -232,10 +232,21 @@
   white-space: nowrap;
 }
 
+.single-spec-row {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+}
+
 .single-spec,
 .single-count {
   color: #888888;
-  font-size: 22rpx;
+  font-size: 23rpx;
+  line-height: 30rpx;
+}
+
+.single-count {
+  font-weight: 600;
 }
 
 /* 多件商品：画廊横滚 */
@@ -315,28 +326,47 @@
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
 
+/* 预约配送时间：独立横栏，视效极其精致清晰 */
+.order-delivery-bar {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+  margin-top: 14rpx;
+  padding: 12rpx 18rpx;
+  background: #f4f8f5;
+  border-radius: 14rpx;
+}
+
+.delivery-clock-icon {
+  width: 24rpx;
+  height: 24rpx;
+  flex-shrink: 0;
+}
+
 .delivery-time-text {
-  color: #888888;
-  font-size: 22rpx;
+  color: #007a3d;
+  font-size: 23rpx;
+  font-weight: 600;
+  line-height: 32rpx;
 }
 
 .order-actions {
   display: flex;
   align-items: center;
-  justify-content: stretch;
+  justify-content: flex-end;
   gap: 16rpx;
   padding-top: 20rpx;
+  margin-top: 18rpx;
   border-top: 1rpx solid #f2f4f3;
 }
 
 .order-btn {
   display: inline-flex;
-  flex: 1;
   align-items: center;
   justify-content: center;
-  min-width: 0;
+  min-width: 156rpx;
   height: 60rpx;
-  padding: 0 24rpx;
+  padding: 0 28rpx;
   margin: 0;
   box-sizing: border-box;
   font-size: 25rpx;
