@@ -56,15 +56,13 @@
 
     <view class="cart-list">
       <view wx:for="{{items}}" wx:key="id" class="cart-item card {{item.unavailable ? 'is-unavailable' : ''}}">
-        <button
-          class="item-delete-button"
+        <view
+          class="item-delete-button {{deletingItemId === item.id ? 'is-deleting' : ''}}"
           data-id="{{item.id}}"
-          disabled="{{deletingItemId === item.id}}"
-          bindtap="handleDeleteItem"
-          aria-label="delete item"
+          catchtap="handleDeleteItem"
         >
           <image class="item-delete-icon" src="/assets/icons/close-gray.svg" mode="aspectFit" />
-        </button>
+        </view>
         <view class="cart-main">
           <view
             class="check {{item.unavailable ? 'is-disabled' : (item.selected ? 'checked' : '')}}"

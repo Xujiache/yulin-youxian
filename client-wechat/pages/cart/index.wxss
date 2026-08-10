@@ -357,20 +357,22 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 48rpx;
-  height: 48rpx;
+  flex: 0 0 48rpx;
+  width: 48rpx !important;
+  min-width: 48rpx !important;
+  max-width: 48rpx !important;
+  height: 48rpx !important;
   padding: 0;
+  box-sizing: border-box;
+  overflow: hidden;
   background: #f2f5f3;
   border: 1rpx solid #e2e9e4;
   border-radius: 50%;
 }
 
-.item-delete-button::after {
-  border: 0;
-}
-
-.item-delete-button[disabled] {
+.item-delete-button.is-deleting {
   opacity: 0.45;
+  pointer-events: none;
 }
 
 .item-delete-icon {
