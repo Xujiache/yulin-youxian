@@ -99,7 +99,30 @@
         <text class="delivery-time-text">预约配送：{{item.deliverySlot}}</text>
       </view>
 
-      <block wx:if="{{item.isPendingPayment}}">
+      <block wx:if="{{item.canRestartPayment}}">
+        <view class="order-actions is-restart-actions">
+          <button
+            class="order-btn btn-secondary"
+            data-id="{{item.id}}"
+            data-action="detail"
+            catchtap="handleRestartableAction"
+          >查看详情</button>
+          <view
+            class="order-btn btn-service"
+            data-id="{{item.id}}"
+            data-action="service"
+            catchtap="handleRestartableAction"
+          >联系客服</view>
+          <button
+            class="order-btn btn-restart"
+            data-id="{{item.id}}"
+            data-action="restart"
+            disabled="{{payingOrderId === item.id}}"
+            catchtap="handleRestartableAction"
+          >重启支付</button>
+        </view>
+      </block>
+      <block wx:elif="{{item.isPendingPayment}}">
         <view class="order-actions is-pending-actions">
           <view
             class="order-btn btn-secondary"

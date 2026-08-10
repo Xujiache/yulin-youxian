@@ -429,6 +429,14 @@
   font-weight: 700;
 }
 
+.btn-restart {
+  color: #ffffff;
+  background: linear-gradient(135deg, #00b05b 0%, #007a3d 100%);
+  border: 0;
+  font-weight: 800;
+  box-shadow: 0 6rpx 18rpx rgba(0, 122, 61, 0.2);
+}
+
 .btn-primary {
   color: #007a3d;
   background: #e8f7ee;
@@ -454,6 +462,19 @@
   height: 68rpx;
   padding: 0 4rpx;
   font-size: 22rpx;
+}
+
+.is-restart-actions {
+  gap: 10rpx;
+}
+
+.is-restart-actions .order-btn {
+  flex: 1 1 0;
+  width: 0;
+  min-width: 0;
+  height: 68rpx;
+  padding: 0 6rpx;
+  font-size: 23rpx;
 }
 
 .orders-cancel-modal-mask {

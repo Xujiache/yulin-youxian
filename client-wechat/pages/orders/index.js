@@ -1,12 +1,14 @@
 const { yuan } = require("../../utils/format");
 const { getCart } = require("../../api/cart");
 const { getHome } = require("../../api/catalog");
+const { getDeliverySlots } = require("../../api/delivery");
 const {
   cancelOrder,
   changeToWechatPayment,
   createPaymentShare,
   getOrders,
-  getOrder
+  getOrder,
+  restartOrder
 } = require("../../api/orders");
 const { syncTheme } = require("../../utils/theme");
 const {
@@ -23,6 +25,24 @@ const TABS = ["全部", "待支付", "待接单", "备货中", "配送中", "已
 
 function isAfterSaleStatus(status) {
   return ["退款中", "部分退款", "已退款", "已拒绝"].includes(status);
+}
+
+function chooseDeliverySlot(slots) {
+  return new Promise((resolve, reject) => {
+    wx.showActionSheet({
+      itemList: slots.map((slot) => slot.label),
+      success(result) {
+        resolve(slots[result.tapIndex] || null);
+      },
+      fail(error) {
+        if (isPaymentCancelled(error)) {
+          resolve(null);
+          return;
+        }
+        reject(error);
+      }
+    });
+  });
 }
 
 function primaryActionText(order) {
@@ -226,6 +246,46 @@ Page({
   handleOrderAction(event) {
     const id = event.currentTarget.dataset.id;
     wx.navigateTo({ url: `/pages/order-detail/index?id=${id}` });
+  },
+
+  async handleRestartableAction(event) {
+    const id = Number(event.currentTarget.dataset.id);
+    const action = event.currentTarget.dataset.action;
+    if (!id || this.data.payingOrderId) return;
+    if (action === "detail") {
+      wx.navigateTo({ url: `/pages/order-detail/index?id=${id}` });
+      return;
+    }
+    if (action === "service") {
+      await this.handleService();
+      return;
+    }
+    if (action !== "restart") return;
+
+    const order = this.data.orders.find((item) => Number(item.id) === id);
+    this.setData({ payingOrderId: id });
+    try {
+      let deliverySlotId = null;
+      if (order && order.requiresDeliverySlotSelection) {
+        const slots = (await getDeliverySlots()).filter((slot) => slot && slot.available !== false).slice(0, 6);
+        if (!slots.length) {
+          wx.showToast({ title: "暂无可选配送时间", icon: "none" });
+          return;
+        }
+        const selectedSlot = await chooseDeliverySlot(slots);
+        if (!selectedSlot) return;
+        deliverySlotId = selectedSlot.id;
+      }
+      await restartOrder(id, deliverySlotId);
+      await this.updateOrders(this.data.activeStatus);
+      wx.showToast({ title: "订单已重启", icon: "success" });
+      wx.navigateTo({ url: `/pages/order-detail/index?id=${id}` });
+    } catch (error) {
+      wx.showToast({ title: error.message || "重启支付失败，请稍后重试", icon: "none" });
+      await this.updateOrders(this.data.activeStatus);
+    } finally {
+      this.setData({ payingOrderId: null });
+    }
   },
 
   async handlePendingAction(event) {
