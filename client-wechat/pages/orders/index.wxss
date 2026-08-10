@@ -323,7 +323,7 @@
 .order-actions {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: stretch;
   gap: 16rpx;
   padding-top: 20rpx;
   border-top: 1rpx solid #f2f4f3;
@@ -331,9 +331,10 @@
 
 .order-btn {
   display: inline-flex;
+  flex: 1;
   align-items: center;
   justify-content: center;
-  min-width: 148rpx;
+  min-width: 0;
   height: 60rpx;
   padding: 0 24rpx;
   margin: 0;
