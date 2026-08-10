@@ -251,8 +251,8 @@ Page({
     }
     const result = await new Promise((resolve) => {
       wx.showModal({
-        title: "清空已选",
-        content: "确认清空已选商品吗？",
+        title: "\u6e05\u7a7a\u5df2\u9009",
+        content: "\u786e\u8ba4\u6e05\u7a7a\u5df2\u9009\u5546\u54c1\u5417\uff1f",
         success: resolve
       });
     });
@@ -278,26 +278,13 @@ Page({
     if (!item || this.data.deletingItemId) {
       return;
     }
-    const result = await new Promise((resolve) => {
-      wx.showModal({
-        title: "删除商品",
-        content: `确认从购物车删除“${item.name}”吗？`,
-        confirmText: "删除",
-        confirmColor: "#B54735",
-        cancelText: "取消",
-        success: resolve
-      });
-    });
-    if (!result.confirm) {
-      return;
-    }
     this.setData({ deletingItemId: id });
     try {
       await deleteCartItem(id);
       await this.loadCart();
-      wx.showToast({ title: "已删除", icon: "success" });
+      wx.showToast({ title: "\u5df2\u5220\u9664", icon: "success" });
     } catch (error) {
-      wx.showToast({ title: error.message || "删除失败，请重试", icon: "none" });
+      wx.showToast({ title: error.message || "\u5220\u9664\u5931\u8d25\uff0c\u8bf7\u91cd\u8bd5", icon: "none" });
     } finally {
       this.setData({ deletingItemId: 0 });
     }

@@ -332,6 +332,7 @@
 }
 
 .cart-item {
+  position: relative;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -348,10 +349,40 @@
   box-shadow: 0 8rpx 22rpx rgba(35, 48, 40, 0.05);
 }
 
+.item-delete-button {
+  position: absolute;
+  top: 18rpx;
+  right: 18rpx;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48rpx;
+  height: 48rpx;
+  padding: 0;
+  background: #f2f5f3;
+  border: 1rpx solid #e2e9e4;
+  border-radius: 50%;
+}
+
+.item-delete-button::after {
+  border: 0;
+}
+
+.item-delete-button[disabled] {
+  opacity: 0.45;
+}
+
+.item-delete-icon {
+  width: 26rpx;
+  height: 26rpx;
+}
+
 .cart-main {
   display: flex;
   align-items: center;
   gap: 20rpx;
+  padding-right: 42rpx;
 }
 
 .check {
@@ -519,35 +550,6 @@
   max-width: 100%;
 }
 
-.item-delete-quick {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 76rpx;
-  width: 76rpx;
-  min-width: 76rpx;
-  max-width: 76rpx;
-  height: 44rpx;
-  padding: 0;
-  box-sizing: border-box;
-  overflow: hidden;
-  color: #9c4938;
-  font-size: 20rpx;
-  font-weight: 650;
-  line-height: 44rpx;
-  background: #fff5f1;
-  border: 1rpx solid #f3d6cd;
-  border-radius: 999rpx;
-}
-
-.item-delete-quick::after {
-  border: 0;
-}
-
-.item-delete-quick[disabled] {
-  color: #a6aaa7;
-  background: #f0f2f1;
-}
 
 .item-invalid-price-row {
   display: flex;
@@ -567,8 +569,13 @@
   border-top: 1rpx solid #e2e8e4;
 }
 
-.item-invalid-actions.delete-only .delete {
-  grid-column: 2;
+.item-invalid-actions.has-reselect {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.item-invalid-actions.has-reselect .reselect {
+  width: 180rpx;
 }
 
 .item-action-button {

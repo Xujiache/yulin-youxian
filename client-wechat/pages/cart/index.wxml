@@ -56,6 +56,15 @@
 
     <view class="cart-list">
       <view wx:for="{{items}}" wx:key="id" class="cart-item card {{item.unavailable ? 'is-unavailable' : ''}}">
+        <button
+          class="item-delete-button"
+          data-id="{{item.id}}"
+          disabled="{{deletingItemId === item.id}}"
+          bindtap="handleDeleteItem"
+          aria-label="delete item"
+        >
+          <image class="item-delete-icon" src="/assets/icons/close-gray.svg" mode="aspectFit" />
+        </button>
         <view class="cart-main">
           <view
             class="check {{item.unavailable ? 'is-disabled' : (item.selected ? 'checked' : '')}}"
@@ -85,12 +94,6 @@
             <view wx:if="{{!item.unavailable}}" class="item-bottom">
               <text class="item-price">￥{{item.amountText}}</text>
               <view class="cart-item-controls">
-                <button
-                  class="item-delete-quick"
-                  data-id="{{item.id}}"
-                  disabled="{{deletingItemId === item.id}}"
-                  bindtap="handleDeleteItem"
-                >{{deletingItemId === item.id ? '删除中' : '删除'}}</button>
                 <view class="cart-stepper-shell">
                   <quantity-stepper
                     data-id="{{item.id}}"
@@ -109,10 +112,7 @@
             </view>
           </view>
         </view>
-        <view
-          wx:if="{{item.unavailable}}"
-          class="item-invalid-actions {{item.canReselectSku ? 'has-reselect' : 'delete-only'}}"
-        >
+        <view wx:if="{{item.unavailable && item.canReselectSku}}" class="item-invalid-actions has-reselect">
           <button
             wx:if="{{item.canReselectSku}}"
             class="item-action-button reselect"
@@ -120,12 +120,6 @@
             data-source="bottom-action"
             bindtap="handleReselectSku"
           >重选规格</button>
-          <button
-            class="item-action-button delete"
-            data-id="{{item.id}}"
-            disabled="{{deletingItemId === item.id}}"
-            bindtap="handleDeleteItem"
-          >{{deletingItemId === item.id ? '删除中' : '删除'}}</button>
         </view>
       </view>
     </view>
