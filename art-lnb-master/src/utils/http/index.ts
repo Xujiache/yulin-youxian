@@ -72,6 +72,10 @@ axiosInstance.interceptors.request.use(
       request.headers.set('Authorization', authorization)
     }
 
+    if (request.params) {
+      request.params = cleanParams(request.params)
+    }
+
     if (request.data && !(request.data instanceof FormData) && !request.headers['Content-Type']) {
       request.headers.set('Content-Type', 'application/json')
       request.data = JSON.stringify(request.data)
@@ -84,6 +88,22 @@ axiosInstance.interceptors.request.use(
     return Promise.reject(error)
   }
 )
+
+/** 清理请求参数，移除 null/undefined/空字符串/字符串 "null"/"undefined" */
+function cleanParams(params: Record<string, any>): Record<string, any> {
+  const cleaned: Record<string, any> = {}
+  for (const [key, value] of Object.entries(params)) {
+    if (value == null) continue
+    if (typeof value === 'string') {
+      const trimmed = value.trim()
+      if (trimmed === '' || trimmed.toLowerCase() === 'null' || trimmed.toLowerCase() === 'undefined') {
+        continue
+      }
+    }
+    cleaned[key] = value
+  }
+  return cleaned
+}
 
 /** 响应拦截器 */
 axiosInstance.interceptors.response.use(

@@ -33,14 +33,26 @@ public class WxCatalogController {
 
     @GetMapping("/products")
     public ApiResponse<List<ProductDto>> products(
-            @RequestParam(required = false) Long categoryId,
+            @RequestParam(required = false) String categoryId,
             @RequestParam(required = false) String keyword
     ) {
-        return ApiResponse.ok(storefrontService.storefrontProducts(categoryId, keyword));
+        Long parsedCategoryId = parseLongOrNull(categoryId);
+        return ApiResponse.ok(storefrontService.storefrontProducts(parsedCategoryId, keyword));
     }
 
     @GetMapping("/products/{id}")
     public ApiResponse<ProductDto> product(@PathVariable Long id) {
         return ApiResponse.ok(storefrontService.storefrontProduct(id));
+    }
+
+    private Long parseLongOrNull(String value) {
+        if (value == null || value.isBlank() || "null".equalsIgnoreCase(value) || "undefined".equalsIgnoreCase(value)) {
+            return null;
+        }
+        try {
+            return Long.parseLong(value.trim());
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 }
