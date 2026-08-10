@@ -43,10 +43,11 @@
     <view wx:for="{{orders}}" wx:key="id" class="order-card card" data-id="{{item.id}}" bindtap="goDetail">
       <view class="order-head">
         <view class="order-head-left">
+          <image class="store-icon" src="/assets/icons/store-green.svg" mode="aspectFit" />
           <text class="store-name">禹邻优鲜门店</text>
           <image class="store-arrow" src="/assets/icons/chevron-right-gray.svg" mode="aspectFit" />
         </view>
-        <text class="order-status {{item.status === '待支付' ? 'is-pending' : ''}} {{item.status === '已关闭' ? 'is-closed' : ''}}">{{item.status}}</text>
+        <text class="order-status {{item.statusClass}}">{{item.status}}</text>
       </view>
 
       <view wx:if="{{item.refundNotice}}" class="refund-notice">
@@ -109,7 +110,7 @@
         </view>
         <button
           wx:if="{{item.primaryActionText}}"
-          class="order-btn {{item.status === '待支付' || item.status === '已关闭' ? 'btn-pay' : 'btn-primary'}}"
+          class="order-btn {{item.primaryBtnClass}}"
           data-id="{{item.id}}"
           catchtap="handleOrderAction"
         >

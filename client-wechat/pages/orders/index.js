@@ -146,6 +146,17 @@ Page({
           const isSingleProduct = totalItemCount === 1 || (itemsList.length === 1 && Number(itemsList[0].quantity) === 1);
           const firstItemName = itemsList.length ? (itemsList[0].name || itemsList[0].productName) : (item.summary || "");
 
+          let statusClass = "";
+          if (item.status === "待支付") statusClass = "is-pending";
+          else if (["待接单", "备货中", "配送中"].includes(item.status)) statusClass = "is-active";
+          else if (item.status === "已完成") statusClass = "is-completed";
+          else if (item.status === "已取消" || item.status === "已关闭") statusClass = "is-canceled";
+          else if (isAfterSaleStatus(item.status)) statusClass = "is-refund";
+
+          let primaryBtnClass = "btn-secondary";
+          if (item.status === "待支付") primaryBtnClass = "btn-pay";
+          else if (["已完成", "待接单", "备货中", "配送中"].includes(item.status)) primaryBtnClass = "btn-primary";
+
           return {
             ...item,
             images,
@@ -153,6 +164,8 @@ Page({
             refundNotice: refundNotice(item),
             primaryActionText: primaryActionText(item),
             secondaryActionText: secondaryActionText(item),
+            statusClass,
+            primaryBtnClass,
             isSingleProduct,
             singleProductName: firstItemName,
             singleProductSpec: itemsList.length ? (itemsList[0].specificationText || "") : "",

@@ -1,6 +1,6 @@
 .orders-page {
   min-height: 100vh;
-  padding: 286rpx 24rpx 164rpx;
+  padding: 272rpx 24rpx 164rpx;
   background:
     radial-gradient(circle at 90% 6%, rgba(194, 230, 208, 0.46), transparent 25%),
     linear-gradient(180deg, #edf4ef 0%, #eaf1ed 45%, #f5f7f6 100%);
@@ -12,8 +12,11 @@
   left: 0;
   right: 0;
   z-index: 45;
-  padding: 12rpx 24rpx;
-  background: transparent;
+  padding: 8rpx 24rpx 16rpx;
+  background: rgba(234, 241, 237, 0.98);
+  backdrop-filter: blur(20rpx);
+  -webkit-backdrop-filter: blur(20rpx);
+  box-shadow: 0 10rpx 24rpx rgba(18, 48, 32, 0.05);
 }
 
 .status-tabs {
@@ -137,11 +140,13 @@
   margin-top: 34rpx;
 }
 
+/* 美团大厂级订单卡片容器 */
 .order-card {
-  padding: 24rpx 28rpx;
+  padding: 24rpx 26rpx;
   background: #ffffff;
-  border-radius: 28rpx;
-  box-shadow: 0 8rpx 24rpx rgba(0, 0, 0, 0.04);
+  border-radius: 24rpx;
+  border: 1rpx solid rgba(220, 232, 225, 0.6);
+  box-shadow: 0 6rpx 20rpx rgba(10, 36, 22, 0.04);
 }
 
 .order-head {
@@ -155,18 +160,24 @@
 .order-head-left {
   display: flex;
   align-items: center;
-  gap: 6rpx;
+  gap: 10rpx;
+}
+
+.store-icon {
+  width: 32rpx;
+  height: 32rpx;
 }
 
 .store-name {
-  color: #1a1a1a;
+  color: #101815;
   font-size: 28rpx;
   font-weight: 700;
 }
 
 .store-arrow {
-  width: 20rpx;
-  height: 20rpx;
+  width: 18rpx;
+  height: 18rpx;
+  opacity: 0.6;
 }
 
 .order-status {
@@ -177,13 +188,23 @@
 }
 
 .order-status.is-pending {
-  color: #007a3d;
+  color: #ff4b2b;
   font-weight: 800;
 }
 
-.order-status.is-closed {
-  color: #7a5b4d;
+.order-status.is-active {
+  color: #008a45;
   font-weight: 800;
+}
+
+.order-status.is-completed {
+  color: #333333;
+  font-weight: 600;
+}
+
+.order-status.is-canceled {
+  color: #888888;
+  font-weight: 500;
 }
 
 .refund-notice {
@@ -200,16 +221,16 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16rpx;
-  padding: 24rpx 0 16rpx;
+  gap: 20rpx;
+  padding: 22rpx 0 16rpx;
 }
 
 /* 单件商品：大图 + 商品名描述 */
 .single-thumb {
   flex-shrink: 0;
-  width: 120rpx;
-  height: 120rpx;
-  background: #f7f9f8;
+  width: 128rpx;
+  height: 128rpx;
+  background: #f6f8f7;
   border-radius: 20rpx;
 }
 
@@ -219,11 +240,11 @@
   min-width: 0;
   flex-direction: column;
   justify-content: center;
-  gap: 8rpx;
+  gap: 10rpx;
 }
 
 .single-name {
-  color: #1a1a1a;
+  color: #101815;
   font-size: 28rpx;
   font-weight: 700;
   line-height: 38rpx;
@@ -238,15 +259,21 @@
   gap: 12rpx;
 }
 
-.single-spec,
-.single-count {
-  color: #888888;
-  font-size: 23rpx;
+.single-spec {
+  display: inline-block;
+  padding: 2rpx 12rpx;
+  color: #555555;
+  font-size: 21rpx;
   line-height: 30rpx;
+  background: #f2f6f4;
+  border-radius: 8rpx;
 }
 
 .single-count {
+  color: #777777;
+  font-size: 23rpx;
   font-weight: 600;
+  line-height: 30rpx;
 }
 
 /* 多件商品：画廊横滚 */
@@ -270,9 +297,10 @@
 
 .multi-thumb {
   flex-shrink: 0;
-  width: 110rpx;
-  height: 110rpx;
-  background: #f7f9f8;
+  width: 112rpx;
+  height: 112rpx;
+  background: #f6f8f7;
+  border: 1rpx solid #eef2ef;
   border-radius: 18rpx;
 }
 
@@ -282,7 +310,7 @@
   align-items: flex-end;
   justify-content: center;
   flex-shrink: 0;
-  gap: 8rpx;
+  gap: 6rpx;
 }
 
 .multi-meta {
@@ -307,34 +335,34 @@
 }
 
 .total-label-text {
-  color: #333333;
-  font-size: 24rpx;
-  font-weight: 600;
-  margin-right: 2rpx;
+  color: #555555;
+  font-size: 22rpx;
+  font-weight: 500;
+  margin-right: 4rpx;
 }
 
 .total-currency {
-  color: #1a1a1a;
+  color: #101815;
   font-size: 24rpx;
   font-weight: 700;
 }
 
 .total-amount {
-  color: #1a1a1a;
+  color: #101815;
   font-size: 36rpx;
   font-weight: 900;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
 
-/* 预约配送时间：独立横栏，视效极其精致清晰 */
+/* 预约配送时间：微型精致横栏 */
 .order-delivery-bar {
   display: flex;
   align-items: center;
-  gap: 10rpx;
-  margin-top: 14rpx;
-  padding: 12rpx 18rpx;
+  gap: 12rpx;
+  margin-top: 8rpx;
+  padding: 10rpx 16rpx;
   background: #f4f8f5;
-  border-radius: 14rpx;
+  border-radius: 12rpx;
 }
 
 .delivery-clock-icon {
@@ -345,7 +373,7 @@
 
 .delivery-time-text {
   color: #007a3d;
-  font-size: 23rpx;
+  font-size: 22rpx;
   font-weight: 600;
   line-height: 32rpx;
 }
@@ -355,9 +383,9 @@
   align-items: center;
   justify-content: flex-end;
   gap: 16rpx;
-  padding-top: 20rpx;
-  margin-top: 18rpx;
-  border-top: 1rpx solid #f2f4f3;
+  padding-top: 18rpx;
+  margin-top: 16rpx;
+  border-top: 1rpx solid #f3f5f4;
 }
 
 .order-btn {
@@ -381,9 +409,9 @@
 }
 
 .btn-secondary {
-  color: #555555;
+  color: #444444;
   background: #ffffff;
-  border: 1rpx solid #dddddd;
+  border: 1rpx solid #d5dad7;
 }
 
 .btn-primary {
@@ -397,7 +425,7 @@
   color: #ffffff;
   background: linear-gradient(135deg, #00b05b 0%, #007a3d 100%);
   font-weight: 800;
-  box-shadow: 0 6rpx 16rpx rgba(0, 122, 61, 0.25);
+  box-shadow: 0 6rpx 18rpx rgba(0, 122, 61, 0.22);
 }
 
 .orders-cancel-modal-mask {
