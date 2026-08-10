@@ -69,8 +69,20 @@ public class AdminProductController {
     }
 
     @GetMapping("/products")
-    public ApiResponse<PageResult<ProductDto>> products(@RequestParam(required = false) Long categoryId) {
-        return ApiResponse.ok(PageResult.of(storefrontService.products(categoryId, null)));
+    public ApiResponse<PageResult<ProductDto>> products(@RequestParam(required = false) String categoryId) {
+        Long parsedCategoryId = parseLongOrNull(categoryId);
+        return ApiResponse.ok(PageResult.of(storefrontService.products(parsedCategoryId, null)));
+    }
+
+    private Long parseLongOrNull(String value) {
+        if (value == null || value.isBlank() || "null".equalsIgnoreCase(value) || "undefined".equalsIgnoreCase(value)) {
+            return null;
+        }
+        try {
+            return Long.parseLong(value.trim());
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 
     @GetMapping("/products/{id}")

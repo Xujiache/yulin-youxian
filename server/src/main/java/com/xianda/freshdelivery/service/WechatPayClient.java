@@ -31,6 +31,8 @@ import java.security.spec.PKCS8EncodedKeySpec;
 import java.security.spec.X509EncodedKeySpec;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.Base64;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
@@ -48,6 +50,7 @@ public class WechatPayClient {
     private static final long CALLBACK_MAX_AGE_SECONDS = 300;
     private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(5);
     private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(15);
+    private static final DateTimeFormatter RFC3339_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ssXXX");
 
     private final WechatPayProperties properties;
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -103,7 +106,20 @@ public class WechatPayClient {
         requestBody.put("amount", Map.of("total", order.payableAmount(), "currency", "CNY"));
         requestBody.put("payer", Map.of("openid", openId));
         if (hasText(order.paymentExpireAt())) {
-            requestBody.put("time_expire", order.paymentExpireAt());
+            String expireAt = order.paymentExpireAt();
+            try {
+                // Parse potentially nanosecond-precision string like 2026-08-10T20:00:00.123456789+08:00
+                ZonedDateTime zonedDateTime = ZonedDateTime.parse(expireAt);
+                requestBody.put("time_expire", zonedDateTime.format(RFC3339_FORMATTER));
+            } catch (Exception parseException) {
+                // Fallback: try to strip nanoseconds manually (e.g., trim ".xxx" before "+")
+                int dotIndex = expireAt.indexOf('.');
+                int plusIndex = expireAt.indexOf('+', dotIndex > 0 ? dotIndex : 0);
+                if (dotIndex > 0 && plusIndex > dotIndex) {
+                    expireAt = expireAt.substring(0, dotIndex) + expireAt.substring(plusIndex);
+                }
+                requestBody.put("time_expire", expireAt);
+            }
         }
         JsonNode response = postJson("/v3/pay/transactions/jsapi", requestBody);
         String prepayId = response.path("prepay_id").asText();
