@@ -1,6 +1,7 @@
 package com.xianda.freshdelivery;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -26,6 +27,7 @@ import com.xianda.freshdelivery.service.StorefrontService;
 import java.math.BigDecimal;
 import java.nio.file.Path;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Set;
 import org.junit.jupiter.api.AfterEach;
@@ -90,6 +92,83 @@ class StorefrontServiceTests {
         assertEquals(104L, products.get(0).id());
         assertTrue(products.indexOf(service.product(101L)) > products.indexOf(service.product(104L)));
         assertEquals(104L, service.home().recommendedProducts().get(0).id());
+    }
+
+    @Test
+    void unpaidOrderClosesAfterSixHoursAndRestoresStock() {
+        StorefrontService service = newService();
+        CurrentUserContext.setUserId(1000L);
+        Long addressId = service.createAddress(addressRequest()).id();
+        BigDecimal beforeStock = service.product(106L).stockQty();
+        service.addCartItem(106L, BigDecimal.ONE);
+        OrderDetailDto order = service.createOrder(new CreateOrderRequest(
+                addressId,
+                3L,
+                "",
+                service.cart().items().stream().map(item -> item.id()).toList()
+        ));
+        LocalDateTime createdAt = LocalDateTime.parse(order.createdAt().replace(" ", "T"));
+
+        assertEquals(0, service.closeExpiredOrders(createdAt.plusHours(6).minusSeconds(1)));
+        assertEquals("待支付", service.order(order.id()).status());
+        assertTrue(service.closeExpiredOrders(createdAt.plusHours(6).plusSeconds(1)) >= 1);
+
+        OrderDetailDto closed = service.order(order.id());
+        assertEquals("已关闭", closed.status());
+        assertTrue(closed.canRestartPayment());
+        assertEquals(beforeStock, service.product(106L).stockQty());
+    }
+
+    @Test
+    void cancelledOrderCanReturnItsItemsToCart() {
+        StorefrontService service = newService();
+        CurrentUserContext.setUserId(1000L);
+        Long addressId = service.createAddress(addressRequest()).id();
+        BigDecimal beforeStock = service.product(106L).stockQty();
+        service.addCartItem(106L, BigDecimal.ONE);
+        OrderDetailDto order = service.createOrder(new CreateOrderRequest(
+                addressId,
+                3L,
+                "",
+                service.cart().items().stream().map(item -> item.id()).toList()
+        ));
+
+        OrderDetailDto cancelled = service.cancelOrder(order.id(), true);
+
+        assertEquals("已取消", cancelled.status());
+        assertEquals(beforeStock, service.product(106L).stockQty());
+        assertEquals(1, service.cart().items().size());
+        assertEquals(106L, service.cart().items().get(0).productId());
+        assertTrue(service.cart().items().get(0).selected());
+    }
+
+    @Test
+    void restartingClosedOrderNextDayRequiresNewDeliverySlot() {
+        StorefrontService service = newService();
+        CurrentUserContext.setUserId(1000L);
+        Long addressId = service.createAddress(addressRequest()).id();
+        service.addCartItem(106L, BigDecimal.ONE);
+        OrderDetailDto order = service.createOrder(new CreateOrderRequest(
+                addressId,
+                3L,
+                "",
+                service.cart().items().stream().map(item -> item.id()).toList()
+        ));
+        LocalDateTime createdAt = LocalDateTime.parse(order.createdAt().replace(" ", "T"));
+        service.closeExpiredOrders(createdAt.plusHours(6).plusSeconds(1));
+        LocalDateTime nextDay = createdAt.plusDays(1);
+
+        BusinessException missingSlot = assertThrows(
+                BusinessException.class,
+                () -> service.restartOrder(order.id(), null, nextDay)
+        );
+        assertTrue(missingSlot.getMessage().contains("重新选择配送时间"));
+
+        OrderDetailDto restarted = service.restartOrder(order.id(), 3L, nextDay);
+        assertEquals("待支付", restarted.status());
+        assertNotEquals(order.paymentOrderNo(), restarted.paymentOrderNo());
+        assertTrue(restarted.deliverySlot().contains("09:00-11:00"));
+        assertTrue(!restarted.paymentExpireAt().isBlank());
     }
 
     @Test

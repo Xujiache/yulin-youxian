@@ -3,6 +3,7 @@ package com.xianda.freshdelivery.controller.wx;
 import com.xianda.freshdelivery.common.ApiResponse;
 import com.xianda.freshdelivery.common.BusinessException;
 import com.xianda.freshdelivery.dto.CreateOrderRequest;
+import com.xianda.freshdelivery.dto.CancelOrderRequest;
 import com.xianda.freshdelivery.dto.OrderDetailDto;
 import com.xianda.freshdelivery.dto.OrderDto;
 import com.xianda.freshdelivery.dto.OrderPreviewDto;
@@ -10,6 +11,7 @@ import com.xianda.freshdelivery.dto.OrderPreviewRequest;
 import com.xianda.freshdelivery.dto.PaymentDto;
 import com.xianda.freshdelivery.dto.RefundDto;
 import com.xianda.freshdelivery.dto.RefundRequest;
+import com.xianda.freshdelivery.dto.RestartOrderRequest;
 import com.xianda.freshdelivery.service.StorefrontService;
 import com.xianda.freshdelivery.service.WechatPaymentService;
 import jakarta.validation.Valid;
@@ -66,8 +68,25 @@ public class WxOrderController {
     }
 
     @PostMapping("/orders/{id}/cancel")
-    public ApiResponse<OrderDetailDto> cancel(@PathVariable Long id) {
-        return ApiResponse.ok(storefrontService.cancelOrder(id));
+    public ApiResponse<OrderDetailDto> cancel(
+            @PathVariable Long id,
+            @RequestBody(required = false) CancelOrderRequest request
+    ) {
+        return ApiResponse.ok(wechatPaymentService.cancelOrder(
+                id,
+                request != null && request.shouldReturnToCart()
+        ));
+    }
+
+    @PostMapping("/orders/{id}/restart")
+    public ApiResponse<OrderDetailDto> restart(
+            @PathVariable Long id,
+            @RequestBody(required = false) RestartOrderRequest request
+    ) {
+        return ApiResponse.ok(storefrontService.restartOrder(
+                id,
+                request == null ? null : request.deliverySlotId()
+        ));
     }
 
     @PostMapping("/orders/{id}/pay")

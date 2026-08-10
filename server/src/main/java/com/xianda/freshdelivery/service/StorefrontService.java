@@ -62,6 +62,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -69,6 +70,7 @@ public class StorefrontService {
     private static final String STATE_KEY = "storefront";
     private static final int DEFAULT_DELIVERY_FEE = 500;
     private static final int DEFAULT_PACKAGE_FEE = 100;
+    private static final int PAYMENT_TIMEOUT_HOURS = 6;
     private static final ZoneId STORE_ZONE = ZoneId.of("Asia/Shanghai");
     private static final Pattern DELIVERY_TIME_RANGE_PATTERN =
             Pattern.compile("(\\d{1,2}:\\d{2})\\s*[-~—至]\\s*(\\d{1,2}:\\d{2})");
@@ -102,6 +104,8 @@ public class StorefrontService {
     private final Map<Long, OrderState> orders = new LinkedHashMap<>();
     private final Map<Long, RefundState> refunds = new LinkedHashMap<>();
     private final Map<String, String> paymentTransactionIds = new LinkedHashMap<>();
+    private final Map<Long, String> paymentOrderNos = new LinkedHashMap<>();
+    private final Map<Long, String> paymentStartedAts = new LinkedHashMap<>();
 
     private SettingsDto settings = new SettingsDto("禹邻优鲜", "/assets/products/store-logo.png", 0, DEFAULT_DELIVERY_FEE, DEFAULT_PACKAGE_FEE, "08:00-20:00", "400-800-1234", false, true, List.of());
 
@@ -663,7 +667,7 @@ public class StorefrontService {
             int shortfall = minOrderAmount - preview.productAmount();
             throw new BusinessException(400, "未满起送价¥" + yuan(minOrderAmount) + "，还差¥" + yuan(shortfall));
         }
-        preview.items().forEach(this::decreaseStock);
+        reserveStock(preview.items());
         long id = orderId.incrementAndGet();
         LocalDateTime now = LocalDateTime.now(STORE_ZONE);
         String createdAt = now.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME);
@@ -688,6 +692,8 @@ public class StorefrontService {
                 deliveryDate
         );
         orders.put(id, state);
+        paymentOrderNos.put(id, orderNo);
+        paymentStartedAts.put(id, createdAt);
         if (cartCheckout) {
             request.cartItemIds().forEach(cartItems::remove);
         }
@@ -696,6 +702,7 @@ public class StorefrontService {
     }
 
     public synchronized List<OrderDto> orders(String status) {
+        closeExpiredOrders(LocalDateTime.now(STORE_ZONE));
         Long userId = currentUserId();
         return orders.values().stream()
                 .filter(order -> order.userId().equals(userId))
@@ -714,6 +721,7 @@ public class StorefrontService {
     }
 
     public synchronized List<AdminOrderDto> adminOrders(String status, LocalDate requestedDeliveryDate, String printStatus) {
+        closeExpiredOrders(LocalDateTime.now(STORE_ZONE));
         List<AdminOrderCandidate> candidates = orders.values().stream()
                 .filter(order -> matchesOrderStatus(order, status))
                 .filter(order -> requestedDeliveryDate == null || deliveryDate(order).equals(requestedDeliveryDate))
@@ -772,6 +780,7 @@ public class StorefrontService {
     }
 
     public synchronized OrderDetailDto order(Long id) {
+        closeExpiredOrders(LocalDateTime.now(STORE_ZONE));
         return toOrderDetailDto(orderState(id));
     }
 
@@ -808,12 +817,18 @@ public class StorefrontService {
     }
 
     public synchronized OrderDetailDto cancelOrder(Long id) {
+        return cancelOrder(id, false);
+    }
+
+    public synchronized OrderDetailDto cancelOrder(Long id, boolean returnToCart) {
+        closeExpiredOrders(LocalDateTime.now(STORE_ZONE));
         OrderState order = orderState(id);
-        if (!List.of("待支付", "已支付/待接单").contains(order.status())) {
-            throw new BusinessException(409, "当前订单状态不可取消");
+        if (!"待支付".equals(order.status())) {
+            throw new BusinessException(409, "仅待支付订单可以由用户取消");
         }
-        if ("待支付".equals(order.status())) {
-            restoreStock(order.items());
+        restoreStock(order.items());
+        if (returnToCart) {
+            returnOrderItemsToCart(order);
         }
         OrderState next = order.withStatus("已取消");
         orders.put(id, next);
@@ -821,7 +836,71 @@ public class StorefrontService {
         return toOrderDetailDto(next);
     }
 
+    public synchronized OrderDetailDto restartOrder(Long id, Long deliverySlotId) {
+        return restartOrder(id, deliverySlotId, LocalDateTime.now(STORE_ZONE));
+    }
+
+    public synchronized OrderDetailDto restartOrder(Long id, Long deliverySlotId, LocalDateTime now) {
+        closeExpiredOrders(now);
+        OrderState order = orderState(id);
+        if (!"已关闭".equals(order.status()) || order.paidAmount() > 0) {
+            throw new BusinessException(409, "当前订单不可重启支付");
+        }
+
+        boolean slotRequired = requiresDeliverySlotSelection(order, now);
+        if (slotRequired && deliverySlotId == null) {
+            throw new BusinessException(409, "订单日期已变化，请重新选择配送时间");
+        }
+
+        OrderState restarted = order;
+        if (deliverySlotId != null) {
+            DeliverySlotDto slot = availableDeliverySlot(deliverySlotId);
+            if (!isDeliverySlotOpen(slot, now)) {
+                throw new BusinessException(409, "所选配送时间已不可用，请重新选择");
+            }
+            restarted = order.withDeliverySlot(
+                    slot.label(),
+                    deliveryDateForSlot(slot.label(), now.toLocalDate()).toString()
+            );
+        }
+
+        reserveStock(restarted.items());
+        String paymentStartedAt = now.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+        paymentStartedAts.put(id, paymentStartedAt);
+        paymentOrderNos.put(id, restartedPaymentOrderNo(restarted, now));
+        paymentTransactionIds.remove(restarted.orderNo());
+        restarted = restarted.withStatus("待支付");
+        orders.put(id, restarted);
+        persist();
+        return toOrderDetailDto(restarted);
+    }
+
+    @Scheduled(
+            fixedDelayString = "${storefront.order-expiration-scan-ms:60000}",
+            initialDelayString = "${storefront.order-expiration-initial-delay-ms:10000}"
+    )
+    public void closeExpiredOrders() {
+        closeExpiredOrders(LocalDateTime.now(STORE_ZONE));
+    }
+
+    public synchronized int closeExpiredOrders(LocalDateTime now) {
+        List<OrderState> expired = orders.values().stream()
+                .filter(order -> "待支付".equals(order.status()))
+                .filter(order -> !paymentExpireTime(order).isAfter(now))
+                .toList();
+        if (expired.isEmpty()) {
+            return 0;
+        }
+        for (OrderState order : expired) {
+            restoreStock(order.items());
+            orders.put(order.id(), order.withStatus("已关闭"));
+        }
+        persist();
+        return expired.size();
+    }
+
     public synchronized OrderDetailDto preparePayment(Long id) {
+        closeExpiredOrders(LocalDateTime.now(STORE_ZONE));
         OrderState order = orderState(id);
         if (!"待支付".equals(order.status())) {
             throw new BusinessException(409, "当前订单状态不可支付");
@@ -829,20 +908,43 @@ public class StorefrontService {
         return toOrderDetailDto(order);
     }
 
+    public synchronized OrderDetailDto renewPaymentAttempt(Long id) {
+        LocalDateTime now = LocalDateTime.now(STORE_ZONE);
+        closeExpiredOrders(now);
+        OrderState order = orderState(id);
+        if (!"待支付".equals(order.status())) {
+            throw new BusinessException(409, "当前订单状态不可支付");
+        }
+        String nextPaymentOrderNo = restartedPaymentOrderNo(order, now);
+        if (nextPaymentOrderNo.equals(paymentOrderNo(order))) {
+            nextPaymentOrderNo = restartedPaymentOrderNo(order, now.plusNanos(1_000_000));
+        }
+        paymentOrderNos.put(id, nextPaymentOrderNo);
+        persist();
+        return toOrderDetailDto(order);
+    }
+
     public synchronized PaymentConfirmationResult confirmPayment(PaymentNotifyRequest request) {
         if (!"SUCCESS".equalsIgnoreCase(request.tradeState())) {
             throw new BusinessException(400, "支付状态不是成功");
         }
-        OrderState order = orderByNo(request.orderNo());
+        closeExpiredOrders(LocalDateTime.now(STORE_ZONE));
+        OrderState order = orderByPaymentNo(request.orderNo());
         if (request.totalAmount() != null && !request.totalAmount().equals(order.payableAmount())) {
             throw new BusinessException(409, "微信支付回调金额与订单金额不一致");
         }
-        if (request.transactionId() != null && !request.transactionId().isBlank()) {
-            paymentTransactionIds.put(order.orderNo(), request.transactionId().trim());
+        if (!paymentOrderNo(order).equals(request.orderNo())) {
+            return new PaymentConfirmationResult(toOrderDetailDto(order), false);
         }
         if (!"待支付".equals(order.status())) {
+            if (order.paidAmount() > 0 && request.transactionId() != null && !request.transactionId().isBlank()) {
+                paymentTransactionIds.put(order.orderNo(), request.transactionId().trim());
+            }
             persist();
             return new PaymentConfirmationResult(toOrderDetailDto(order), false);
+        }
+        if (request.transactionId() != null && !request.transactionId().isBlank()) {
+            paymentTransactionIds.put(order.orderNo(), request.transactionId().trim());
         }
         String nextStatus = Boolean.FALSE.equals(settings.autoDeliveryEnabled()) ? "已支付/待接单" : "备货中";
         OrderState paid = order.withStatus(nextStatus).withPaidAmount(order.payableAmount());
@@ -1230,6 +1332,10 @@ public class StorefrontService {
             }
             paymentTransactionIds.clear();
             paymentTransactionIds.putAll(snapshot.paymentTransactionIds() == null ? Map.of() : snapshot.paymentTransactionIds());
+            paymentOrderNos.clear();
+            paymentOrderNos.putAll(snapshot.paymentOrderNos() == null ? Map.of() : snapshot.paymentOrderNos());
+            paymentStartedAts.clear();
+            paymentStartedAts.putAll(snapshot.paymentStartedAts() == null ? Map.of() : snapshot.paymentStartedAts());
             settings = settingsOrDefault(snapshot.settings());
             resetSequences();
             return true;
@@ -1255,6 +1361,8 @@ public class StorefrontService {
                 new ArrayList<>(orders.values()),
                 new ArrayList<>(refunds.values()),
                 new LinkedHashMap<>(paymentTransactionIds),
+                new LinkedHashMap<>(paymentOrderNos),
+                new LinkedHashMap<>(paymentStartedAts),
                 settings
         );
         try {
@@ -1946,16 +2054,61 @@ public class StorefrontService {
         products.put(product.id(), copyProduct(product, nextStock, product.status()));
     }
 
-    private void restoreStock(List<OrderItemDto> items) {
+    private void reserveStock(List<OrderItemDto> items) {
         for (OrderItemDto item : items) {
             ProductDto product = product(item.productId());
+            ProductSkuDto sku = Boolean.TRUE.equals(product.skuEnabled())
+                    ? findSku(product, item.skuId()).orElse(null)
+                    : null;
+            validateProductForPurchase(product, sku, item.quantity());
+        }
+        items.forEach(this::decreaseStock);
+    }
+
+    private void restoreStock(List<OrderItemDto> items) {
+        for (OrderItemDto item : items) {
+            ProductDto product = products.get(item.productId());
+            if (product == null) {
+                continue;
+            }
             if (Boolean.TRUE.equals(product.skuEnabled()) && item.skuId() != null) {
-                ProductSkuDto sku = findSku(product, item.skuId())
-                        .orElseThrow(() -> new BusinessException(409, item.productName() + "规格已调整，无法恢复库存"));
+                ProductSkuDto sku = findSku(product, item.skuId()).orElse(null);
+                if (sku == null) {
+                    continue;
+                }
                 products.put(product.id(), updateSkuStock(product, sku.id(), sku.stockQty().add(item.quantity())));
                 continue;
             }
             products.put(product.id(), copyProduct(product, product.stockQty().add(item.quantity()), product.status()));
+        }
+    }
+
+    private void returnOrderItemsToCart(OrderState order) {
+        for (OrderItemDto item : order.items()) {
+            if (!products.containsKey(item.productId())) {
+                continue;
+            }
+            CartItemState existing = cartItems.values().stream()
+                    .filter(candidate -> candidate.userId().equals(order.userId()))
+                    .filter(candidate -> candidate.productId().equals(item.productId()))
+                    .filter(candidate -> Objects.equals(candidate.skuId(), item.skuId()))
+                    .findFirst()
+                    .orElse(null);
+            if (existing != null) {
+                cartItems.put(existing.id(), existing
+                        .withQuantity(existing.quantity().add(item.quantity()))
+                        .withSelected(true));
+                continue;
+            }
+            CartItemState returned = new CartItemState(
+                    cartId.incrementAndGet(),
+                    order.userId(),
+                    item.productId(),
+                    item.skuId(),
+                    item.quantity(),
+                    true
+            );
+            cartItems.put(returned.id(), returned);
         }
     }
 
@@ -2054,9 +2207,9 @@ public class StorefrontService {
         return order;
     }
 
-    private OrderState orderByNo(String orderNo) {
+    private OrderState orderByPaymentNo(String orderNo) {
         return orders.values().stream()
-                .filter(order -> order.orderNo().equals(orderNo))
+                .filter(order -> order.orderNo().equals(orderNo) || paymentOrderNo(order).equals(orderNo))
                 .findFirst()
                 .orElseThrow(() -> new BusinessException(404, "订单不存在"));
     }
@@ -2376,7 +2529,11 @@ public class StorefrontService {
                 latestRefund == null ? "" : latestRefund.reason(),
                 order.userId(),
                 refundsForOrder(order.id()),
-                paymentTransactionIds.getOrDefault(order.orderNo(), "")
+                paymentTransactionIds.getOrDefault(order.orderNo(), ""),
+                paymentOrderNo(order),
+                paymentExpireAt(order),
+                "已关闭".equals(order.status()) && order.paidAmount() == 0,
+                requiresDeliverySlotSelection(order, LocalDateTime.now(STORE_ZONE))
         );
     }
 
@@ -2516,6 +2673,69 @@ public class StorefrontService {
             return "明日 " + timeRange + "（" + deliveryDate.format(DELIVERY_DATE_FORMATTER) + " " + weekday + "）";
         }
         return deliveryDate.format(DELIVERY_DATE_FORMATTER) + " " + weekday + " " + timeRange;
+    }
+
+    private String paymentOrderNo(OrderState order) {
+        String value = paymentOrderNos.get(order.id());
+        return value == null || value.isBlank() ? order.orderNo() : value;
+    }
+
+    private LocalDateTime paymentStartedAt(OrderState order) {
+        String value = paymentStartedAts.get(order.id());
+        if (value == null || value.isBlank()) {
+            return createdAt(order);
+        }
+        try {
+            return LocalDateTime.parse(value);
+        } catch (RuntimeException ignored) {
+            return createdAt(order);
+        }
+    }
+
+    private LocalDateTime paymentExpireTime(OrderState order) {
+        return paymentStartedAt(order).plusHours(PAYMENT_TIMEOUT_HOURS);
+    }
+
+    private String paymentExpireAt(OrderState order) {
+        if (!"待支付".equals(order.status())) {
+            return "";
+        }
+        return paymentExpireTime(order)
+                .atZone(STORE_ZONE)
+                .format(DateTimeFormatter.ISO_OFFSET_DATE_TIME);
+    }
+
+    private String restartedPaymentOrderNo(OrderState order, LocalDateTime now) {
+        String suffix = "R" + Long.toString(now.atZone(STORE_ZONE).toInstant().toEpochMilli(), 36).toUpperCase();
+        String base = order.orderNo();
+        int maxBaseLength = Math.max(1, 32 - suffix.length());
+        if (base.length() > maxBaseLength) {
+            base = base.substring(0, maxBaseLength);
+        }
+        return base + suffix;
+    }
+
+    private boolean requiresDeliverySlotSelection(OrderState order, LocalDateTime now) {
+        if (!"已关闭".equals(order.status())) {
+            return false;
+        }
+        if (!createdDate(order).equals(now.toLocalDate())) {
+            return true;
+        }
+        LocalDate selectedDate = deliveryDate(order);
+        if (selectedDate.isBefore(now.toLocalDate())) {
+            return true;
+        }
+        Matcher matcher = DELIVERY_TIME_RANGE_PATTERN.matcher(order.deliverySlot() == null ? "" : order.deliverySlot());
+        if (!matcher.find() || selectedDate.isAfter(now.toLocalDate())) {
+            return false;
+        }
+        try {
+            LocalTime startTime = LocalTime.parse(matcher.group(1), DateTimeFormatter.ofPattern("H:mm"));
+            return !startTime.isAfter(now.toLocalTime());
+        } catch (RuntimeException ignored) {
+            return false;
+        }
     }
 
     private LocalDateTime createdAt(OrderState order) {
@@ -2840,6 +3060,8 @@ public class StorefrontService {
                 toOrderItemDto(10011L, products.get(105L), new BigDecimal("1.0"))
         );
         putDemoOrder(1006L, 10002L, "XD2026070615121006", "待支付", addresses.get(2L).address(), "明日 14:00-16:00", order6Items, "", false, 0);
+        paymentOrderNos.put(1006L, "XD2026070615121006");
+        paymentStartedAts.put(1006L, LocalDateTime.now(STORE_ZONE).format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
 
         if (refunds.isEmpty()) {
             OrderState refundOrder1 = orders.get(1005L);
@@ -2888,6 +3110,8 @@ public class StorefrontService {
             List<OrderState> orders,
             List<RefundState> refunds,
             Map<String, String> paymentTransactionIds,
+            Map<Long, String> paymentOrderNos,
+            Map<Long, String> paymentStartedAts,
             SettingsDto settings
     ) {
     }
@@ -3056,6 +3280,10 @@ public class StorefrontService {
 
         OrderState withRefundedAmount(Integer nextRefundedAmount) {
             return new OrderState(id, userId, orderNo, status, address, deliverySlot, items, productAmount, deliveryFee, packageFee, payableAmount, paidAmount, nextRefundedAmount, remark, createdAt, deliveryDate);
+        }
+
+        OrderState withDeliverySlot(String nextDeliverySlot, String nextDeliveryDate) {
+            return new OrderState(id, userId, orderNo, status, address, nextDeliverySlot, items, productAmount, deliveryFee, packageFee, payableAmount, paidAmount, refundedAmount, remark, createdAt, nextDeliveryDate);
         }
     }
 }

@@ -5,7 +5,8 @@
 }
 
 .cart-page .page-header {
-  padding-right: 176rpx;
+  /* 给微信右上角胶囊按钮留出更大的安全区，避免“清空已选”被遮挡 */
+  padding-right: 300rpx;
 }
 
 .cart-heading {
@@ -25,21 +26,23 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  min-width: 112rpx;
-  height: 48rpx;
-  padding: 0 18rpx;
-  color: #007a3d;
+  min-width: 132rpx;
+  height: 56rpx;
+  padding: 0 22rpx;
+  color: #ffffff;
   font-size: 24rpx;
   font-weight: 700;
-  background: #e8f7ee;
-  border: 1rpx solid rgba(0, 122, 61, 0.12);
+  background: linear-gradient(135deg, #00a957 0%, #007a3d 100%);
+  border: 0;
   border-radius: 999rpx;
+  box-shadow: 0 8rpx 18rpx rgba(0, 122, 61, 0.2);
 }
 
 .clear.disabled {
   color: #9aa5a0;
   background: #edf0ee;
   border-color: #edf0ee;
+  box-shadow: none;
 }
 
 .cart-content {
@@ -506,6 +509,34 @@
   justify-content: space-between;
   gap: 14rpx;
   margin-top: auto;
+}
+
+.cart-item-controls {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 10rpx;
+}
+
+.item-delete-quick {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  min-width: 58rpx;
+  height: 48rpx;
+  padding: 0 8rpx;
+  color: #9c4938;
+  font-size: 21rpx;
+  font-weight: 700;
+  line-height: 48rpx;
+  background: #fff4ef;
+  border-radius: 999rpx;
+}
+
+.item-delete-quick[disabled] {
+  color: #a6aaa7;
+  background: #f0f2f1;
 }
 
 .item-invalid-price-row {

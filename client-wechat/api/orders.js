@@ -26,6 +26,10 @@ async function getOrder(id) {
   const order = await request({
     url: `/api/wx/orders/${id}`
   });
+  return normalizeOrderDetail(order);
+}
+
+function normalizeOrderDetail(order) {
   return {
     ...order,
     items: (order.items || []).map(normalizeOrderItem),
@@ -60,11 +64,30 @@ function payOrder(id) {
   });
 }
 
-function refreshPaymentStatus(id) {
-  return request({
+async function cancelOrder(id, returnToCart) {
+  const order = await request({
+    url: `/api/wx/orders/${id}/cancel`,
+    method: "POST",
+    data: { returnToCart: Boolean(returnToCart) }
+  });
+  return normalizeOrderDetail(order);
+}
+
+async function restartOrder(id, deliverySlotId) {
+  const order = await request({
+    url: `/api/wx/orders/${id}/restart`,
+    method: "POST",
+    data: deliverySlotId ? { deliverySlotId } : {}
+  });
+  return normalizeOrderDetail(order);
+}
+
+async function refreshPaymentStatus(id) {
+  const order = await request({
     url: `/api/wx/orders/${id}/payment-status`,
     method: "POST"
   });
+  return normalizeOrderDetail(order);
 }
 
 function submitRefund(data) {
@@ -122,6 +145,8 @@ module.exports = {
   previewOrder,
   createOrder,
   payOrder,
+  cancelOrder,
+  restartOrder,
   refreshPaymentStatus,
   submitRefund,
   uploadRefundEvidence

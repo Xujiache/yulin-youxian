@@ -59,6 +59,8 @@ auth:
 storefront:
   storage-path: ${STOREFRONT_STORAGE_PATH:data/storefront-state.json}
   seed-demo-data: ${STOREFRONT_SEED_DEMO_DATA:false}
+  order-expiration-scan-ms: ${ORDER_EXPIRATION_SCAN_MS:60000}
+  order-expiration-initial-delay-ms: ${ORDER_EXPIRATION_INITIAL_DELAY_MS:10000}
 
 persistence:
   mode: ${PERSISTENCE_MODE:mysql}

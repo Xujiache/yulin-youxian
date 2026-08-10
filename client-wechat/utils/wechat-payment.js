@@ -8,7 +8,11 @@ function wait(milliseconds) {
 }
 
 function isPaidOrder(order) {
-  return Boolean(order && typeof order.status === "string" && order.status.includes(PAID_STATUS));
+  if (!order) return false;
+  if (Number(order.paidAmount || 0) > 0) return true;
+  const status = String(order.status || "");
+  return status.includes(PAID_STATUS)
+    || ["待接单", "备货中", "配送中", "已完成", "退款中", "部分退款", "已退款"].includes(status);
 }
 
 function isPendingPaymentOrder(order) {

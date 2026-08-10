@@ -32,6 +32,10 @@ public class WechatPaymentService {
 
     public PaymentDto createPayment(Long orderId) {
         OrderDetailDto order = storefrontService.preparePayment(orderId);
+        if (wechatPayClient.isPaymentConfigured()) {
+            wechatPayClient.closePayment(order);
+            order = storefrontService.renewPaymentAttempt(orderId);
+        }
         String openId = authService.openIdForUser(CurrentUserContext.userId());
         return wechatPayClient.createJsapiPayment(order, openId);
     }
@@ -55,6 +59,14 @@ public class WechatPaymentService {
             return order;
         }
         return confirmPayment(payment);
+    }
+
+    public OrderDetailDto cancelOrder(Long orderId, boolean returnToCart) {
+        OrderDetailDto order = storefrontService.preparePayment(orderId);
+        if (wechatPayClient.isPaymentConfigured()) {
+            wechatPayClient.closePayment(order);
+        }
+        return storefrontService.cancelOrder(orderId, returnToCart);
     }
 
     public OrderDetailDto deliverAdminOrder(Long orderId) {

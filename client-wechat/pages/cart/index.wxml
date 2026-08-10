@@ -84,16 +84,24 @@
             <text wx:if="{{item.unavailable}}" class="item-unavailable-tip">{{item.availabilityMessage}}</text>
             <view wx:if="{{!item.unavailable}}" class="item-bottom">
               <text class="item-price">￥{{item.amountText}}</text>
-              <view class="cart-stepper-shell">
-                <quantity-stepper
+              <view class="cart-item-controls">
+                <button
+                  class="item-delete-quick"
                   data-id="{{item.id}}"
-                  value="{{item.quantity}}"
-                  min="{{item.minPurchaseQty || 1}}"
-                  max="{{item.stockQty}}"
-                  step="{{item.stepQty || 1}}"
-                  unit="{{item.saleUnit || ''}}"
-                  bind:change="handleQuantityChange"
-                />
+                  disabled="{{deletingItemId === item.id}}"
+                  bindtap="handleDeleteItem"
+                >{{deletingItemId === item.id ? '删除中' : '删除'}}</button>
+                <view class="cart-stepper-shell">
+                  <quantity-stepper
+                    data-id="{{item.id}}"
+                    value="{{item.quantity}}"
+                    min="{{item.minPurchaseQty || 1}}"
+                    max="{{item.stockQty}}"
+                    step="{{item.stepQty || 1}}"
+                    unit="{{item.saleUnit || ''}}"
+                    bind:change="handleQuantityChange"
+                  />
+                </view>
               </view>
             </view>
             <view wx:else class="item-invalid-price-row">

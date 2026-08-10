@@ -1,6 +1,6 @@
 const { yuan } = require("../../utils/format");
 const { getCart } = require("../../api/cart");
-const { getOrders, getOrder } = require("../../api/orders");
+const { cancelOrder, getOrders, getOrder } = require("../../api/orders");
 const { syncTheme } = require("../../utils/theme");
 
 const TABS = ["全部", "待支付", "待接单", "备货中", "配送中", "已完成", "售后"];
@@ -15,6 +15,9 @@ function primaryActionText(order) {
   }
   if (order.status === "待支付") {
     return "去支付";
+  }
+  if (order.status === "已关闭") {
+    return "重启支付";
   }
   if (isAfterSaleStatus(order.status)) {
     return "查看售后";
@@ -42,6 +45,9 @@ function secondaryActionText(order) {
     return "再来一单";
   }
   if (order.status === "已取消") {
+    return "查看详情";
+  }
+  if (order.status === "已关闭") {
     return "查看详情";
   }
   return "";
@@ -188,8 +194,39 @@ Page({
     wx.navigateTo({ url: `/pages/order-detail/index?id=${id}` });
   },
 
-  handleSecondaryAction(event) {
+  async handleSecondaryAction(event) {
     const id = event.currentTarget.dataset.id;
+    const order = this.data.orders.find((item) => Number(item.id) === Number(id));
+    if (order && order.status === "待支付") {
+      const choice = await new Promise((resolve) => {
+        wx.showModal({
+          title: "取消订单",
+          content: "取消后，是否将本单商品放回购物车？",
+          confirmText: "放回购物车",
+          cancelText: "不要了",
+          confirmColor: "#008a52",
+          success: resolve,
+          fail: () => resolve(null)
+        });
+      });
+      if (!choice) return;
+      const returnToCart = Boolean(choice.confirm);
+      try {
+        await cancelOrder(id, returnToCart);
+        wx.showToast({
+          title: returnToCart ? "已取消并放回购物车" : "订单已取消",
+          icon: "success"
+        });
+        await Promise.all([
+          this.updateOrders(this.data.activeStatus),
+          this.loadCartCount()
+        ]);
+      } catch (error) {
+        wx.showToast({ title: error.message || "取消订单失败", icon: "none" });
+        await this.updateOrders(this.data.activeStatus);
+      }
+      return;
+    }
     wx.navigateTo({ url: `/pages/order-detail/index?id=${id}` });
   },
 

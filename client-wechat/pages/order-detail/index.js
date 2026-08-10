@@ -1,6 +1,7 @@
 const { yuan } = require("../../utils/format");
 const { getHome } = require("../../api/catalog");
-const { getOrder, payOrder } = require("../../api/orders");
+const { getDeliverySlots } = require("../../api/delivery");
+const { cancelOrder, getOrder, payOrder, restartOrder } = require("../../api/orders");
 const { syncTheme } = require("../../utils/theme");
 const {
   isPaidOrder,
@@ -20,16 +21,27 @@ function buildRefundNotice(order) {
   return `退款申请未通过：${order.latestRefundReason || "请联系门店客服了解原因"}`;
 }
 
+function paymentDeadlineText(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const pad = (number) => String(number).padStart(2, "0");
+  return `${date.getMonth() + 1}月${date.getDate()}日 ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
 function getStatusConfig(order) {
   const status = order ? order.status : "";
   switch (status) {
-    case "待支付":
+    case "待支付": {
+      const deadline = paymentDeadlineText(order.paymentExpireAt);
       return {
         title: "等待买家付款",
-        desc: "请在规定时间内完成支付，超时订单将自动取消",
+        desc: deadline ? `请在 ${deadline} 前完成支付，超时订单将自动关闭` : "请在 6 小时内完成支付，超时订单将自动关闭",
         iconPath: "/assets/icons/status-pending.svg",
         themeClass: "is-pending"
       };
+    }
+    case "已支付/待接单":
     case "待接单":
       return {
         title: "订单已提交，等待商家接单",
@@ -54,9 +66,16 @@ function getStatusConfig(order) {
     case "已完成":
       return {
         title: "订单已完成",
-        desc: "感谢您的支持，欢迎再次光临",
+        desc: "感谢你的支持，欢迎再次光临",
         iconPath: "/assets/icons/status-completed.svg",
         themeClass: "is-completed"
+      };
+    case "已关闭":
+      return {
+        title: "订单已超时关闭",
+        desc: order.requiresDeliverySlotSelection ? "可重启支付，重新选择配送时间后继续下单" : "可重启订单并继续完成支付",
+        iconPath: "/assets/icons/status-cancelled.svg",
+        themeClass: "is-closed"
       };
     case "已取消":
       return {
@@ -83,6 +102,31 @@ function getStatusConfig(order) {
   }
 }
 
+function canApplyRefund(order) {
+  if (!order || Number(order.paidAmount || 0) <= Number(order.refundedAmount || 0)) {
+    return false;
+  }
+  return !["待支付", "已关闭", "已取消", "已退款"].includes(order.status);
+}
+
+function chooseDeliverySlot(slots) {
+  return new Promise((resolve, reject) => {
+    wx.showActionSheet({
+      itemList: slots.map((slot) => slot.label),
+      success(result) {
+        resolve(slots[result.tapIndex] || null);
+      },
+      fail(error) {
+        if (isPaymentCancelled(error)) {
+          resolve(null);
+          return;
+        }
+        reject(error);
+      }
+    });
+  });
+}
+
 Page({
   data: {
     glassMode: false,
@@ -105,7 +149,12 @@ Page({
     refundRecords: [],
     contactPhone: DEFAULT_CONTACT_PHONE,
     isPendingPayment: false,
+    canCancel: false,
+    canRestartPayment: false,
+    canRefund: false,
     paying: false,
+    restarting: false,
+    cancelling: false,
     paymentNotice: ""
   },
 
@@ -120,34 +169,7 @@ Page({
     }
     try {
       const order = await getOrder(id);
-      this.setData({
-        order,
-        orderId: order.id,
-        orderNo: order.orderNo,
-        statusText: order.status,
-        statusConfig: getStatusConfig(order),
-        isPendingPayment: isPendingPaymentOrder(order),
-        address: order.address || {},
-        deliverySlotText: order.deliverySlot || "",
-        items: (order.items || []).map((item) => ({
-          ...item,
-          amountText: yuan(item.amount)
-        })),
-        productAmountText: yuan(order.productAmount),
-        deliveryFeeText: yuan(order.deliveryFee),
-        packageFeeText: yuan(order.packageFee),
-        payableText: yuan(order.payableAmount),
-        refundedText: yuan(order.refundedAmount),
-        hasRefundedAmount: Number(order.refundedAmount || 0) > 0,
-        refundNotice: buildRefundNotice(order),
-        refundRecords: (order.refunds || []).map((refund) => ({
-          ...refund,
-          amountText: yuan(refund.refundAmount),
-          sourceText: refund.source === "ADMIN" ? "管理员发起" : "用户申请",
-          createdAtText: refund.createdAt ? refund.createdAt.replace("T", " ").slice(0, 19) : ""
-        }))
-      });
-      return;
+      this.applyOrder(order);
     } catch {
       wx.showToast({ title: "订单详情加载失败", icon: "none" });
     } finally {
@@ -157,21 +179,49 @@ Page({
 
   onShow() {
     syncTheme(this);
-    if (this.data.orderId && !this.data.loading && !this.data.paying) {
+    if (this.data.orderId && !this.data.loading && !this.data.paying && !this.data.restarting) {
       this.refreshOrder();
     }
+  },
+
+  applyOrder(order) {
+    this.setData({
+      order,
+      orderId: order.id,
+      orderNo: order.orderNo,
+      statusText: order.status,
+      statusConfig: getStatusConfig(order),
+      isPendingPayment: isPendingPaymentOrder(order),
+      canCancel: isPendingPaymentOrder(order),
+      canRestartPayment: Boolean(order.canRestartPayment),
+      canRefund: canApplyRefund(order),
+      address: order.address || {},
+      deliverySlotText: order.deliverySlot || "",
+      items: (order.items || []).map((item) => ({
+        ...item,
+        amountText: yuan(item.amount)
+      })),
+      productAmountText: yuan(order.productAmount),
+      deliveryFeeText: yuan(order.deliveryFee),
+      packageFeeText: yuan(order.packageFee),
+      payableText: yuan(order.payableAmount),
+      refundedText: yuan(order.refundedAmount),
+      hasRefundedAmount: Number(order.refundedAmount || 0) > 0,
+      refundNotice: buildRefundNotice(order),
+      refundRecords: (order.refunds || []).map((refund) => ({
+        ...refund,
+        amountText: yuan(refund.refundAmount),
+        sourceText: refund.source === "ADMIN" ? "管理员发起" : "用户申请",
+        createdAtText: refund.createdAt ? refund.createdAt.replace("T", " ").slice(0, 19) : ""
+      }))
+    });
   },
 
   async refreshOrder() {
     try {
       const order = await getOrder(this.data.orderId);
-      this.setData({
-        order,
-        statusText: order.status,
-        statusConfig: getStatusConfig(order),
-        isPendingPayment: isPendingPaymentOrder(order),
-        paymentNotice: ""
-      });
+      this.applyOrder(order);
+      this.setData({ paymentNotice: "" });
     } catch {}
   },
 
@@ -188,21 +238,21 @@ Page({
         this.setData({ paymentNotice: "支付结果还在确认中，请稍后刷新订单状态。" });
         return;
       }
-      await this.refreshOrder();
+      this.applyOrder(order);
       wx.showToast({ title: "支付成功", icon: "success" });
     } catch (error) {
       if (this.data.orderId && !isPaymentCancelled(error)) {
         try {
           const order = await waitForPaymentResult(this.data.orderId, { attempts: 3, interval: 700 });
           if (isPaidOrder(order)) {
-            await this.refreshOrder();
+            this.applyOrder(order);
             wx.showToast({ title: "支付成功", icon: "success" });
             return;
           }
         } catch {}
       }
       if (isPaymentCancelled(error)) {
-        this.setData({ paymentNotice: "支付已取消，订单仍可继续支付。" });
+        this.setData({ paymentNotice: "支付已取消，订单在 6 小时有效期内仍可继续支付。" });
         return;
       }
       wx.showModal({
@@ -212,6 +262,74 @@ Page({
       });
     } finally {
       this.setData({ paying: false });
+    }
+  },
+
+  async handleRestartPayment() {
+    const order = this.data.order;
+    if (!order || !this.data.canRestartPayment || this.data.restarting || this.data.paying) {
+      return;
+    }
+    this.setData({ restarting: true, paymentNotice: "" });
+    try {
+      let deliverySlotId = null;
+      if (order.requiresDeliverySlotSelection) {
+        const slots = (await getDeliverySlots()).filter((slot) => slot && slot.available !== false).slice(0, 6);
+        if (!slots.length) {
+          wx.showToast({ title: "暂无可选配送时间", icon: "none" });
+          return;
+        }
+        const selectedSlot = await chooseDeliverySlot(slots);
+        if (!selectedSlot) {
+          return;
+        }
+        deliverySlotId = selectedSlot.id;
+      }
+      const restarted = await restartOrder(order.id, deliverySlotId);
+      this.applyOrder(restarted);
+      this.setData({ restarting: false });
+      await this.handlePay();
+    } catch (error) {
+      wx.showModal({
+        title: "重启支付失败",
+        content: error.message || "订单暂时无法重启，请稍后重试",
+        showCancel: false
+      });
+    } finally {
+      this.setData({ restarting: false });
+    }
+  },
+
+  async handleCancelOrder() {
+    if (!this.data.canCancel || this.data.cancelling) {
+      return;
+    }
+    const choice = await new Promise((resolve) => {
+      wx.showModal({
+        title: "取消订单",
+        content: "取消后，是否将本单商品放回购物车？",
+        confirmText: "放回购物车",
+        cancelText: "不要了",
+        confirmColor: "#008a52",
+        success: resolve,
+        fail: () => resolve(null)
+      });
+    });
+    if (!choice) return;
+    const returnToCart = Boolean(choice.confirm);
+    this.setData({ cancelling: true });
+    try {
+      const cancelled = await cancelOrder(this.data.orderId, returnToCart);
+      this.applyOrder(cancelled);
+      wx.showToast({
+        title: returnToCart ? "已取消并放回购物车" : "订单已取消",
+        icon: "success"
+      });
+    } catch (error) {
+      wx.showToast({ title: error.message || "取消订单失败", icon: "none" });
+      await this.refreshOrder();
+    } finally {
+      this.setData({ cancelling: false });
     }
   },
 
@@ -249,9 +367,7 @@ Page({
       confirmText: "拨打电话",
       cancelText: "取消",
       success(result) {
-        if (!result.confirm) {
-          return;
-        }
+        if (!result.confirm) return;
         wx.makePhoneCall({
           phoneNumber: phone,
           fail() {

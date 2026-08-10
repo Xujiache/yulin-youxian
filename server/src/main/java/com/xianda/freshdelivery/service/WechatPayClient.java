@@ -84,15 +84,18 @@ public class WechatPayClient {
             throw new BusinessException(500, "真实微信支付需要微信 openId");
         }
 
-        JsonNode response = postJson("/v3/pay/transactions/jsapi", Map.of(
-                "appid", properties.getAppId(),
-                "mchid", properties.getMchId(),
-                "description", "禹邻优鲜订单",
-                "out_trade_no", order.orderNo(),
-                "notify_url", properties.getNotifyUrl(),
-                "amount", Map.of("total", order.payableAmount(), "currency", "CNY"),
-                "payer", Map.of("openid", openId)
-        ));
+        Map<String, Object> requestBody = new LinkedHashMap<>();
+        requestBody.put("appid", properties.getAppId());
+        requestBody.put("mchid", properties.getMchId());
+        requestBody.put("description", "禹邻优鲜订单");
+        requestBody.put("out_trade_no", paymentOrderNo(order));
+        requestBody.put("notify_url", properties.getNotifyUrl());
+        requestBody.put("amount", Map.of("total", order.payableAmount(), "currency", "CNY"));
+        requestBody.put("payer", Map.of("openid", openId));
+        if (hasText(order.paymentExpireAt())) {
+            requestBody.put("time_expire", order.paymentExpireAt());
+        }
+        JsonNode response = postJson("/v3/pay/transactions/jsapi", requestBody);
         String prepayId = response.path("prepay_id").asText();
         if (!hasText(prepayId)) {
             throw new BusinessException(502, "微信支付下单未返回 prepay_id");
@@ -106,7 +109,7 @@ public class WechatPayClient {
 
     public PaymentNotifyRequest queryPayment(OrderDetailDto order) {
         ensurePaymentConfigured();
-        String path = "/v3/pay/transactions/out-trade-no/" + order.orderNo() + "?mchid=" + properties.getMchId();
+        String path = "/v3/pay/transactions/out-trade-no/" + paymentOrderNo(order) + "?mchid=" + properties.getMchId();
         JsonNode response = getJson(path);
         String tradeState = text(response, "trade_state");
         String transactionId = response.path("transaction_id").asText("");
@@ -123,10 +126,27 @@ public class WechatPayClient {
         );
     }
 
+    public void closePayment(OrderDetailDto order) {
+        ensurePaymentConfigured();
+        try {
+            postJson(
+                    "/v3/pay/transactions/out-trade-no/" + paymentOrderNo(order) + "/close",
+                    Map.of("mchid", properties.getMchId())
+            );
+        } catch (BusinessException exception) {
+            if (exception.getMessage() != null
+                    && (exception.getMessage().contains("ORDER_NOT_EXIST")
+                    || exception.getMessage().contains("ORDER_CLOSED"))) {
+                return;
+            }
+            throw exception;
+        }
+    }
+
     public void requestRefund(RefundDto refund, OrderDetailDto order) {
         ensureRefundConfigured();
         Map<String, Object> body = new LinkedHashMap<>();
-        body.put("out_trade_no", order.orderNo());
+        body.put("out_trade_no", paymentOrderNo(order));
         body.put("out_refund_no", refund.refundNo());
         if (hasText(refund.reason())) {
             body.put("reason", refund.reason());
@@ -138,6 +158,10 @@ public class WechatPayClient {
                 "currency", "CNY"
         ));
         postJson("/v3/refund/domestic/refunds", body);
+    }
+
+    private String paymentOrderNo(OrderDetailDto order) {
+        return hasText(order.paymentOrderNo()) ? order.paymentOrderNo() : order.orderNo();
     }
 
     public PaymentNotifyRequest parsePaymentNotify(String body, String timestamp, String nonce, String serial, String signature) {

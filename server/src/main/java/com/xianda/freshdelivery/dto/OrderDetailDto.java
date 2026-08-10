@@ -21,6 +21,39 @@ public record OrderDetailDto(
         String latestRefundReason,
         Long userId,
         List<RefundDto> refunds,
-        String transactionId
+        String transactionId,
+        String paymentOrderNo,
+        String paymentExpireAt,
+        boolean canRestartPayment,
+        boolean requiresDeliverySlotSelection
 ) {
+    public OrderDetailDto(
+            Long id,
+            String orderNo,
+            String status,
+            AddressDto address,
+            String deliverySlot,
+            List<OrderItemDto> items,
+            Integer productAmount,
+            Integer deliveryFee,
+            Integer packageFee,
+            Integer payableAmount,
+            Integer paidAmount,
+            Integer refundedAmount,
+            String remark,
+            String createdAt,
+            String latestRefundStatus,
+            String latestRefundReason,
+            Long userId,
+            List<RefundDto> refunds,
+            String transactionId
+    ) {
+        this(
+                id, orderNo, status, address, deliverySlot, items,
+                productAmount, deliveryFee, packageFee, payableAmount,
+                paidAmount, refundedAmount, remark, createdAt,
+                latestRefundStatus, latestRefundReason, userId, refunds,
+                transactionId, orderNo, "", false, false
+        );
+    }
 }

@@ -71,6 +71,11 @@
   box-shadow: 0 16rpx 36rpx rgba(93, 109, 126, 0.15);
 }
 
+.status-banner.is-closed {
+  background: linear-gradient(135deg, #6f7c76 0%, #45554d 100%);
+  box-shadow: 0 16rpx 36rpx rgba(69, 85, 77, 0.18);
+}
+
 .status-banner.is-refund {
   background: linear-gradient(135deg, #e67e22 0%, #d35400 100%);
   box-shadow: 0 16rpx 36rpx rgba(230, 126, 34, 0.22);
@@ -385,8 +390,8 @@
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 20rpx;
-  padding: 20rpx 32rpx calc(24rpx + env(safe-area-inset-bottom));
+  gap: 12rpx;
+  padding: 20rpx 24rpx calc(24rpx + env(safe-area-inset-bottom));
   box-sizing: border-box;
   background: #ffffff;
   box-shadow: 0 -8rpx 30rpx rgba(0, 0, 0, 0.06);
@@ -396,9 +401,9 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 180rpx;
+  min-width: 150rpx;
   height: 76rpx;
-  padding: 0 36rpx;
+  padding: 0 24rpx;
   margin: 0;
   box-sizing: border-box;
   font-size: 27rpx;
@@ -423,9 +428,22 @@
   border: 1.5rpx solid #dcdcdc;
 }
 
+.btn-cancel {
+  color: #a34b3a;
+  background: #fff7f3;
+  border: 1.5rpx solid #e7b9ad;
+}
+
 .btn-primary {
   color: #ffffff;
   background: linear-gradient(135deg, #00b05b 0%, #007a3d 100%);
   border: 0;
   box-shadow: 0 8rpx 24rpx rgba(0, 122, 61, 0.3);
+}
+
+.action-btn[disabled] {
+  color: #ffffff;
+  background: #b9c1bd;
+  border-color: #b9c1bd;
+  box-shadow: none;
 }
