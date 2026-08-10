@@ -127,7 +127,7 @@ function canApplyRefund(order) {
   if (!order || Number(order.paidAmount || 0) <= Number(order.refundedAmount || 0)) {
     return false;
   }
-  return !["待支付", "已关闭", "已取消", "已退款"].includes(order.status);
+  return !["待支付", "已关闭", "已取消", "退款中", "已退款"].includes(order.status);
 }
 
 function isCancelableOrder(order) {

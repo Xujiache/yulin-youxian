@@ -45,6 +45,14 @@ function chooseDeliverySlot(slots) {
   });
 }
 
+function isActiveOrderStatus(status) {
+  return ["已支付/待接单", "待接单", "备货中", "配送中"].includes(status);
+}
+
+function displayOrderStatus(status) {
+  return status === "已支付/待接单" ? "待接单" : status;
+}
+
 function primaryActionText(order) {
   if (order.latestRefundStatus === "已拒绝") {
     return "查看拒绝原因";
@@ -59,9 +67,9 @@ function primaryActionText(order) {
     return "查看售后";
   }
   if (order.status === "已完成") {
-    return "再来一单";
+    return "查看详情";
   }
-  if (["备货中", "配送中"].includes(order.status)) {
+  if (isActiveOrderStatus(order.status)) {
     return "查看进度";
   }
   if (order.status === "已取消") {
@@ -74,7 +82,7 @@ function secondaryActionText(order) {
   if (order.status === "待支付") {
     return "取消订单";
   }
-  if (["待接单", "备货中", "配送中"].includes(order.status)) {
+  if (isActiveOrderStatus(order.status)) {
     return "联系客服";
   }
   if (order.status === "已完成") {
@@ -185,14 +193,14 @@ Page({
 
           let statusClass = "";
           if (item.status === "待支付") statusClass = "is-pending";
-          else if (["待接单", "备货中", "配送中"].includes(item.status)) statusClass = "is-active";
+          else if (isActiveOrderStatus(item.status)) statusClass = "is-active";
           else if (item.status === "已完成") statusClass = "is-completed";
           else if (item.status === "已取消" || item.status === "已关闭") statusClass = "is-canceled";
           else if (isAfterSaleStatus(item.status)) statusClass = "is-refund";
 
           let primaryBtnClass = "btn-secondary";
           if (item.status === "待支付") primaryBtnClass = "btn-pay";
-          else if (["已完成", "待接单", "备货中", "配送中"].includes(item.status)) primaryBtnClass = "btn-primary";
+          else if (item.status === "已完成" || isActiveOrderStatus(item.status)) primaryBtnClass = "btn-primary";
 
           return {
             ...item,
@@ -201,6 +209,7 @@ Page({
             refundNotice: refundNotice(item),
             primaryActionText: primaryActionText(item),
             secondaryActionText: secondaryActionText(item),
+            statusText: displayOrderStatus(item.status),
             isPendingPayment: item.status === "待支付",
             statusClass,
             primaryBtnClass,
@@ -387,6 +396,10 @@ Page({
     const order = this.data.orders.find((item) => Number(item.id) === Number(id));
     if (order && String(order.status || "").trim() === "待支付") {
       this.setData({ showCancelModal: true, cancelOrderId: id });
+      return;
+    }
+    if (order && isActiveOrderStatus(order.status)) {
+      await this.handleService();
       return;
     }
     wx.navigateTo({ url: `/pages/order-detail/index?id=${id}` });

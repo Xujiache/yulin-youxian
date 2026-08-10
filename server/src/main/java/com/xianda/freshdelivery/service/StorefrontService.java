@@ -109,6 +109,7 @@ public class StorefrontService {
     private final Map<Long, DeliverySlotDto> deliverySlots = new LinkedHashMap<>();
     private final Map<Long, OrderState> orders = new LinkedHashMap<>();
     private final Map<Long, RefundState> refunds = new LinkedHashMap<>();
+    private final Map<Long, String> refundOriginalStatuses = new LinkedHashMap<>();
     private final Map<String, String> paymentTransactionIds = new LinkedHashMap<>();
     private final Map<Long, String> paymentOrderNos = new LinkedHashMap<>();
     private final Map<Long, String> paymentStartedAts = new LinkedHashMap<>();
@@ -1060,6 +1061,9 @@ public class StorefrontService {
         if ("待支付".equals(order.status())) {
             throw new BusinessException(409, "待支付订单不能申请退款");
         }
+        if ("退款中".equals(order.status())) {
+            throw new BusinessException(409, "退款申请处理中，请勿重复提交");
+        }
         int refundable = refundableAmount(order, request.orderItemIds(), null);
         if (request.refundAmount() > refundable) {
             throw new BusinessException(409, "退款金额超过可退金额");
@@ -1068,6 +1072,7 @@ public class StorefrontService {
         Long userId = currentUserId();
         RefundDto refund = createRefundRecord(id, userId, order, request.refundAmount(), request.reason(), "USER", evidenceImages(request.evidenceImages()));
         refunds.put(id, new RefundState(userId, refund));
+        refundOriginalStatuses.putIfAbsent(order.id(), order.status());
         OrderState next = order.withStatus("退款中");
         orders.put(order.id(), next);
         persist();
@@ -1089,6 +1094,7 @@ public class StorefrontService {
         long id = refundId.incrementAndGet();
         RefundDto refund = createRefundRecord(id, request.userId(), order, request.refundAmount(), request.reason(), "ADMIN", List.of());
         refunds.put(id, new RefundState(request.userId(), refund));
+        refundOriginalStatuses.putIfAbsent(order.id(), order.status());
         orders.put(order.id(), order.withStatus("退款中"));
         persist();
         return refund;
@@ -1161,6 +1167,7 @@ public class StorefrontService {
         int refundedAmount = order.refundedAmount() + current.refundAmount();
         String orderStatus = refundedAmount >= order.paidAmount() ? "已退款" : "部分退款";
         orders.put(order.id(), order.withStatus(orderStatus).withRefundedAmount(refundedAmount));
+        refundOriginalStatuses.remove(order.id());
         persist();
         return nextRefund;
     }
@@ -1193,7 +1200,8 @@ public class StorefrontService {
         );
         refunds.put(id, new RefundState(state.userId(), nextRefund));
         OrderState order = adminOrderState(current.orderId());
-        orders.put(order.id(), order.withStatus("已支付/待接单"));
+        String restoredStatus = refundOriginalStatuses.remove(order.id());
+        orders.put(order.id(), order.withStatus(restoredStatus == null || restoredStatus.isBlank() ? "已支付/待接单" : restoredStatus));
         persist();
         return nextRefund;
     }
@@ -1433,6 +1441,8 @@ public class StorefrontService {
                 RefundDto normalized = normalizeRefund(refund);
                 refunds.put(normalized.id(), new RefundState(normalized.userId(), normalized));
             }
+            refundOriginalStatuses.clear();
+            refundOriginalStatuses.putAll(snapshot.refundOriginalStatuses() == null ? Map.of() : snapshot.refundOriginalStatuses());
             paymentTransactionIds.clear();
             paymentTransactionIds.putAll(snapshot.paymentTransactionIds() == null ? Map.of() : snapshot.paymentTransactionIds());
             paymentOrderNos.clear();
@@ -1467,6 +1477,7 @@ public class StorefrontService {
                 new ArrayList<>(deliverySlots.values()),
                 new ArrayList<>(orders.values()),
                 new ArrayList<>(refunds.values()),
+                new LinkedHashMap<>(refundOriginalStatuses),
                 new LinkedHashMap<>(paymentTransactionIds),
                 new LinkedHashMap<>(paymentOrderNos),
                 new LinkedHashMap<>(paymentStartedAts),
@@ -2972,7 +2983,7 @@ public class StorefrontService {
             return "已支付/待接单".equals(order.status());
         }
         if ("售后".equals(status)) {
-            return order.status().contains("退款");
+            return order.status().contains("退款") || !refundsForOrder(order.id()).isEmpty();
         }
         return order.status().equals(status);
     }
@@ -3283,6 +3294,7 @@ public class StorefrontService {
             List<DeliverySlotDto> deliverySlots,
             List<OrderState> orders,
             List<RefundState> refunds,
+            Map<Long, String> refundOriginalStatuses,
             Map<String, String> paymentTransactionIds,
             Map<Long, String> paymentOrderNos,
             Map<Long, String> paymentStartedAts,

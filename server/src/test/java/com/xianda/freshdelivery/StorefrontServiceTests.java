@@ -549,6 +549,20 @@ class StorefrontServiceTests {
     }
 
     @Test
+    void rejectedRefundRestoresThePreviousOrderStatusAndRemainsInAfterSaleList() {
+        StorefrontService service = newService();
+        CurrentUserContext.setUserId(10001L);
+
+        RefundDto created = service.createAdminRefund(new AdminRefundCreateRequest(10001L, 1004L, 100, "测试拒绝退款"));
+        assertEquals("退款中", service.adminOrder(1004L).status());
+
+        service.rejectRefund(created.id(), "商品已完成配送");
+
+        assertEquals("已完成", service.adminOrder(1004L).status());
+        assertTrue(service.orders("售后").stream().anyMatch(order -> order.id().equals(1004L)));
+    }
+
+    @Test
     void adminOrdersKeepSameBuildingTogetherInDeliveryOrder() {
         StorefrontService service = newService();
         CurrentUserContext.setUserId(10001L);
