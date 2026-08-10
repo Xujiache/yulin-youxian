@@ -99,24 +99,56 @@
         <text class="delivery-time-text">预约配送：{{item.deliverySlot}}</text>
       </view>
 
-      <view wx:if="{{item.primaryActionText || item.secondaryActionText}}" class="order-actions">
-        <view
-          wx:if="{{item.secondaryActionText}}"
-          class="order-btn btn-secondary"
-          data-id="{{item.id}}"
-          catchtap="handleSecondaryAction"
-        >
-          {{item.secondaryActionText}}
+      <block wx:if="{{item.isPendingPayment}}">
+        <view class="order-actions is-pending-actions">
+          <view
+            class="order-btn btn-secondary"
+            data-id="{{item.id}}"
+            data-action="cancel"
+            catchtap="handlePendingAction"
+          >取消订单</view>
+          <view
+            class="order-btn btn-service"
+            data-id="{{item.id}}"
+            data-action="service"
+            catchtap="handlePendingAction"
+          >联系客服</view>
+          <button
+            class="order-btn btn-friend-pay"
+            data-id="{{item.id}}"
+            data-action="friend-pay"
+            disabled="{{payingOrderId === item.id}}"
+            catchtap="handlePendingAction"
+          >分享给好友支付</button>
+          <button
+            class="order-btn btn-pay"
+            data-id="{{item.id}}"
+            data-action="wechat-pay"
+            disabled="{{payingOrderId === item.id}}"
+            catchtap="handlePendingAction"
+          >微信支付</button>
         </view>
-        <button
-          wx:if="{{item.primaryActionText}}"
-          class="order-btn {{item.primaryBtnClass}}"
-          data-id="{{item.id}}"
-          catchtap="handleOrderAction"
-        >
-          {{item.primaryActionText}}
-        </button>
-      </view>
+      </block>
+      <block wx:else>
+        <view wx:if="{{item.primaryActionText || item.secondaryActionText}}" class="order-actions">
+          <view
+            wx:if="{{item.secondaryActionText}}"
+            class="order-btn btn-secondary"
+            data-id="{{item.id}}"
+            catchtap="handleSecondaryAction"
+          >
+            {{item.secondaryActionText}}
+          </view>
+          <button
+            wx:if="{{item.primaryActionText}}"
+            class="order-btn {{item.primaryBtnClass}}"
+            data-id="{{item.id}}"
+            catchtap="handleOrderAction"
+          >
+            {{item.primaryActionText}}
+          </button>
+        </view>
+      </block>
     </view>
   </view>
 

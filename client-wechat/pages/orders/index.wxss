@@ -416,6 +416,19 @@
   border: 1rpx solid #dfe4e1;
 }
 
+.btn-service {
+  color: #4d6256;
+  background: #f5f8f6;
+  border: 1rpx solid #d6e0da;
+}
+
+.btn-friend-pay {
+  color: #96602a;
+  background: #fff7ea;
+  border: 1rpx solid #f0d5ab;
+  font-weight: 700;
+}
+
 .btn-primary {
   color: #007a3d;
   background: #e8f7ee;
@@ -428,6 +441,19 @@
   background: linear-gradient(135deg, #00b05b 0%, #007a3d 100%);
   font-weight: 800;
   box-shadow: 0 6rpx 18rpx rgba(0, 122, 61, 0.22);
+}
+
+.is-pending-actions {
+  gap: 8rpx;
+}
+
+.is-pending-actions .order-btn {
+  flex: 1 1 0;
+  width: 0;
+  min-width: 0;
+  height: 68rpx;
+  padding: 0 4rpx;
+  font-size: 22rpx;
 }
 
 .orders-cancel-modal-mask {

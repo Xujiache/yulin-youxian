@@ -1,7 +1,23 @@
 const { yuan } = require("../../utils/format");
 const { getCart } = require("../../api/cart");
-const { cancelOrder, getOrders, getOrder } = require("../../api/orders");
+const { getHome } = require("../../api/catalog");
+const {
+  cancelOrder,
+  changeToWechatPayment,
+  createPaymentShare,
+  getOrders,
+  getOrder
+} = require("../../api/orders");
 const { syncTheme } = require("../../utils/theme");
+const {
+  isPaidOrder,
+  isPaymentCancelled,
+  paymentErrorMessage,
+  requestWechatPayment,
+  waitForPaymentResult
+} = require("../../utils/wechat-payment");
+
+const DEFAULT_CONTACT_PHONE = "400-800-1234";
 
 const TABS = ["全部", "待支付", "待接单", "备货中", "配送中", "已完成", "售后"];
 
@@ -68,6 +84,7 @@ Page({
     activeStatus: "全部",
     cartCount: 0,
     orders: [],
+    payingOrderId: null,
     showCancelModal: false,
     cancelOrderId: null,
     cancelling: false,
@@ -164,6 +181,7 @@ Page({
             refundNotice: refundNotice(item),
             primaryActionText: primaryActionText(item),
             secondaryActionText: secondaryActionText(item),
+            isPendingPayment: item.status === "待支付",
             statusClass,
             primaryBtnClass,
             isSingleProduct,
@@ -208,6 +226,100 @@ Page({
   handleOrderAction(event) {
     const id = event.currentTarget.dataset.id;
     wx.navigateTo({ url: `/pages/order-detail/index?id=${id}` });
+  },
+
+  async handlePendingAction(event) {
+    const id = Number(event.currentTarget.dataset.id);
+    const action = event.currentTarget.dataset.action;
+    if (!id || this.data.payingOrderId) return;
+
+    if (action === "cancel") {
+      this.setData({ showCancelModal: true, cancelOrderId: id });
+      return;
+    }
+    if (action === "service") {
+      await this.handleService();
+      return;
+    }
+    if (action === "friend-pay") {
+      await this.handleFriendPayment(id);
+      return;
+    }
+    if (action === "wechat-pay") {
+      await this.handleWechatPayment(id);
+    }
+  },
+
+  async handleFriendPayment(id) {
+    this.setData({ payingOrderId: id });
+    try {
+      const share = await createPaymentShare(id);
+      if (!share || !share.token) {
+        throw new Error("支付链接生成失败，请稍后重试");
+      }
+      wx.navigateTo({
+        url: `/pages/pay-for-other/index?token=${encodeURIComponent(share.token)}&owner=1&orderId=${id}`
+      });
+    } catch (error) {
+      wx.showToast({ title: error.message || "支付链接生成失败", icon: "none" });
+    } finally {
+      this.setData({ payingOrderId: null });
+    }
+  },
+
+  async handleWechatPayment(id) {
+    this.setData({ payingOrderId: id });
+    try {
+      const payment = await changeToWechatPayment(id);
+      await requestWechatPayment(payment);
+      const order = await waitForPaymentResult(id);
+      if (!isPaidOrder(order)) {
+        wx.showModal({
+          title: "支付处理中",
+          content: "微信已返回支付结果，订单状态还在确认中，请稍后刷新订单。",
+          showCancel: false
+        });
+        return;
+      }
+      wx.showToast({ title: "支付成功", icon: "success" });
+      await this.updateOrders(this.data.activeStatus);
+    } catch (error) {
+      if (isPaymentCancelled(error)) {
+        wx.showToast({ title: "支付已取消", icon: "none" });
+        return;
+      }
+      wx.showModal({
+        title: "支付失败",
+        content: paymentErrorMessage(error, "支付失败，请稍后重试"),
+        showCancel: false
+      });
+      await this.updateOrders(this.data.activeStatus);
+    } finally {
+      this.setData({ payingOrderId: null });
+    }
+  },
+
+  async handleService() {
+    let phone = DEFAULT_CONTACT_PHONE;
+    try {
+      const home = await getHome();
+      phone = home.contactPhone || phone;
+    } catch {}
+    wx.showModal({
+      title: "联系客服",
+      content: `禺邻优鲜客服电话：${phone}`,
+      confirmText: "拨打电话",
+      cancelText: "取消",
+      success(result) {
+        if (!result.confirm) return;
+        wx.makePhoneCall({
+          phoneNumber: phone,
+          fail() {
+            wx.showToast({ title: "拨号失败，请稍后重试", icon: "none" });
+          }
+        });
+      }
+    });
   },
 
   async handleSecondaryAction(event) {
