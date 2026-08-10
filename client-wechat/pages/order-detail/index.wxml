@@ -129,10 +129,10 @@
   </view>
 
   <view class="detail-actions">
-    <button class="action-btn btn-service" bindtap="handleService">联系客服</button>
     <view wx:if="{{canCancel}}" class="action-btn btn-cancel {{cancelling || paying ? 'is-disabled' : ''}}" catchtap="handleCancelOrder">
       <text>{{cancelling ? '取消中' : '取消订单'}}</text>
     </view>
+    <button class="action-btn btn-service" bindtap="handleService">联系客服</button>
     <button wx:if="{{canRefund}}" class="action-btn btn-ghost" bindtap="handleRefund">申请退款</button>
     <button wx:if="{{canRestartPayment}}" class="action-btn btn-primary" disabled="{{restarting || paying}}" bindtap="handleRestartPayment">{{restarting ? '重启中' : '重启支付'}}</button>
     <button wx:if="{{isPendingPayment}}" class="action-btn btn-primary" disabled="{{paying}}" bindtap="handlePay">{{paying ? '支付处理中' : '继续支付'}}</button>

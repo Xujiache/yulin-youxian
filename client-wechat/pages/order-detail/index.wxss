@@ -458,7 +458,9 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 150rpx;
+  flex: 1 1 0;
+  width: 0;
+  min-width: 0;
   height: 76rpx;
   padding: 0 14rpx;
   margin: 0;
