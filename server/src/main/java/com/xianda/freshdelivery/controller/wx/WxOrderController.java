@@ -9,6 +9,7 @@ import com.xianda.freshdelivery.dto.OrderDto;
 import com.xianda.freshdelivery.dto.OrderPreviewDto;
 import com.xianda.freshdelivery.dto.OrderPreviewRequest;
 import com.xianda.freshdelivery.dto.PaymentDto;
+import com.xianda.freshdelivery.dto.PaymentShareDto;
 import com.xianda.freshdelivery.dto.RefundDto;
 import com.xianda.freshdelivery.dto.RefundRequest;
 import com.xianda.freshdelivery.dto.RestartOrderRequest;
@@ -92,6 +93,11 @@ public class WxOrderController {
     @PostMapping("/orders/{id}/pay")
     public ApiResponse<PaymentDto> pay(@PathVariable Long id) {
         return ApiResponse.ok(wechatPaymentService.createPayment(id));
+    }
+
+    @PostMapping("/orders/{id}/payment-share")
+    public ApiResponse<PaymentShareDto> createPaymentShare(@PathVariable Long id) {
+        return ApiResponse.ok(storefrontService.createPaymentShare(id));
     }
 
     @PostMapping("/orders/{id}/payment-status")

@@ -3,7 +3,7 @@ const { getAddresses } = require("../../api/addresses");
 const { getCart } = require("../../api/cart");
 const { getHome } = require("../../api/catalog");
 const { getDeliverySlots } = require("../../api/delivery");
-const { createOrder, payOrder, previewOrder } = require("../../api/orders");
+const { createOrder, createPaymentShare, payOrder, previewOrder } = require("../../api/orders");
 const { requireCompleteProfile } = require("../../utils/auth-guard");
 const { syncTheme } = require("../../utils/theme");
 const { buildMinOrderState, normalizeMinOrderAmount } = require("../../utils/min-order");
@@ -58,6 +58,28 @@ const EMPTY_AMOUNT = {
   shortfallText: "",
   payLabel: "微信支付"
 };
+
+const PAYMENT_METHODS = [
+  {
+    code: "WECHAT",
+    title: "微信支付",
+    desc: "使用当前微信账号付款",
+    icon: "微"
+  },
+  {
+    code: "OTHER",
+    title: "请好友付款",
+    desc: "生成代付链接，好友使用自己的微信付款",
+    icon: "付"
+  }
+];
+
+function paymentButtonLabel(paymentMethod, minOrderMet, shortfallText) {
+  if (!minOrderMet) {
+    return `还差¥${shortfallText}起送`;
+  }
+  return paymentMethod === "OTHER" ? "提交订单并分享" : "微信支付";
+}
 
 function applyPreviewAmounts(preview, fallbackMinOrderAmount = 0) {
   const minOrderAmount = normalizeMinOrderAmount(
@@ -114,7 +136,9 @@ Page({
     loadError: "",
     payDisabled: true,
     paying: false,
-    remark: ""
+    remark: "",
+    paymentMethods: PAYMENT_METHODS,
+    paymentMethod: "WECHAT"
   },
 
   onLoad(options = {}) {
@@ -163,6 +187,7 @@ Page({
       buyNowRequest,
       remark: "",
       paying: false,
+      paymentMethod: "WECHAT",
       ...EMPTY_AMOUNT
     });
     try {
@@ -242,6 +267,7 @@ Page({
         cartItemIds,
         buyNowRequest,
         ...amounts,
+        payLabel: paymentButtonLabel("WECHAT", amounts.minOrderMet, amounts.shortfallText),
         payDisabled: !amounts.minOrderMet,
         loadError: ""
       });
@@ -288,6 +314,7 @@ Page({
           amountText: yuan(item.amount)
         })),
         ...amounts,
+        payLabel: paymentButtonLabel(this.data.paymentMethod, amounts.minOrderMet, amounts.shortfallText),
         payDisabled: !amounts.minOrderMet,
         loadError: ""
       });
@@ -303,6 +330,15 @@ Page({
 
   handleRemarkInput(event) {
     this.setData({ remark: event.detail.value || "" });
+  },
+
+  handlePaymentMethod(event) {
+    if (this.data.paying) return;
+    const paymentMethod = event.currentTarget.dataset.method === "OTHER" ? "OTHER" : "WECHAT";
+    this.setData({
+      paymentMethod,
+      payLabel: paymentButtonLabel(paymentMethod, this.data.minOrderMet, this.data.shortfallText)
+    });
   },
 
   goCart() {
@@ -333,6 +369,7 @@ Page({
       return;
     }
     const canPay = !this.data.payDisabled && this.data.address && this.data.activeSlotId && hasOrderSource(this);
+    const paymentMethod = this.data.paymentMethod;
     this.setData({ paying: true, payDisabled: true });
     let orderId = null;
     if (!canPay) {
@@ -348,6 +385,13 @@ Page({
         remark: (this.data.remark || "").trim()
       });
       orderId = order.id;
+      if (paymentMethod === "OTHER") {
+        const share = await createPaymentShare(order.id);
+        wx.redirectTo({
+          url: `/pages/pay-for-other/index?token=${encodeURIComponent(share.token)}&owner=1&orderId=${order.id}`
+        });
+        return;
+      }
       const payment = await payOrder(order.id);
       await requestWechatPayment(payment);
       const latestOrder = await waitForPaymentResult(order.id);
@@ -358,7 +402,7 @@ Page({
       wx.showToast({ title: "支付成功", icon: "success" });
       wx.redirectTo({ url: `/pages/order-detail/index?id=${order.id}` });
     } catch (error) {
-      if (orderId && !isPaymentCancelled(error)) {
+      if (orderId && paymentMethod === "WECHAT" && !isPaymentCancelled(error)) {
         try {
           const latestOrder = await waitForPaymentResult(orderId, { attempts: 3, interval: 700 });
           if (isPaidOrder(latestOrder)) {

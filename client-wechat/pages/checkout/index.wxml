@@ -99,6 +99,30 @@
       </view>
     </view>
 
+    <view class="payment-method card">
+      <view class="payment-method-heading">
+        <text class="module-title">支付方式</text>
+        <text class="payment-method-hint">默认微信支付</text>
+      </view>
+      <view
+        wx:for="{{paymentMethods}}"
+        wx:key="code"
+        wx:for-index="index"
+        class="payment-option {{index === 0 ? 'first' : ''}} {{paymentMethod === item.code ? 'active' : ''}}"
+        data-method="{{item.code}}"
+        bindtap="handlePaymentMethod"
+      >
+        <view class="payment-option-icon {{item.code === 'OTHER' ? 'is-other' : ''}}">{{item.icon}}</view>
+        <view class="payment-option-info">
+          <text class="payment-option-title">{{item.title}}</text>
+          <text class="payment-option-desc">{{item.desc}}</text>
+        </view>
+        <view class="payment-radio {{paymentMethod === item.code ? 'checked' : ''}}">
+          <text wx:if="{{paymentMethod === item.code}}">✓</text>
+        </view>
+      </view>
+    </view>
+
     <view class="remark card">
       <text class="module-title">给商家留言</text>
       <textarea class="remark-input" value="{{remark}}" maxlength="200" bindinput="handleRemarkInput" placeholder="例如：请尽快配送，放门口请电话联系" />

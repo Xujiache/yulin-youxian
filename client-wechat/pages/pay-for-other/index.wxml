@@ -1,0 +1,53 @@
+<view class="pay-for-other-page {{glassMode ? 'glass-mode' : ''}}">
+  <view class="page-header">
+    <navigator class="back" open-type="navigateBack">
+      <image class="back-icon" src="/assets/icons/back-green.svg" mode="aspectFit" />
+    </navigator>
+    <text class="title">{{ownerMode ? '请好友付款' : '好友代付'}}</text>
+    <view class="placeholder"></view>
+  </view>
+
+  <view wx:if="{{loading}}" class="loading-card card">正在加载付款信息…</view>
+
+  <view wx:elif="{{loadError}}" class="error-card card">
+    <view class="error-mark">!</view>
+    <text class="error-title">付款链接不可用</text>
+    <text class="error-desc">{{loadError}}</text>
+    <button class="back-home-button" bindtap="handleBackHome">返回首页</button>
+  </view>
+
+  <block wx:else>
+    <view class="payment-card card">
+      <view class="payment-emblem">付</view>
+      <text class="merchant-name">{{merchantName}}</text>
+      <text class="payment-caption">请帮好友支付</text>
+      <view class="payment-amount">
+        <text class="amount-prefix">¥</text>
+        <text class="amount-value">{{amountText}}</text>
+      </view>
+      <text wx:if="{{expireText}}" class="expire-text">{{expireText}}</text>
+    </view>
+
+    <view wx:if="{{ownerMode}}" class="owner-card card">
+      <text class="owner-title">{{ownerPaid ? '好友已完成付款' : '发送给好友完成付款'}}</text>
+      <text class="owner-desc">{{ownerPaid ? '付款结果已同步到你的订单，可查看配送状态。' : '好友只会看到付款金额，不会看到你的订单和配送信息。'}}</text>
+      <button wx:if="{{!ownerPaid}}" class="share-button" open-type="share">发送给好友付款</button>
+      <button wx:else class="view-order-button" bindtap="handleViewOrder">查看订单状态</button>
+    </view>
+
+    <view wx:else class="payer-card card">
+      <block wx:if="{{paymentFinished}}">
+        <view class="success-mark">✓</view>
+        <text class="payer-title">付款已完成</text>
+        <text class="payer-desc">已通知订单发起人，订单信息及配送状态由发起人查看。</text>
+        <button class="back-home-button" bindtap="handleBackHome">完成</button>
+      </block>
+      <block wx:else>
+        <text class="payer-title">确认代付</text>
+        <text class="payer-desc">你将使用自己的微信账号完成本次付款。</text>
+        <button class="pay-button {{paying ? 'disabled' : ''}}" disabled="{{paying}}" bindtap="handlePay">{{paying ? '付款处理中' : '确认付款'}}</button>
+        <text class="privacy-note">付款完成后，你不会看到该订单的商品、地址或配送状态。</text>
+      </block>
+    </view>
+  </block>
+</view>

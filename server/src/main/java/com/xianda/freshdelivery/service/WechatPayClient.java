@@ -117,7 +117,7 @@ public class WechatPayClient {
                 ? response.path("amount").path("total").asInt()
                 : null;
         return new PaymentNotifyRequest(
-                order.orderNo(),
+                paymentOrderNo(order),
                 transactionId,
                 tradeState,
                 response.path("appid").asText(properties.getAppId()),

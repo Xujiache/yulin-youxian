@@ -26,6 +26,7 @@ import com.xianda.freshdelivery.dto.OrderPreviewRequest;
 import com.xianda.freshdelivery.dto.OrderStatusCountDto;
 import com.xianda.freshdelivery.dto.PaymentConfirmationResult;
 import com.xianda.freshdelivery.dto.PaymentNotifyRequest;
+import com.xianda.freshdelivery.dto.PaymentShareDto;
 import com.xianda.freshdelivery.dto.PrintModels;
 import com.xianda.freshdelivery.dto.ProductDto;
 import com.xianda.freshdelivery.dto.ProductSaveRequest;
@@ -57,6 +58,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -106,6 +108,7 @@ public class StorefrontService {
     private final Map<String, String> paymentTransactionIds = new LinkedHashMap<>();
     private final Map<Long, String> paymentOrderNos = new LinkedHashMap<>();
     private final Map<Long, String> paymentStartedAts = new LinkedHashMap<>();
+    private final Map<String, PaymentShareState> paymentShares = new LinkedHashMap<>();
 
     private SettingsDto settings = new SettingsDto("禹邻优鲜", "/assets/products/store-logo.png", 0, DEFAULT_DELIVERY_FEE, DEFAULT_PACKAGE_FEE, "08:00-20:00", "400-800-1234", false, true, List.of());
 
@@ -827,6 +830,7 @@ public class StorefrontService {
             throw new BusinessException(409, "仅待支付订单可以由用户取消");
         }
         restoreStock(order.items());
+        invalidatePaymentShares(order.id());
         if (returnToCart) {
             returnOrderItemsToCart(order);
         }
@@ -869,6 +873,7 @@ public class StorefrontService {
         paymentStartedAts.put(id, paymentStartedAt);
         paymentOrderNos.put(id, restartedPaymentOrderNo(restarted, now));
         paymentTransactionIds.remove(restarted.orderNo());
+        invalidatePaymentShares(restarted.id());
         restarted = restarted.withStatus("待支付");
         orders.put(id, restarted);
         persist();
@@ -894,6 +899,7 @@ public class StorefrontService {
         for (OrderState order : expired) {
             restoreStock(order.items());
             orders.put(order.id(), order.withStatus("已关闭"));
+            invalidatePaymentShares(order.id());
         }
         persist();
         return expired.size();
@@ -908,10 +914,53 @@ public class StorefrontService {
         return toOrderDetailDto(order);
     }
 
+    public synchronized PaymentShareDto createPaymentShare(Long id) {
+        closeExpiredOrders(LocalDateTime.now(STORE_ZONE));
+        OrderState order = orderState(id);
+        if (!"待支付".equals(order.status())) {
+            throw new BusinessException(409, "当前订单不可发起好友代付");
+        }
+        invalidatePaymentShares(order.id());
+        String token = UUID.randomUUID().toString().replace("-", "");
+        paymentShares.put(token, new PaymentShareState(
+                token,
+                order.id(),
+                order.userId(),
+                LocalDateTime.now(STORE_ZONE).format(DateTimeFormatter.ISO_LOCAL_DATE_TIME)
+        ));
+        persist();
+        return toPaymentShareDto(token, order);
+    }
+
+    /**
+     * 公共代付页只允许读取门店、金额及有效期，避免通过链接泄露订单信息。
+     */
+    public synchronized PaymentShareDto paymentShare(String token) {
+        closeExpiredOrders(LocalDateTime.now(STORE_ZONE));
+        OrderState order = paymentShareOrder(token);
+        return toPaymentShareDto(normalizePaymentShareToken(token), order);
+    }
+
+    public synchronized PaymentSharePaymentContext preparePaymentShare(String token) {
+        closeExpiredOrders(LocalDateTime.now(STORE_ZONE));
+        PaymentShareState share = activePaymentShare(token);
+        OrderState order = paymentShareOrder(share.token());
+        return new PaymentSharePaymentContext(toOrderDetailDto(order), share.creatorUserId());
+    }
+
     public synchronized OrderDetailDto renewPaymentAttempt(Long id) {
         LocalDateTime now = LocalDateTime.now(STORE_ZONE);
         closeExpiredOrders(now);
-        OrderState order = orderState(id);
+        return renewPaymentAttempt(orderState(id), now);
+    }
+
+    public synchronized OrderDetailDto renewPaymentAttemptForShare(String token) {
+        LocalDateTime now = LocalDateTime.now(STORE_ZONE);
+        closeExpiredOrders(now);
+        return renewPaymentAttempt(paymentShareOrder(token), now);
+    }
+
+    private OrderDetailDto renewPaymentAttempt(OrderState order, LocalDateTime now) {
         if (!"待支付".equals(order.status())) {
             throw new BusinessException(409, "当前订单状态不可支付");
         }
@@ -919,7 +968,7 @@ public class StorefrontService {
         if (nextPaymentOrderNo.equals(paymentOrderNo(order))) {
             nextPaymentOrderNo = restartedPaymentOrderNo(order, now.plusNanos(1_000_000));
         }
-        paymentOrderNos.put(id, nextPaymentOrderNo);
+        paymentOrderNos.put(order.id(), nextPaymentOrderNo);
         persist();
         return toOrderDetailDto(order);
     }
@@ -949,6 +998,7 @@ public class StorefrontService {
         String nextStatus = Boolean.FALSE.equals(settings.autoDeliveryEnabled()) ? "已支付/待接单" : "备货中";
         OrderState paid = order.withStatus(nextStatus).withPaidAmount(order.payableAmount());
         orders.put(order.id(), paid);
+        invalidatePaymentShares(order.id());
         persist();
         return new PaymentConfirmationResult(toOrderDetailDto(paid), true);
     }
@@ -1287,6 +1337,7 @@ public class StorefrontService {
         }
         OrderState next = order.withStatus("已取消");
         orders.put(id, next);
+        invalidatePaymentShares(order.id());
         persist();
         return toOrderDetailDto(next);
     }
@@ -1336,6 +1387,8 @@ public class StorefrontService {
             paymentOrderNos.putAll(snapshot.paymentOrderNos() == null ? Map.of() : snapshot.paymentOrderNos());
             paymentStartedAts.clear();
             paymentStartedAts.putAll(snapshot.paymentStartedAts() == null ? Map.of() : snapshot.paymentStartedAts());
+            paymentShares.clear();
+            paymentShares.putAll(snapshot.paymentShares() == null ? Map.of() : snapshot.paymentShares());
             settings = settingsOrDefault(snapshot.settings());
             resetSequences();
             return true;
@@ -1363,6 +1416,7 @@ public class StorefrontService {
                 new LinkedHashMap<>(paymentTransactionIds),
                 new LinkedHashMap<>(paymentOrderNos),
                 new LinkedHashMap<>(paymentStartedAts),
+                new LinkedHashMap<>(paymentShares),
                 settings
         );
         try {
@@ -2199,6 +2253,35 @@ public class StorefrontService {
         return order;
     }
 
+    private OrderState paymentShareOrder(String token) {
+        PaymentShareState share = activePaymentShare(token);
+        OrderState order = orders.get(share.orderId());
+        if (order == null || !"待支付".equals(order.status())) {
+            throw new BusinessException(404, "付款链接已失效");
+        }
+        return order;
+    }
+
+    private PaymentShareState activePaymentShare(String token) {
+        PaymentShareState share = paymentShares.get(normalizePaymentShareToken(token));
+        if (share == null) {
+            throw new BusinessException(404, "付款链接已失效");
+        }
+        return share;
+    }
+
+    private String normalizePaymentShareToken(String token) {
+        String normalized = token == null ? "" : token.trim();
+        if (normalized.length() < 24) {
+            throw new BusinessException(404, "付款链接已失效");
+        }
+        return normalized;
+    }
+
+    private boolean invalidatePaymentShares(Long orderId) {
+        return paymentShares.entrySet().removeIf(entry -> Objects.equals(entry.getValue().orderId(), orderId));
+    }
+
     private OrderState adminOrderState(Long id) {
         OrderState order = orders.get(id);
         if (order == null) {
@@ -2534,6 +2617,15 @@ public class StorefrontService {
                 paymentExpireAt(order),
                 "已关闭".equals(order.status()) && order.paidAmount() == 0,
                 requiresDeliverySlotSelection(order, LocalDateTime.now(STORE_ZONE))
+        );
+    }
+
+    private PaymentShareDto toPaymentShareDto(String token, OrderState order) {
+        return new PaymentShareDto(
+                normalizePaymentShareToken(token),
+                settings.storeName(),
+                order.payableAmount(),
+                paymentExpireAt(order)
         );
     }
 
@@ -3112,7 +3204,22 @@ public class StorefrontService {
             Map<String, String> paymentTransactionIds,
             Map<Long, String> paymentOrderNos,
             Map<Long, String> paymentStartedAts,
+            Map<String, PaymentShareState> paymentShares,
             SettingsDto settings
+    ) {
+    }
+
+    public record PaymentSharePaymentContext(
+            OrderDetailDto order,
+            Long creatorUserId
+    ) {
+    }
+
+    public record PaymentShareState(
+            String token,
+            Long orderId,
+            Long creatorUserId,
+            String createdAt
     ) {
     }
 

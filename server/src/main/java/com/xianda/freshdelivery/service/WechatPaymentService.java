@@ -7,6 +7,7 @@ import com.xianda.freshdelivery.dto.AdminRefundCreateRequest;
 import com.xianda.freshdelivery.dto.PaymentConfirmationResult;
 import com.xianda.freshdelivery.dto.PaymentDto;
 import com.xianda.freshdelivery.dto.PaymentNotifyRequest;
+import com.xianda.freshdelivery.dto.SharedPaymentDto;
 import com.xianda.freshdelivery.dto.BatchOrderActionResult;
 import java.util.ArrayList;
 import java.util.List;
@@ -38,6 +39,28 @@ public class WechatPaymentService {
         }
         String openId = authService.openIdForUser(CurrentUserContext.userId());
         return wechatPayClient.createJsapiPayment(order, openId);
+    }
+
+    public SharedPaymentDto createSharedPayment(String token) {
+        StorefrontService.PaymentSharePaymentContext context = storefrontService.preparePaymentShare(token);
+        Long payerUserId = CurrentUserContext.userId();
+        if (payerUserId.equals(context.creatorUserId())) {
+            throw new BusinessException(409, "请使用微信支付完成本人的订单付款");
+        }
+        OrderDetailDto order = context.order();
+        if (wechatPayClient.isPaymentConfigured()) {
+            wechatPayClient.closePayment(order);
+            order = storefrontService.renewPaymentAttemptForShare(token);
+        }
+        String openId = authService.openIdForUser(payerUserId);
+        PaymentDto payment = wechatPayClient.createJsapiPayment(order, openId);
+        return new SharedPaymentDto(
+                payment.timeStamp(),
+                payment.nonceStr(),
+                payment.packageValue(),
+                payment.signType(),
+                payment.paySign()
+        );
     }
 
     public OrderDetailDto confirmPayment(PaymentNotifyRequest request) {

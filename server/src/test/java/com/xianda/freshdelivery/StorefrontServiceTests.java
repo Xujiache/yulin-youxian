@@ -1,6 +1,7 @@
 package com.xianda.freshdelivery;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -16,6 +17,7 @@ import com.xianda.freshdelivery.dto.CreateOrderRequest;
 import com.xianda.freshdelivery.dto.DeliverySlotDto;
 import com.xianda.freshdelivery.dto.OrderDetailDto;
 import com.xianda.freshdelivery.dto.PaymentNotifyRequest;
+import com.xianda.freshdelivery.dto.PaymentShareDto;
 import com.xianda.freshdelivery.dto.ProductDto;
 import com.xianda.freshdelivery.dto.ProductSaveRequest;
 import com.xianda.freshdelivery.dto.ProductSkuDto;
@@ -117,6 +119,36 @@ class StorefrontServiceTests {
         assertEquals("已关闭", closed.status());
         assertTrue(closed.canRestartPayment());
         assertEquals(beforeStock, service.product(106L).stockQty());
+    }
+
+    @Test
+    void paymentShareOnlyExposesPaymentSummaryAndIsInvalidatedAfterPayment() {
+        StorefrontService service = newService();
+        CurrentUserContext.setUserId(1000L);
+        Long addressId = service.createAddress(addressRequest()).id();
+        OrderDetailDto order = createOrder(service, addressId, 1L);
+
+        PaymentShareDto created = service.createPaymentShare(order.id());
+        assertEquals(32, created.token().length());
+        assertEquals(order.payableAmount(), created.payableAmount());
+        assertFalse(created.toString().contains(order.orderNo()));
+
+        service.reloadFromPersistence();
+        CurrentUserContext.clear();
+        PaymentShareDto publicSummary = service.paymentShare(created.token());
+        assertEquals(created, publicSummary);
+        assertFalse(publicSummary.toString().contains(order.orderNo()));
+
+        service.confirmPayment(new PaymentNotifyRequest(
+                order.orderNo(),
+                "TX-PAYMENT-SHARE",
+                "SUCCESS",
+                "wx-test-app",
+                "test-mch",
+                order.payableAmount()
+        ));
+
+        assertThrows(BusinessException.class, () -> service.paymentShare(created.token()));
     }
 
     @Test

@@ -64,6 +64,27 @@ function payOrder(id) {
   });
 }
 
+function createPaymentShare(id) {
+  return request({
+    url: `/api/wx/orders/${id}/payment-share`,
+    method: "POST"
+  });
+}
+
+function getPaymentShare(token) {
+  return request({
+    url: `/api/public/payment-shares/${encodeURIComponent(token)}`,
+    skipAuth: true
+  });
+}
+
+function payPaymentShare(token) {
+  return request({
+    url: `/api/wx/payment-shares/${encodeURIComponent(token)}/pay`,
+    method: "POST"
+  });
+}
+
 async function cancelOrder(id, returnToCart) {
   const order = await request({
     url: `/api/wx/orders/${id}/cancel`,
@@ -145,6 +166,9 @@ module.exports = {
   previewOrder,
   createOrder,
   payOrder,
+  createPaymentShare,
+  getPaymentShare,
+  payPaymentShare,
   cancelOrder,
   restartOrder,
   refreshPaymentStatus,
