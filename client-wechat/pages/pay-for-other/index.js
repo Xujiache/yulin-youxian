@@ -1,5 +1,6 @@
-const { yuan } = require("../../utils/format");
+const { yuan, quantityText } = require("../../utils/format");
 const { getOrder, getPaymentShare, payPaymentShare } = require("../../api/orders");
+const { normalizeOrderItem } = require("../../api/normalize");
 const { requireLogin } = require("../../utils/auth-guard");
 const { syncTheme } = require("../../utils/theme");
 const {
@@ -26,6 +27,12 @@ Page({
     orderId: 0,
     merchantName: "禹邻优鲜",
     amountText: "0.00",
+    deliverySlotText: "",
+    productAmountText: "0.00",
+    deliveryFeeText: "0.00",
+    packageFeeText: "0.00",
+    items: [],
+    totalItemCount: 0,
     expireText: "",
     loadError: "",
     paying: false,
@@ -61,7 +68,8 @@ Page({
   onShareAppMessage() {
     return {
       title: `请帮我支付 ¥${this.data.amountText}`,
-      path: `/pages/pay-for-other/index?token=${encodeURIComponent(this.data.token)}`
+      path: `/pages/pay-for-other/index?token=${encodeURIComponent(this.data.token)}`,
+      imageUrl: "/assets/share/share-payment.jpg"
     };
   },
 
@@ -73,6 +81,19 @@ Page({
       this.setData({
         merchantName: share.merchantName || "禹邻优鲜",
         amountText: yuan(share.payableAmount),
+        deliverySlotText: share.deliverySlot || "",
+        productAmountText: yuan(share.productAmount),
+        deliveryFeeText: yuan(share.deliveryFee),
+        packageFeeText: yuan(share.packageFee),
+        items: (share.items || []).map((item) => {
+          const normalized = normalizeOrderItem(item);
+          return {
+            ...normalized,
+            quantityText: quantityText(normalized.quantity, normalized.saleUnit || ""),
+            amountText: yuan(normalized.amount)
+          };
+        }),
+        totalItemCount: (share.items || []).reduce((sum, item) => sum + Number(item.quantity || 0), 0),
         expireText: expireText(share.paymentExpireAt),
         loadError: ""
       });

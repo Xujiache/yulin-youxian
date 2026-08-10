@@ -122,7 +122,7 @@ class StorefrontServiceTests {
     }
 
     @Test
-    void paymentShareOnlyExposesPaymentSummaryAndIsInvalidatedAfterPayment() {
+    void paymentShareExposesProductSummaryAndIsInvalidatedAfterPayment() {
         StorefrontService service = newService();
         CurrentUserContext.setUserId(1000L);
         Long addressId = service.createAddress(addressRequest()).id();
@@ -132,6 +132,9 @@ class StorefrontServiceTests {
         OrderDetailDto sharedOrder = service.order(order.id());
         assertEquals(32, created.token().length());
         assertEquals(order.payableAmount(), created.payableAmount());
+        assertFalse(created.items().isEmpty());
+        assertEquals(order.items().get(0).productName(), created.items().get(0).productName());
+        assertEquals(order.items().get(0).quantity(), created.items().get(0).quantity());
         assertFalse(created.toString().contains(order.orderNo()));
 
         service.reloadFromPersistence();

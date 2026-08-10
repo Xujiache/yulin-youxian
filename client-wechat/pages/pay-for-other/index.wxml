@@ -18,9 +18,16 @@
 
   <block wx:else>
     <view class="payment-card card">
-      <view class="payment-emblem">付</view>
-      <text class="merchant-name">{{merchantName}}</text>
-      <text class="payment-caption">请帮好友支付</text>
+      <view class="payment-hero-head">
+        <view class="payment-brand">
+          <image class="payment-brand-icon" src="/assets/payment/friend-pay.png" mode="aspectFit" />
+          <view class="payment-brand-copy">
+            <text class="merchant-name">{{merchantName}}</text>
+            <text class="payment-caption">好友代付</text>
+          </view>
+        </view>
+        <view class="payment-status-pill {{paymentFinished || ownerPaid ? 'is-paid' : ''}}">{{paymentFinished || ownerPaid ? '已完成' : '待支付'}}</view>
+      </view>
       <view class="payment-amount">
         <text class="amount-prefix">¥</text>
         <text class="amount-value">{{amountText}}</text>
@@ -28,9 +35,48 @@
       <text wx:if="{{expireText}}" class="expire-text">{{expireText}}</text>
     </view>
 
+    <view class="shared-order-card card">
+      <view class="section-heading">
+        <view>
+          <text class="section-title">本次付款包含</text>
+          <text class="section-subtitle">商品信息仅用于确认代付内容</text>
+        </view>
+        <text class="item-count">共 {{totalItemCount}} 件</text>
+      </view>
+      <view wx:for="{{items}}" wx:key="index" class="shared-item">
+        <image class="shared-item-image" src="{{item.imageUrl}}" mode="aspectFill" lazy-load="{{true}}" />
+        <view class="shared-item-info">
+          <text class="shared-item-name">{{item.productName}}</text>
+          <view class="shared-item-meta">
+            <text wx:if="{{item.specificationText}}" class="shared-item-spec">{{item.specificationText}}</text>
+            <text class="shared-item-quantity">数量 x{{item.quantityText}}</text>
+          </view>
+        </view>
+        <text class="shared-item-price">¥{{item.amountText}}</text>
+      </view>
+      <view wx:if="{{deliverySlotText}}" class="shared-delivery">
+        <image src="/assets/icons/clock-green.svg" mode="aspectFit" />
+        <text>预约配送：{{deliverySlotText}}</text>
+      </view>
+      <view class="shared-amounts">
+        <view class="shared-amount-row">
+          <text>商品金额</text>
+          <text>¥{{productAmountText}}</text>
+        </view>
+        <view class="shared-amount-row">
+          <text>配送费</text>
+          <text>¥{{deliveryFeeText}}</text>
+        </view>
+        <view class="shared-amount-row">
+          <text>包装费</text>
+          <text>¥{{packageFeeText}}</text>
+        </view>
+      </view>
+    </view>
+
     <view wx:if="{{ownerMode}}" class="owner-card card">
       <text class="owner-title">{{ownerPaid ? '好友已完成付款' : '发送给好友完成付款'}}</text>
-      <text class="owner-desc">{{ownerPaid ? '付款结果已同步到你的订单，可查看配送状态。' : '好友只会看到付款金额，不会看到你的订单和配送信息。'}}</text>
+      <text class="owner-desc">{{ownerPaid ? '付款结果已同步到你的订单，可查看配送状态。' : '好友只会看到本次商品和付款信息，不能查看你的订单进度。'}}</text>
       <button wx:if="{{!ownerPaid}}" class="share-button" open-type="share">发送给好友付款</button>
       <button wx:else class="view-order-button" bindtap="handleViewOrder">查看订单状态</button>
     </view>
@@ -46,7 +92,7 @@
         <text class="payer-title">确认代付</text>
         <text class="payer-desc">你将使用自己的微信账号完成本次付款。</text>
         <button class="pay-button {{paying ? 'disabled' : ''}}" disabled="{{paying}}" bindtap="handlePay">{{paying ? '付款处理中' : '确认付款'}}</button>
-        <text class="privacy-note">付款完成后，你不会看到该订单的商品、地址或配送状态。</text>
+        <text class="privacy-note">付款完成后，你不会进入订单列表，也不能查看订单状态、地址或配送进度。</text>
       </block>
     </view>
   </block>

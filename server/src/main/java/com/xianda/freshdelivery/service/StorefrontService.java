@@ -28,6 +28,7 @@ import com.xianda.freshdelivery.dto.PaymentConfirmationResult;
 import com.xianda.freshdelivery.dto.PaymentMethodDto;
 import com.xianda.freshdelivery.dto.PaymentNotifyRequest;
 import com.xianda.freshdelivery.dto.PaymentShareDto;
+import com.xianda.freshdelivery.dto.PaymentShareItemDto;
 import com.xianda.freshdelivery.dto.PrintModels;
 import com.xianda.freshdelivery.dto.ProductDto;
 import com.xianda.freshdelivery.dto.ProductSaveRequest;
@@ -2690,8 +2691,23 @@ public class StorefrontService {
         return new PaymentShareDto(
                 normalizePaymentShareToken(token),
                 settings.storeName(),
+                deliverySlotDisplay(order),
+                order.productAmount(),
+                order.deliveryFee(),
+                order.packageFee(),
                 order.payableAmount(),
-                paymentExpireAt(order)
+                paymentExpireAt(order),
+                order.items().stream()
+                        .map(item -> new PaymentShareItemDto(
+                                item.productName(),
+                                item.imageUrl(),
+                                item.saleUnit(),
+                                item.unitPrice(),
+                                item.quantity(),
+                                item.amount(),
+                                item.specificationText()
+                        ))
+                        .toList()
         );
     }
 
