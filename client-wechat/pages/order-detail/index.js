@@ -109,6 +109,10 @@ function canApplyRefund(order) {
   return !["待支付", "已关闭", "已取消", "已退款"].includes(order.status);
 }
 
+function isCancelableOrder(order) {
+  return String(order && order.status || "").trim() === "待支付";
+}
+
 function chooseDeliverySlot(slots) {
   return new Promise((resolve, reject) => {
     wx.showActionSheet({
@@ -192,7 +196,7 @@ Page({
       statusText: order.status,
       statusConfig: getStatusConfig(order),
       isPendingPayment: isPendingPaymentOrder(order),
-      canCancel: isPendingPaymentOrder(order),
+      canCancel: isCancelableOrder(order),
       canRestartPayment: Boolean(order.canRestartPayment),
       canRefund: canApplyRefund(order),
       address: order.address || {},
@@ -301,7 +305,12 @@ Page({
   },
 
   async handleCancelOrder() {
-    if (!this.data.canCancel || this.data.cancelling) {
+    if (this.data.cancelling) {
+      return;
+    }
+    if (!isCancelableOrder(this.data.order)) {
+      wx.showToast({ title: "当前订单不可取消", icon: "none" });
+      await this.refreshOrder();
       return;
     }
     const choice = await new Promise((resolve) => {

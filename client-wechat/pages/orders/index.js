@@ -197,7 +197,7 @@ Page({
   async handleSecondaryAction(event) {
     const id = event.currentTarget.dataset.id;
     const order = this.data.orders.find((item) => Number(item.id) === Number(id));
-    if (order && order.status === "待支付") {
+    if (order && String(order.status || "").trim() === "待支付") {
       const choice = await new Promise((resolve) => {
         wx.showModal({
           title: "取消订单",
