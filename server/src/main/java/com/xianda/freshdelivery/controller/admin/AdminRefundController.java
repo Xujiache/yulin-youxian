@@ -31,10 +31,12 @@ public class AdminRefundController {
 
     @GetMapping
     public ApiResponse<PageResult<RefundDto>> refunds(
-            @RequestParam(required = false) Long userId,
-            @RequestParam(required = false) Long orderId
+            @RequestParam(required = false) String userId,
+            @RequestParam(required = false) String orderId
     ) {
-        return ApiResponse.ok(PageResult.of(storefrontService.adminRefunds(userId, orderId)));
+        Long parsedUserId = parseLongOrNull(userId);
+        Long parsedOrderId = parseLongOrNull(orderId);
+        return ApiResponse.ok(PageResult.of(storefrontService.adminRefunds(parsedUserId, parsedOrderId)));
     }
 
     @PostMapping
@@ -63,5 +65,16 @@ public class AdminRefundController {
             @Valid @RequestBody RefundAmountUpdateRequest request
     ) {
         return ApiResponse.ok(storefrontService.updateRefundAmount(id, request.refundAmount()));
+    }
+
+    private Long parseLongOrNull(String value) {
+        if (value == null || value.isBlank() || "null".equalsIgnoreCase(value) || "undefined".equalsIgnoreCase(value)) {
+            return null;
+        }
+        try {
+            return Long.parseLong(value.trim());
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 }
