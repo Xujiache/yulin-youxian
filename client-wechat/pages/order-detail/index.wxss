@@ -403,12 +403,13 @@
   justify-content: center;
   min-width: 150rpx;
   height: 76rpx;
-  padding: 0 24rpx;
+  padding: 0 14rpx;
   margin: 0;
   box-sizing: border-box;
   font-size: 27rpx;
   font-weight: 700;
   line-height: 1;
+  white-space: nowrap;
   border-radius: 999rpx;
 }
 
