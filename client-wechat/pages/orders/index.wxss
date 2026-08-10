@@ -367,3 +367,70 @@
   font-weight: 800;
   box-shadow: 0 6rpx 16rpx rgba(0, 122, 61, 0.25);
 }
+
+.orders-cancel-modal-mask {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 120;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 48rpx;
+  box-sizing: border-box;
+  background: rgba(16, 24, 21, 0.45);
+}
+
+.orders-cancel-modal {
+  width: 100%;
+  padding: 40rpx 36rpx 32rpx;
+  box-sizing: border-box;
+  background: #ffffff;
+  border-radius: 28rpx;
+  box-shadow: 0 20rpx 60rpx rgba(0, 0, 0, 0.18);
+}
+
+.orders-cancel-title {
+  display: block;
+  color: #18211d;
+  font-size: 34rpx;
+  font-weight: 800;
+  text-align: center;
+}
+
+.orders-cancel-desc {
+  display: block;
+  margin-top: 18rpx;
+  color: #68716d;
+  font-size: 26rpx;
+  line-height: 38rpx;
+  text-align: center;
+}
+
+.orders-cancel-actions {
+  display: flex;
+  gap: 18rpx;
+  margin-top: 32rpx;
+}
+
+.orders-cancel-choice {
+  flex: 1;
+  height: 76rpx;
+  line-height: 76rpx;
+  border-radius: 999rpx;
+  font-size: 27rpx;
+  font-weight: 700;
+  text-align: center;
+}
+
+.orders-cancel-discard {
+  color: #6f7773;
+  background: #f2f4f3;
+}
+
+.orders-cancel-return {
+  color: #ffffff;
+  background: linear-gradient(135deg, #00a957 0%, #007a3d 100%);
+}

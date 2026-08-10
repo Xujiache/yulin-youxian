@@ -93,14 +93,14 @@
       </view>
 
       <view wx:if="{{item.primaryActionText || item.secondaryActionText}}" class="order-actions">
-        <button
+        <view
           wx:if="{{item.secondaryActionText}}"
           class="order-btn btn-secondary"
           data-id="{{item.id}}"
           catchtap="handleSecondaryAction"
         >
           {{item.secondaryActionText}}
-        </button>
+        </view>
         <button
           wx:if="{{item.primaryActionText}}"
           class="order-btn {{item.status === '待支付' || item.status === '已关闭' ? 'btn-pay' : 'btn-primary'}}"
@@ -109,6 +109,17 @@
         >
           {{item.primaryActionText}}
         </button>
+      </view>
+    </view>
+  </view>
+
+  <view wx:if="{{showCancelModal}}" class="orders-cancel-modal-mask" catchtap="closeCancelModal">
+    <view class="orders-cancel-modal" catchtap="stopCancelModalTap">
+      <text class="orders-cancel-title">取消订单</text>
+      <text class="orders-cancel-desc">取消后，是否将本单商品放回购物车？</text>
+      <view class="orders-cancel-actions">
+        <view class="orders-cancel-choice orders-cancel-discard" data-return-to-cart="false" catchtap="handleCancelChoice">不要了</view>
+        <view class="orders-cancel-choice orders-cancel-return" data-return-to-cart="true" catchtap="handleCancelChoice">放回购物车</view>
       </view>
     </view>
   </view>

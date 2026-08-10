@@ -159,6 +159,7 @@ Page({
     paying: false,
     restarting: false,
     cancelling: false,
+    showCancelModal: false,
     paymentNotice: ""
   },
 
@@ -305,7 +306,7 @@ Page({
   },
 
   async handleCancelOrder() {
-    if (this.data.cancelling) {
+    if (this.data.cancelling || this.data.paying) {
       return;
     }
     if (!isCancelableOrder(this.data.order)) {
@@ -313,19 +314,21 @@ Page({
       await this.refreshOrder();
       return;
     }
-    const choice = await new Promise((resolve) => {
-      wx.showModal({
-        title: "取消订单",
-        content: "取消后，是否将本单商品放回购物车？",
-        confirmText: "放回购物车",
-        cancelText: "不要了",
-        confirmColor: "#008a52",
-        success: resolve,
-        fail: () => resolve(null)
-      });
-    });
-    if (!choice) return;
-    const returnToCart = Boolean(choice.confirm);
+    this.setData({ showCancelModal: true });
+  },
+
+  stopCancelModalTap() {},
+
+  closeCancelModal() {
+    if (!this.data.cancelling) {
+      this.setData({ showCancelModal: false });
+    }
+  },
+
+  async handleCancelChoice(event) {
+    if (this.data.cancelling) return;
+    const value = event.currentTarget.dataset.returnToCart;
+    const returnToCart = value === true || value === "true";
     this.setData({ cancelling: true });
     try {
       const cancelled = await cancelOrder(this.data.orderId, returnToCart);
@@ -338,7 +341,7 @@ Page({
       wx.showToast({ title: error.message || "取消订单失败", icon: "none" });
       await this.refreshOrder();
     } finally {
-      this.setData({ cancelling: false });
+      this.setData({ cancelling: false, showCancelModal: false });
     }
   },
 

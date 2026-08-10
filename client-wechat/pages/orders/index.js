@@ -68,6 +68,9 @@ Page({
     activeStatus: "全部",
     cartCount: 0,
     orders: [],
+    showCancelModal: false,
+    cancelOrderId: null,
+    cancelling: false,
     needsLogin: false,
     emptyTitle: "还没有订单",
     emptyDesc: "下单后，配送进度、支付状态和售后记录都会在这里更新。"
@@ -198,36 +201,43 @@ Page({
     const id = event.currentTarget.dataset.id;
     const order = this.data.orders.find((item) => Number(item.id) === Number(id));
     if (order && String(order.status || "").trim() === "待支付") {
-      const choice = await new Promise((resolve) => {
-        wx.showModal({
-          title: "取消订单",
-          content: "取消后，是否将本单商品放回购物车？",
-          confirmText: "放回购物车",
-          cancelText: "不要了",
-          confirmColor: "#008a52",
-          success: resolve,
-          fail: () => resolve(null)
-        });
-      });
-      if (!choice) return;
-      const returnToCart = Boolean(choice.confirm);
-      try {
-        await cancelOrder(id, returnToCart);
-        wx.showToast({
-          title: returnToCart ? "已取消并放回购物车" : "订单已取消",
-          icon: "success"
-        });
-        await Promise.all([
-          this.updateOrders(this.data.activeStatus),
-          this.loadCartCount()
-        ]);
-      } catch (error) {
-        wx.showToast({ title: error.message || "取消订单失败", icon: "none" });
-        await this.updateOrders(this.data.activeStatus);
-      }
+      this.setData({ showCancelModal: true, cancelOrderId: id });
       return;
     }
     wx.navigateTo({ url: `/pages/order-detail/index?id=${id}` });
+  },
+
+  stopCancelModalTap() {},
+
+  closeCancelModal() {
+    if (!this.data.cancelling) {
+      this.setData({ showCancelModal: false, cancelOrderId: null });
+    }
+  },
+
+  async handleCancelChoice(event) {
+    if (this.data.cancelling) return;
+    const value = event.currentTarget.dataset.returnToCart;
+    const returnToCart = value === true || value === "true";
+    const id = this.data.cancelOrderId;
+    if (!id) return;
+    this.setData({ cancelling: true, showCancelModal: false });
+    try {
+      await cancelOrder(id, returnToCart);
+      wx.showToast({
+        title: returnToCart ? "已取消并放回购物车" : "订单已取消",
+        icon: "success"
+      });
+      await Promise.all([
+        this.updateOrders(this.data.activeStatus),
+        this.loadCartCount()
+      ]);
+    } catch (error) {
+      wx.showToast({ title: error.message || "取消订单失败", icon: "none" });
+      await this.updateOrders(this.data.activeStatus);
+    } finally {
+      this.setData({ cancelling: false, showCancelModal: false, cancelOrderId: null });
+    }
   },
 
   goHome() {
