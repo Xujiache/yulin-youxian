@@ -390,11 +390,12 @@
 
 .order-btn {
   display: inline-flex;
+  flex: 0 0 auto;
   align-items: center;
   justify-content: center;
-  min-width: 156rpx;
-  height: 60rpx;
-  padding: 0 28rpx;
+  min-width: 148rpx;
+  height: 64rpx;
+  padding: 0 26rpx;
   margin: 0;
   box-sizing: border-box;
   font-size: 25rpx;
@@ -409,9 +410,10 @@
 }
 
 .btn-secondary {
-  color: #444444;
+  min-width: 152rpx;
+  color: #68716d;
   background: #ffffff;
-  border: 1rpx solid #d5dad7;
+  border: 1rpx solid #dfe4e1;
 }
 
 .btn-primary {
@@ -422,6 +424,7 @@
 }
 
 .btn-pay {
+  min-width: 212rpx;
   color: #ffffff;
   background: linear-gradient(135deg, #00b05b 0%, #007a3d 100%);
   font-weight: 800;
