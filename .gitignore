@@ -28,7 +28,7 @@ rider-android/local.properties
 local.properties
 *.keystore
 *.jks
-# 含 release 签名口令明文,只留 gradle.properties.example 进版本库
+# 本地 Gradle 参数文件不进版本库；release 签名材料必须保存在工作区外
 rider-android/gradle.properties
 rider-android/build/
 rider-android/**/build/

@@ -121,12 +121,12 @@ jobs:
         if: steps.signing.outputs.enabled == 'true'
         working-directory: rider-android
         env:
-          ORG_GRADLE_PROJECT_RIDER_KEYSTORE_FILE: keystore/ci-release.jks
-          ORG_GRADLE_PROJECT_RIDER_KEYSTORE_PASSWORD: ${{ secrets.RIDER_KEYSTORE_PASSWORD }}
-          ORG_GRADLE_PROJECT_RIDER_KEY_ALIAS: ${{ secrets.RIDER_KEY_ALIAS }}
-          ORG_GRADLE_PROJECT_RIDER_KEY_PASSWORD: ${{ secrets.RIDER_KEY_PASSWORD }}
+          RIDER_KEYSTORE_PATH: ${{ github.workspace }}/rider-android/keystore/ci-release.jks
+          RIDER_KEYSTORE_PASSWORD: ${{ secrets.RIDER_KEYSTORE_PASSWORD }}
+          RIDER_KEY_ALIAS: ${{ secrets.RIDER_KEY_ALIAS }}
+          RIDER_KEY_PASSWORD: ${{ secrets.RIDER_KEY_PASSWORD }}
           ORG_GRADLE_PROJECT_AMAP_KEY: ${{ secrets.AMAP_KEY }}
-        run: ./gradlew --no-daemon assembleRelease
+        run: ./gradlew --no-daemon :app:verifyReleaseSignature
       - name: Verify APK signature and checksum
         if: steps.signing.outputs.enabled == 'true'
         shell: bash
