@@ -23,16 +23,31 @@
           <image class="payment-brand-icon" src="/assets/payment/friend-pay.png" mode="aspectFit" />
           <view class="payment-brand-copy">
             <text class="merchant-name">{{merchantName}}</text>
-            <text class="payment-caption">好友代付</text>
+            <text class="payment-caption">好友代付 · 金额已锁定</text>
           </view>
         </view>
-        <view class="payment-status-pill {{paymentFinished || ownerPaid ? 'is-paid' : ''}}">{{paymentFinished || ownerPaid ? '已完成' : '待支付'}}</view>
+        <view class="payment-status-pill {{paymentFinished || ownerPaid ? 'is-paid' : (paymentConfirming ? 'is-confirming' : '')}}">
+          {{paymentFinished || ownerPaid ? '已完成' : (paymentConfirming ? '确认中' : '待支付')}}
+        </view>
       </view>
       <view class="payment-amount">
         <text class="amount-prefix">¥</text>
         <text class="amount-value">{{amountText}}</text>
       </view>
       <text wx:if="{{expireText}}" class="expire-text">{{expireText}}</text>
+    </view>
+
+    <view wx:if="{{hasDiscount || hasLotteryPrize}}" class="locked-lottery-card">
+      <view class="locked-lottery-mark">
+        <view class="locked-leaf"></view>
+        <text>鲜</text>
+      </view>
+      <view class="locked-lottery-copy">
+        <text class="locked-lottery-title">发起人已锁定本单鲜礼结果</text>
+        <text wx:if="{{hasDiscount}}" class="locked-lottery-desc">已减免 ¥{{discountAmountText}}，下方为最终应付金额</text>
+        <text wx:if="{{hasLotteryPrize}}" class="locked-lottery-prize">鲜礼：{{lotteryPrizeName}}</text>
+        <text class="locked-lottery-note">代付好友不能参与或重新抽奖</text>
+      </view>
     </view>
 
     <view class="shared-order-card card">
@@ -71,12 +86,26 @@
           <text>包装费</text>
           <text>¥{{packageFeeText}}</text>
         </view>
+        <view
+          wx:for="{{discountDetails}}"
+          wx:key="id"
+          class="shared-amount-row discount-row"
+        >
+          <text>{{item.name}}</text>
+          <text wx:if="{{item.hasAmount}}">-¥{{item.amountText}}</text>
+          <text wx:else>已计入</text>
+        </view>
+        <view class="shared-amount-divider"></view>
+        <view class="shared-amount-row final-row">
+          <text>最终支付</text>
+          <text>¥{{amountText}}</text>
+        </view>
       </view>
     </view>
 
     <view wx:if="{{ownerMode}}" class="owner-card card">
       <text class="owner-title">{{ownerPaid ? '好友已完成付款' : '发送给好友完成付款'}}</text>
-      <text class="owner-desc">{{ownerPaid ? '付款结果已同步到你的订单，可查看配送状态。' : '好友只会看到本次商品和付款信息，不能查看你的订单进度。'}}</text>
+      <text class="owner-desc">{{ownerPaid ? '付款结果已同步到你的订单，可查看配送状态。' : '鲜礼结果和金额已经锁定；好友只会看到商品及付款信息，不能查看地址或订单进度。'}}</text>
       <button wx:if="{{!ownerPaid}}" class="share-button" open-type="share">发送给好友付款</button>
       <button wx:else class="view-order-button" bindtap="handleViewOrder">查看订单状态</button>
     </view>
@@ -88,9 +117,16 @@
         <text class="payer-desc">已通知订单发起人，订单信息及配送状态由发起人查看。</text>
         <button class="back-home-button" bindtap="handleBackHome">完成</button>
       </block>
+      <block wx:elif="{{paymentConfirming}}">
+        <view class="confirming-mark">…</view>
+        <text class="payer-title">支付结果确认中</text>
+        <text class="payer-desc">{{paymentConfirmationText}}</text>
+        <button class="view-order-button" disabled="{{paying}}" bindtap="handleConfirmPayment">{{paying ? '正在确认' : '重新确认结果'}}</button>
+        <button class="back-home-button secondary-home-button" bindtap="handleBackHome">返回首页</button>
+      </block>
       <block wx:else>
         <text class="payer-title">确认代付</text>
-        <text class="payer-desc">你将使用自己的微信账号完成本次付款。</text>
+        <text class="payer-desc">优惠和最终金额已由订单发起人锁定，你将使用自己的微信账号完成付款。</text>
         <button class="pay-button {{paying ? 'disabled' : ''}}" disabled="{{paying}}" bindtap="handlePay">{{paying ? '付款处理中' : '确认付款'}}</button>
         <text class="privacy-note">付款完成后，你不会进入订单列表，也不能查看订单状态、地址或配送进度。</text>
       </block>

@@ -1,0 +1,14 @@
+/agent.config.json
+/agent.config.json.tmp
+/*.log
+/*.log.*
+/*.pid
+/*.dmp
+/*.dump
+/*.dumpstream
+/*.token
+/token.*
+/*.keystore
+/*.jks
+/*.p12
+/*.pfx

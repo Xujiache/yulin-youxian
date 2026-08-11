@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  发布包的网络策略:全站禁止明文 HTTP,只走 https://hqhjxt.vip。
+  debug 变体有一份同名文件(src/debug/res/xml)会覆盖它,用于连本机 10.0.2.2。
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

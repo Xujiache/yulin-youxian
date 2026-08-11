@@ -52,6 +52,11 @@ public class AdminRefundController {
         return ApiResponse.ok(wechatPaymentService.approveRefund(id));
     }
 
+    @PostMapping("/{id}/retry")
+    public ApiResponse<RefundDto> retry(@PathVariable Long id) {
+        return ApiResponse.ok(wechatPaymentService.retryRefund(id));
+    }
+
     @PostMapping("/{id}/reject")
     public ApiResponse<RefundDto> reject(@PathVariable Long id, @RequestBody(required = false) RefundReviewRequest request) {
         return ApiResponse.ok(storefrontService.rejectRefund(id, request == null ? null : request.reason()));

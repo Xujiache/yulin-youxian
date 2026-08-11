@@ -113,6 +113,11 @@
   background: #00a957;
 }
 
+.payment-status-pill.is-confirming {
+  color: #8a5a16;
+  background: #fff0ce;
+}
+
 .merchant-name {
   display: block;
   color: #1c2821;
@@ -156,6 +161,79 @@
   margin-top: 14rpx;
   color: #d17732;
   font-size: 23rpx;
+}
+
+.locked-lottery-card {
+  display: flex;
+  align-items: center;
+  gap: 18rpx;
+  margin-top: 24rpx;
+  padding: 24rpx 26rpx;
+  color: #122019;
+  background:
+    linear-gradient(90deg, rgba(0, 138, 82, 0.035) 1rpx, transparent 1rpx),
+    #fff8e7;
+  background-size: 22rpx 22rpx;
+  border: 2rpx solid rgba(244, 201, 93, 0.72);
+  border-radius: 26rpx;
+  box-shadow: 0 10rpx 28rpx rgba(61, 77, 26, 0.09);
+}
+
+.locked-lottery-mark {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 70rpx;
+  height: 70rpx;
+  color: #fff8e7;
+  font-family: "STKaiti", "KaiTi", sans-serif;
+  font-size: 34rpx;
+  font-weight: 900;
+  background: linear-gradient(145deg, #60c041, #008a52);
+  border: 5rpx solid #f4c95d;
+  border-radius: 22rpx 22rpx 28rpx 28rpx;
+}
+
+.locked-leaf {
+  position: absolute;
+  top: -12rpx;
+  right: 2rpx;
+  width: 25rpx;
+  height: 34rpx;
+  background: #006d42;
+  border-radius: 24rpx 4rpx 24rpx 4rpx;
+  transform: rotate(38deg);
+}
+
+.locked-lottery-copy {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.locked-lottery-title {
+  color: #122019;
+  font-size: 26rpx;
+  font-weight: 900;
+  line-height: 36rpx;
+}
+
+.locked-lottery-desc,
+.locked-lottery-prize,
+.locked-lottery-note {
+  margin-top: 4rpx;
+  color: #006d42;
+  font-size: 21rpx;
+  font-weight: 700;
+  line-height: 30rpx;
+}
+
+.locked-lottery-note {
+  color: #748078;
+  font-weight: 500;
 }
 
 .shared-order-card {
@@ -303,6 +381,28 @@
   font-size: 23rpx;
 }
 
+.shared-amount-row.discount-row {
+  color: #008a52;
+  font-weight: 750;
+}
+
+.shared-amount-divider {
+  height: 1rpx;
+  margin: 5rpx 0;
+  background: #e5ece8;
+}
+
+.shared-amount-row.final-row {
+  color: #122019;
+  font-size: 27rpx;
+  font-weight: 900;
+}
+
+.shared-amount-row.final-row text:last-child {
+  color: #006d42;
+  font-size: 32rpx;
+}
+
 .owner-card,
 .payer-card,
 .error-card {
@@ -358,6 +458,19 @@
   box-shadow: none;
 }
 
+.view-order-button[disabled] {
+  color: #ffffff;
+  background: #aebbb4;
+  box-shadow: none;
+}
+
+.secondary-home-button {
+  margin-top: 16rpx;
+  color: #547066;
+  background: #eef4f1;
+  box-shadow: none;
+}
+
 .privacy-note {
   display: block;
   margin-top: 20rpx;
@@ -367,6 +480,7 @@
 }
 
 .success-mark,
+.confirming-mark,
 .error-mark {
   display: flex;
   align-items: center;
@@ -379,6 +493,11 @@
   font-weight: 800;
   background: #00a957;
   border-radius: 50%;
+}
+
+.confirming-mark {
+  color: #8a5a16;
+  background: #fff0ce;
 }
 
 .error-mark {

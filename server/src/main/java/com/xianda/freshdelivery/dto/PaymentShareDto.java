@@ -1,5 +1,7 @@
 package com.xianda.freshdelivery.dto;
 
+import com.xianda.freshdelivery.lottery.LotteryModels.DrawResult;
+import com.xianda.freshdelivery.lottery.LotteryModels.Gift;
 import java.util.List;
 
 /**
@@ -14,6 +16,14 @@ public record PaymentShareDto(
         Integer packageFee,
         Integer payableAmount,
         String paymentExpireAt,
-        List<PaymentShareItemDto> items
+        List<PaymentShareItemDto> items,
+        Integer discountAmount,
+        List<Gift> gifts,
+        DrawResult lotteryResult
 ) {
+    public PaymentShareDto {
+        items = items == null ? List.of() : List.copyOf(items);
+        discountAmount = discountAmount == null ? 0 : discountAmount;
+        gifts = gifts == null ? List.of() : List.copyOf(gifts);
+    }
 }

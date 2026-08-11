@@ -1,0 +1,92 @@
+<view wx:if="{{visible}}" class="lucky-mask" catchtap="handleClose">
+  <view class="lucky-sheet" catchtap="stopPanelTap">
+    <view class="ticket-cut ticket-cut-left"></view>
+    <view class="ticket-cut ticket-cut-right"></view>
+
+    <view class="sheet-head">
+      <view>
+        <text class="sheet-eyebrow">菜篮鲜礼签</text>
+        <text class="sheet-title">{{showResult ? '鲜礼已经装进菜篮' : '分享资格已点亮'}}</text>
+      </view>
+      <view
+        class="sheet-close {{spinning || drawLoading || continueLoading ? 'is-locked' : ''}}"
+        catchtap="handleClose"
+      >{{spinning ? '转动中' : '×'}}</view>
+    </view>
+
+    <view class="wheel-stage">
+      <view class="wheel-shadow"></view>
+      <view class="wheel-pointer">
+        <view class="pointer-leaf"></view>
+        <view class="pointer-tip"></view>
+      </view>
+      <view
+        class="wheel-disc {{spinning ? 'is-spinning' : ''}}"
+        style="transform: rotate({{wheelRotation}}deg); transition: {{wheelTransition}};"
+        bindtransitionend="handleTransitionEnd"
+      >
+        <view class="basket-weave"></view>
+        <view
+          wx:for="{{displayPrizes}}"
+          wx:key="id"
+          class="wheel-prize tone-{{item.tone}}"
+          style="{{item.segmentStyle}}"
+        >
+          <image wx:if="{{item.imageUrl}}" class="prize-image" src="{{item.imageUrl}}" mode="aspectFill" />
+          <view wx:else class="prize-produce">
+            <view class="produce-leaf"></view>
+            <view class="produce-body"></view>
+          </view>
+          <text class="prize-name">{{item.shortName}}</text>
+        </view>
+        <view class="wheel-hub">
+          <text class="hub-mark">鲜</text>
+          <text class="hub-caption">开签</text>
+        </view>
+      </view>
+    </view>
+
+    <view wx:if="{{showResult}}" class="result-card">
+      <image wx:if="{{resultImageUrl}}" class="result-image" src="{{resultImageUrl}}" mode="aspectFill" />
+      <view class="result-copy">
+        <text class="result-kicker">本次抽中</text>
+        <text class="result-title">{{resultTitle}}</text>
+        <text wx:if="{{resultDiscountText}}" class="result-discount">{{resultDiscountText}}</text>
+        <text wx:if="{{resultHasGift}}" class="gift-delivery">将作为赠品随本单送达</text>
+        <text wx:elif="{{!resultDiscountText}}" class="result-plain">本次未减免，订单仍按原价结算</text>
+      </view>
+      <view class="result-payable">
+        <text class="payable-label">最终应付</text>
+        <text class="payable-amount">¥{{resultPayableText}}</text>
+      </view>
+    </view>
+
+    <view wx:elif="{{spinning}}" class="drawing-copy">
+      <text class="drawing-title">正在按服务端结果落签</text>
+      <text class="drawing-desc">转动结束前请不要关闭页面</text>
+    </view>
+
+    <view wx:else class="ready-copy">
+      <text class="ready-title">资格已确认，可以抽取一次</text>
+      <text class="ready-desc">中奖结果由服务端先锁定；网络失败不会消耗资格</text>
+    </view>
+
+    <button
+      wx:if="{{!showResult}}"
+      class="wheel-action {{drawLoading || spinning || !displayPrizes.length ? 'is-disabled' : ''}}"
+      disabled="{{drawLoading || spinning || !displayPrizes.length}}"
+      bindtap="handleDraw"
+    >{{drawLoading ? '正在向菜篮取签…' : spinning ? '鲜礼转动中…' : '抽取本单鲜礼'}}</button>
+
+    <button
+      wx:else
+      class="wheel-action {{continueLoading ? 'is-disabled' : ''}}"
+      disabled="{{continueLoading}}"
+      bindtap="handleContinue"
+    >{{continueLoading ? '正在锁定金额…' : continueText}}</button>
+
+    <text class="sheet-footnote">
+      {{spinning ? '转动中不可关闭' : showResult ? '结果已保存，重新进入仍可查看' : '每个符合条件的订单仅有一次机会'}}
+    </text>
+  </view>
+</view>

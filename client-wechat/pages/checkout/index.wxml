@@ -93,6 +93,10 @@
         <text>包装费</text>
         <text>￥{{packageFeeText}}</text>
       </view>
+      <view wx:if="{{hasLotteryDiscount}}" class="amount-row lottery-discount-row">
+        <text>随机减免</text>
+        <text>-￥{{lotteryDiscountText}}</text>
+      </view>
       <view wx:if="{{minOrderAmount}}" class="amount-row min-order-row">
         <text>起送价</text>
         <text>￥{{minOrderText}}</text>
@@ -144,4 +148,64 @@
       bindtap="handlePay"
     >{{paying ? '支付处理中，请稍候' : payLabel}}</button>
   </view>
+
+  <view wx:if="{{showLotteryChoice}}" class="lottery-choice-mask">
+    <view class="lottery-choice-sheet">
+      <view class="choice-ticket-edge"></view>
+      <view class="choice-heading">
+        <view class="choice-mark">
+          <view class="choice-leaf"></view>
+          <text>鲜</text>
+        </view>
+        <view class="choice-title-copy">
+          <text class="choice-eyebrow">菜篮鲜礼签 · 本单可参与</text>
+          <text class="choice-title">{{lotteryState.campaign.name || '分享解锁随机鲜礼'}}</text>
+        </view>
+      </view>
+      <text class="choice-desc">{{lotteryState.campaign.shareDescription || '进入朋友圈分享入口后，返回即可抽取本单减免或随单鲜礼。'}}</text>
+
+      <scroll-view wx:if="{{wheelPrizes.length}}" class="choice-prizes" scroll-x enhanced show-scrollbar="{{false}}">
+        <view class="choice-prizes-inner">
+          <view wx:for="{{wheelPrizes}}" wx:key="id" class="choice-prize">
+            <image wx:if="{{item.imageUrl}}" class="choice-prize-image" src="{{item.imageUrl}}" mode="aspectFill" />
+            <view wx:else class="choice-prize-fallback">
+              <view class="choice-produce-leaf"></view>
+              <view class="choice-produce"></view>
+            </view>
+            <text>{{item.name}}</text>
+          </view>
+        </view>
+      </scroll-view>
+
+      <view class="choice-facts">
+        <view class="choice-fact"><text class="fact-dot"></text><text>分享后仍由服务端确认资格</text></view>
+        <view class="choice-fact"><text class="fact-dot"></text><text>实物鲜礼随本订单一同配送</text></view>
+      </view>
+      <button
+        class="choice-share-button {{lotteryBusy ? 'is-disabled' : ''}}"
+        disabled="{{lotteryBusy}}"
+        bindtap="handleUnlockLottery"
+      >{{lotteryBusy ? '正在准备分享凭证…' : '分享解锁抽奖'}}</button>
+      <button
+        class="choice-original-button"
+        disabled="{{lotteryBusy}}"
+        bindtap="handleSkipLottery"
+      >不参加，原价支付</button>
+      <text class="choice-footnote">不会自动拉起分享；下一页会引导你使用微信右上角菜单</text>
+    </view>
+  </view>
+
+  <lucky-wheel
+    id="checkoutLuckyWheel"
+    visible="{{showLuckyWheel}}"
+    prizes="{{wheelPrizes}}"
+    initial-result="{{wheelInitialResult}}"
+    draw-loading="{{drawLoading}}"
+    continue-loading="{{lotteryContinueLoading}}"
+    continue-text="{{wheelContinueText}}"
+    bind:draw="handleLotteryDraw"
+    bind:finish="handleLotteryFinish"
+    bind:continue="handleLuckyWheelContinue"
+    bind:close="handleLuckyWheelClose"
+  />
 </view>

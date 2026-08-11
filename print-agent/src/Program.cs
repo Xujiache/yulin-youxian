@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Net;
 using System.Runtime.InteropServices;
@@ -11,10 +12,11 @@ using System.Web.Script.Serialization;
 
 internal static class Program
 {
-    private const string Version = "1.1.0";
+    private const string Version = "1.2.1";
     private static readonly JavaScriptSerializer Json = new JavaScriptSerializer { MaxJsonLength = Int32.MaxValue };
     private static readonly string BaseDirectory = AppDomain.CurrentDomain.BaseDirectory;
     private static readonly string ConfigPath = Path.Combine(BaseDirectory, "agent.config.json");
+    private static readonly byte[] KeyEntropy = Encoding.UTF8.GetBytes("YulinYouxian.PrintAgent.AccessKey.v1");
 
     private static int Main(string[] args)
     {
@@ -85,8 +87,8 @@ internal static class Program
 
         // step 1: API URL
         Console.WriteLine("第 1 步：填写后端 API 地址");
-        Console.WriteLine("（本地开发：http://localhost:8080/api）");
-        Console.WriteLine("（生产环境：https://你的域名/api，注意末尾必须带 /api）");
+        Console.WriteLine("（本地开发仅允许：http://localhost:8080/api）");
+        Console.WriteLine("（生产环境强制：https://你的域名/api，注意末尾必须带 /api）");
         string defaultApiUrl = ValueOr(previous.ApiBaseUrl, "http://localhost:8080/api");
         config.ApiBaseUrl = ReadRequired("API 地址", defaultApiUrl).TrimEnd('/');
         Console.WriteLine();
@@ -94,7 +96,7 @@ internal static class Program
         // step 2: access key
         Console.WriteLine("第 2 步：填写打印密钥");
         Console.WriteLine("（在管理后台小票打印页面点击生成代理密钥，复制粘贴到这里）");
-        config.AccessKey = ReadRequired("打印密钥", previous.AccessKey);
+        config.AccessKey = ReadSecretOrExisting("打印密钥", previous.AccessKey);
         Console.WriteLine();
 
         // step 3: printer connection
@@ -106,8 +108,8 @@ internal static class Program
         config.PollSeconds = Math.Max(2, previous.PollSeconds <= 0 ? 3 : previous.PollSeconds);
 
         ValidateConfig(config);
-        File.WriteAllText(ConfigPath, Json.Serialize(config), new UTF8Encoding(false));
-        Console.WriteLine("配置已保存到 " + ConfigPath);
+        SaveConfig(config);
+        Console.WriteLine("配置已加密保存到 " + ConfigPath);
         Console.WriteLine();
 
         // step 4: local test print (hardware verification)
@@ -230,8 +232,13 @@ internal static class Program
     {
         try
         {
-            AgentConfig config = Json.Deserialize<AgentConfig>(File.ReadAllText(ConfigPath, Encoding.UTF8));
-            return config ?? new AgentConfig();
+            bool migrated;
+            AgentConfig config = DeserializeConfig(File.ReadAllText(ConfigPath, Encoding.UTF8), out migrated);
+            if (migrated)
+            {
+                SaveConfig(config);
+            }
+            return config;
         }
         catch
         {
@@ -357,10 +364,12 @@ internal static class Program
         {
             throw new InvalidOperationException("未找到 agent.config.json，请先执行 YulinPrintAgent.exe setup");
         }
-        AgentConfig config = Json.Deserialize<AgentConfig>(File.ReadAllText(ConfigPath, Encoding.UTF8));
-        if (config == null)
+        bool migrated;
+        AgentConfig config = DeserializeConfig(File.ReadAllText(ConfigPath, Encoding.UTF8), out migrated);
+        if (migrated)
         {
-            throw new InvalidOperationException("agent.config.json 读取失败");
+            SaveConfig(config);
+            AgentLog.Write("旧版明文打印密钥已迁移为当前 Windows 用户的 DPAPI 密文");
         }
         ValidateConfig(config);
         return config;
@@ -372,6 +381,7 @@ internal static class Program
         {
             throw new InvalidOperationException("API 地址和打印代理密钥不能为空");
         }
+        ValidateApiUrl(config.ApiBaseUrl);
         if (String.Equals(config.ConnectionMode, "usb", StringComparison.OrdinalIgnoreCase))
         {
             if (String.IsNullOrWhiteSpace(config.UsbPath))
@@ -387,6 +397,98 @@ internal static class Program
         if (config.NetworkPort <= 0 || config.NetworkPort > 65535)
         {
             throw new InvalidOperationException("打印机端口不合法");
+        }
+    }
+
+    private static void ValidateApiUrl(string value)
+    {
+        Uri uri;
+        if (!Uri.TryCreate(value, UriKind.Absolute, out uri))
+        {
+            throw new InvalidOperationException("API 地址不是有效的绝对 URL");
+        }
+
+        bool isHttps = String.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase);
+        bool isLocalHttp = String.Equals(uri.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase)
+            && (uri.IsLoopback || String.Equals(uri.Host, "localhost", StringComparison.OrdinalIgnoreCase));
+        if (!isHttps && !isLocalHttp)
+        {
+            throw new InvalidOperationException("生产 API 必须使用 HTTPS；HTTP 仅允许 localhost/回环地址");
+        }
+        if (!String.IsNullOrEmpty(uri.UserInfo))
+        {
+            throw new InvalidOperationException("API 地址不能包含用户名或密码");
+        }
+    }
+
+    private static AgentConfig DeserializeConfig(string json, out bool migrated)
+    {
+        migrated = false;
+        AgentConfig config = Json.Deserialize<AgentConfig>(json);
+        if (config == null)
+        {
+            throw new InvalidOperationException("agent.config.json 读取失败");
+        }
+
+        if (!String.IsNullOrWhiteSpace(config.AccessKeyProtected))
+        {
+            config.AccessKey = UnprotectSecret(config.AccessKeyProtected);
+            return config;
+        }
+
+        Dictionary<string, object> values = Json.DeserializeObject(json) as Dictionary<string, object>;
+        string legacyAccessKey = ReadString(values, "AccessKey");
+        if (String.IsNullOrWhiteSpace(legacyAccessKey))
+        {
+            legacyAccessKey = ReadString(values, "accessKey");
+        }
+        if (!String.IsNullOrWhiteSpace(legacyAccessKey))
+        {
+            config.AccessKey = legacyAccessKey;
+            migrated = true;
+        }
+        return config;
+    }
+
+    private static void SaveConfig(AgentConfig config)
+    {
+        if (String.IsNullOrWhiteSpace(config.AccessKey))
+        {
+            throw new InvalidOperationException("打印代理密钥不能为空");
+        }
+        config.AccessKeyProtected = ProtectSecret(config.AccessKey);
+        string temporaryPath = ConfigPath + ".tmp";
+        File.WriteAllText(temporaryPath, Json.Serialize(config), new UTF8Encoding(false));
+        if (File.Exists(ConfigPath))
+        {
+            File.Replace(temporaryPath, ConfigPath, null);
+        }
+        else
+        {
+            File.Move(temporaryPath, ConfigPath);
+        }
+    }
+
+    private static string ProtectSecret(string value)
+    {
+        byte[] plainText = Encoding.UTF8.GetBytes(value);
+        byte[] protectedBytes = ProtectedData.Protect(plainText, KeyEntropy, DataProtectionScope.CurrentUser);
+        return Convert.ToBase64String(protectedBytes);
+    }
+
+    private static string UnprotectSecret(string value)
+    {
+        try
+        {
+            byte[] protectedBytes = Convert.FromBase64String(value);
+            byte[] plainText = ProtectedData.Unprotect(protectedBytes, KeyEntropy, DataProtectionScope.CurrentUser);
+            return Encoding.UTF8.GetString(plainText);
+        }
+        catch (Exception exception)
+        {
+            throw new InvalidOperationException(
+                "打印密钥无法解密。配置只能由创建它的 Windows 用户使用，请用该用户运行或重新执行 setup。",
+                exception);
         }
     }
 
@@ -430,6 +532,24 @@ internal static class Program
         }
     }
 
+    private static string ReadSecretOrExisting(string label, string existingValue)
+    {
+        while (true)
+        {
+            Console.Write(label + (String.IsNullOrWhiteSpace(existingValue) ? "：" : "（直接回车保留现有密钥）："));
+            string value = Console.ReadLine();
+            if (!String.IsNullOrWhiteSpace(value))
+            {
+                return value.Trim();
+            }
+            if (!String.IsNullOrWhiteSpace(existingValue))
+            {
+                return existingValue;
+            }
+            Console.WriteLine("* " + label + "不能为空，请重新输入。");
+        }
+    }
+
 
     private static int ReadInt(string label, int defaultValue)
     {
@@ -467,6 +587,17 @@ internal static class Program
         return source != null && source.TryGetValue(key, out value) && value != null ? Convert.ToString(value) : "";
     }
 
+    private static bool HasPositiveMoney(string value)
+    {
+        decimal amount;
+        string normalized = (value ?? "")
+            .Replace("¥", "")
+            .Replace("￥", "")
+            .Trim();
+        return Decimal.TryParse(normalized, NumberStyles.Number, CultureInfo.InvariantCulture, out amount)
+            && amount > 0M;
+    }
+
     private static long ReadLong(IDictionary<string, object> source, string key)
     {
         object value;
@@ -486,6 +617,8 @@ internal static class Program
     private sealed class AgentConfig
     {
         public string ApiBaseUrl { get; set; }
+        public string AccessKeyProtected { get; set; }
+        [ScriptIgnore]
         public string AccessKey { get; set; }
         public string ConnectionMode { get; set; }
         public string NetworkHost { get; set; }
@@ -563,10 +696,38 @@ internal static class Program
                     WritePair(ReadString(item, "quantity") + " x " + ReadString(item, "unitPrice"), ReadString(item, "amount"));
                 }
             }
+            object rawGifts;
+            if (receipt.TryGetValue("gifts", out rawGifts) && rawGifts is IEnumerable)
+            {
+                bool giftHeadingPrinted = false;
+                foreach (object giftValue in (IEnumerable)rawGifts)
+                {
+                    Dictionary<string, object> gift = giftValue as Dictionary<string, object>;
+                    if (gift == null)
+                    {
+                        continue;
+                    }
+                    if (!giftHeadingPrinted)
+                    {
+                        Line();
+                        Send(new byte[] { 0x1B, 0x45, 0x01 });
+                        WriteText("鲜礼赠品（随单配送）\r\n");
+                        Send(new byte[] { 0x1B, 0x45, 0x00 });
+                        giftHeadingPrinted = true;
+                    }
+                    WriteWrapped(ReadString(gift, "name"), 32);
+                    WritePair(ReadString(gift, "quantity"), "¥ 0.00");
+                }
+            }
             Line();
             WritePair("商品金额", ReadString(receipt, "productAmount"));
             WritePair("配送费", ReadString(receipt, "deliveryFee"));
             WritePair("包装费", ReadString(receipt, "packageFee"));
+            string discountAmount = ReadString(receipt, "discountAmount");
+            if (HasPositiveMoney(discountAmount))
+            {
+                WritePair("随机减免", "- " + discountAmount);
+            }
             Send(new byte[] { 0x1B, 0x45, 0x01 });
             WritePair("实付款", ReadString(receipt, "payableAmount"));
             Send(new byte[] { 0x1B, 0x45, 0x00 });
@@ -753,7 +914,7 @@ internal static class Program
 
         private static Dictionary<string, object> Send(AgentConfig config, string method, string relativePath, object payload)
         {
-            ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12 | SecurityProtocolType.Tls11;
+            ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
             string url = config.ApiBaseUrl.TrimEnd('/') + relativePath;
             HttpWebRequest request = (HttpWebRequest)WebRequest.Create(url);
             request.Method = method;
@@ -816,13 +977,52 @@ internal static class Program
     {
         private static readonly object Locker = new object();
         private static readonly string LogPath = Path.Combine(BaseDirectory, "print-agent.log");
+        private const long MaxLogBytes = 5L * 1024L * 1024L;
+        private const int RetainedLogFiles = 5;
 
         public static void Write(string message)
         {
-            lock (Locker)
+            try
             {
-                File.AppendAllText(LogPath, DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + " " + message + Environment.NewLine, new UTF8Encoding(false));
+                lock (Locker)
+                {
+                    string line = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + " " + message + Environment.NewLine;
+                    RotateIfNeeded(Encoding.UTF8.GetByteCount(line));
+                    File.AppendAllText(LogPath, line, new UTF8Encoding(false));
+                }
             }
+            catch
+            {
+                // Logging must never terminate the unattended print loop.
+            }
+        }
+
+        private static void RotateIfNeeded(int incomingBytes)
+        {
+            if (!File.Exists(LogPath) || new FileInfo(LogPath).Length + incomingBytes <= MaxLogBytes)
+            {
+                return;
+            }
+
+            string oldest = LogPath + "." + RetainedLogFiles;
+            if (File.Exists(oldest))
+            {
+                File.Delete(oldest);
+            }
+            for (int index = RetainedLogFiles - 1; index >= 1; index--)
+            {
+                string source = LogPath + "." + index;
+                string destination = LogPath + "." + (index + 1);
+                if (File.Exists(source))
+                {
+                    if (File.Exists(destination))
+                    {
+                        File.Delete(destination);
+                    }
+                    File.Move(source, destination);
+                }
+            }
+            File.Move(LogPath, LogPath + ".1");
         }
     }
 

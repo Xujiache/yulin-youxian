@@ -23,6 +23,30 @@ server/.env
 server/.env.*
 !server/.env.example
 
+# Android rider app
+rider-android/local.properties
+local.properties
+*.keystore
+*.jks
+# 含 release 签名口令明文,只留 gradle.properties.example 进版本库
+rider-android/gradle.properties
+rider-android/build/
+rider-android/**/build/
+rider-android/.gradle/
+.gradle/
+
+# Local scratch work: 联调令牌、截图、一次性脚本
+tmp/
+
+# Runtime pid files
+*.pid
+*.dmp
+*.dump
+*.dumpstream
+*.token
+token.*
+**/runtime/
+
 print-agent/agent.config.json
 print-agent/*.log
 *.zip

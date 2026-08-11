@@ -277,6 +277,29 @@
 | GET | `/api/admin/settings` | 配置列表 |
 | PUT | `/api/admin/settings` | 批量保存配置 |
 
+### 3.9 随机减免与随单赠品
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| GET | `/api/public/marketing/lottery` | 朋友圈单页模式可读取的活动展示，不返回权重和库存 |
+| GET | `/api/wx/orders/{orderId}/lottery` | 查询当前订单资格、挑战和已保存结果 |
+| POST | `/api/wx/orders/{orderId}/lottery/challenge` | 创建或复用短时分享挑战 |
+| POST | `/api/wx/orders/{orderId}/lottery/share-trigger` | 记录朋友圈菜单触发，body 为 `{challengeToken}` |
+| POST | `/api/wx/orders/{orderId}/lottery/draw` | 服务端执行一次抽奖，body 为 `{challengeToken}` |
+| GET | `/api/admin/marketing/lottery` | 读取单活动、金额阶梯与奖项配置 |
+| PUT | `/api/admin/marketing/lottery` | 整体保存活动配置 |
+| GET | `/api/admin/marketing/lottery/draws` | 查询抽奖及赠品履约流水 |
+| POST | `/api/admin/marketing/lottery/draws/{id}/fulfill` | 人工确认实物赠品已履约 |
+
+约束：
+
+- 阶梯以订单 `productAmount`（分）匹配，区间为左闭右开 `[min, max)`。
+- 结果由服务端使用整数权重产生；客户端不能提交奖项或减免金额。
+- `DISCOUNT` 直接降低当前订单 `payableAmount`；`GOODS` 预留商品和营销库存并作为零元赠品随单配送；`NONE` 为谢谢惠顾。
+- 同一订单最多一抽，用户每日次数和现金预算由活动配置限制。
+- 好友代付必须在订单发起人抽奖或跳过后生成，付款好友不能重新抽奖。
+- `share-trigger` 只证明客户端进入了微信“分享到朋友圈”菜单，不证明最终发布成功；微信没有提供发布结果回调。
+
 ## 4. 幂等与安全要求
 
 - 微信支付回调按微信交易号幂等。

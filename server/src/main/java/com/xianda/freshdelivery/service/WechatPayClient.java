@@ -16,6 +16,7 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.net.http.HttpTimeoutException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -28,6 +29,7 @@ import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
 import java.security.spec.PKCS8EncodedKeySpec;
 import java.security.spec.X509EncodedKeySpec;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Base64;
 import java.util.HexFormat;
@@ -44,10 +46,14 @@ public class WechatPayClient {
     private static final String SIGN_TYPE = "RSA";
     private static final String AUTH_SCHEMA = "WECHATPAY2-SHA256-RSA2048";
     private static final long CALLBACK_MAX_AGE_SECONDS = 300;
+    private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(5);
+    private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(15);
 
     private final WechatPayProperties properties;
     private final ObjectMapper objectMapper = new ObjectMapper();
-    private final HttpClient httpClient = HttpClient.newHttpClient();
+    private final HttpClient httpClient = HttpClient.newBuilder()
+            .connectTimeout(CONNECT_TIMEOUT)
+            .build();
     private final SecureRandom secureRandom = new SecureRandom();
 
     public WechatPayClient(WechatPayProperties properties) {
@@ -76,6 +82,10 @@ public class WechatPayClient {
 
     public boolean isCallbackVerificationConfigured() {
         return hasText(properties.getApiV3Key()) && hasVerificationMaterial();
+    }
+
+    public boolean isRefundConfigured() {
+        return isPaymentConfigured() && hasText(properties.getRefundNotifyUrl());
     }
 
     public PaymentDto createJsapiPayment(OrderDetailDto order, String openId) {
@@ -143,10 +153,13 @@ public class WechatPayClient {
         }
     }
 
-    public void requestRefund(RefundDto refund, OrderDetailDto order) {
+    public RefundNotifyRequest requestRefund(RefundDto refund, OrderDetailDto order) {
         ensureRefundConfigured();
         Map<String, Object> body = new LinkedHashMap<>();
-        body.put("out_trade_no", paymentOrderNo(order));
+        body.put(
+                "out_trade_no",
+                hasText(refund.paymentOrderNo()) ? refund.paymentOrderNo() : paymentOrderNo(order)
+        );
         body.put("out_refund_no", refund.refundNo());
         if (hasText(refund.reason())) {
             body.put("reason", refund.reason());
@@ -157,7 +170,14 @@ public class WechatPayClient {
                 "total", order.payableAmount(),
                 "currency", "CNY"
         ));
-        postJson("/v3/refund/domestic/refunds", body);
+        JsonNode response = postJson("/v3/refund/domestic/refunds", body);
+        return refundResult(response, refund.refundNo());
+    }
+
+    public RefundNotifyRequest queryRefund(RefundDto refund) {
+        ensureRefundConfigured();
+        JsonNode response = getJson("/v3/refund/domestic/refunds/" + refund.refundNo());
+        return refundResult(response, refund.refundNo());
     }
 
     private String paymentOrderNo(OrderDetailDto order) {
@@ -277,6 +297,7 @@ public class WechatPayClient {
     private JsonNode requestJson(String method, String path, String body) {
         try {
             HttpRequest.Builder builder = HttpRequest.newBuilder(URI.create(normalizedBaseUrl() + path))
+                    .timeout(REQUEST_TIMEOUT)
                     .header("Authorization", authorization(method, path, body))
                     .header("Accept", "application/json")
                     .header("Content-Type", "application/json");
@@ -294,6 +315,8 @@ public class WechatPayClient {
             return response.body().isBlank() ? objectMapper.createObjectNode() : objectMapper.readTree(response.body());
         } catch (BusinessException exception) {
             throw exception;
+        } catch (HttpTimeoutException exception) {
+            throw new BusinessException(504, "微信支付接口请求超时");
         } catch (IOException exception) {
             throw new BusinessException(502, "微信支付接口响应解析失败");
         } catch (InterruptedException exception) {
@@ -462,6 +485,15 @@ public class WechatPayClient {
             throw new BusinessException(400, "微信支付回调缺少字段: " + field);
         }
         return value;
+    }
+
+    private RefundNotifyRequest refundResult(JsonNode response, String fallbackRefundNo) {
+        String refundNo = response.path("out_refund_no").asText(fallbackRefundNo);
+        String status = response.path("status").asText("");
+        if (!hasText(status)) {
+            throw new BusinessException(502, "微信退款接口未返回退款状态");
+        }
+        return new RefundNotifyRequest(refundNo, status);
     }
 
     private boolean hasText(String value) {

@@ -1,0 +1,34 @@
+# 骑手端构建参数模板。
+#
+# 用法:把本文件复制成同目录下的 gradle.properties,再把下面几处占位值换成真实值。
+#   Windows PowerShell: Copy-Item rider-android\gradle.properties.example rider-android\gradle.properties
+#
+# gradle.properties 含签名口令明文,已在 .gitignore 里排除,不要提交,也不要发到微信/邮件。
+# 真实口令保存在交付给店主的密码单里(和 keystore 备份放在一起);
+# 口令丢失时无法找回,也无法重签,只能换证书重新安装 App。
+
+org.gradle.jvmargs=-Xmx4g -Dfile.encoding=UTF-8
+org.gradle.parallel=true
+org.gradle.caching=true
+android.useAndroidX=true
+# 仓库路径含中文目录,关闭 AGP 的非 ASCII 路径检查
+android.overridePathCheck=true
+android.nonTransitiveRClass=true
+kotlin.code.style=official
+
+# ---- release 签名 ----
+# 这套 keystore 就是这个 App 的"身份证"。换一套证书签名的包，手机会认为是另一个应用，
+# 老用户必须卸载重装。所以 rider-android/keystore/rider-release.jks 一定要备份，丢了就发不了更新。
+# keystore 文件本身也不进版本库,随密码单一起单独交付。
+RIDER_KEYSTORE_FILE=keystore/rider-release.jks
+RIDER_KEYSTORE_PASSWORD=在这里填 keystore 口令
+RIDER_KEY_ALIAS=yulin-rider
+RIDER_KEY_PASSWORD=在这里填 key 口令
+
+# 服务器地址。默认 release 打到 https://hqhjxt.vip，要改成别的地址时
+# 改这里，或者命令行 -PRIDER_BASE_URL=https://your.domain
+# RIDER_BASE_URL=https://hqhjxt.vip
+
+# 高德 Key。尚未申请,留空时地图/导航鉴权失败但不崩溃;
+# 拿到后填这里或命令行 -PAMAP_KEY=xxx,不需要改任何源码。
+# AMAP_KEY=

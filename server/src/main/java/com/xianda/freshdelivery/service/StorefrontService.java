@@ -41,12 +41,17 @@ import com.xianda.freshdelivery.dto.RefundRequest;
 import com.xianda.freshdelivery.dto.SettingsDto;
 import com.xianda.freshdelivery.dto.StockOverviewItemDto;
 import com.xianda.freshdelivery.dto.StockOverviewSpecItemDto;
+import com.xianda.freshdelivery.lottery.LotteryModels.Gift;
+import com.xianda.freshdelivery.lottery.LotteryModels.OrderPromotionProjection;
+import com.xianda.freshdelivery.lottery.LotteryOrderLifecycle;
 import com.xianda.freshdelivery.persistence.FileStateStore;
 import com.xianda.freshdelivery.persistence.StateStore;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import java.security.MessageDigest;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -55,6 +60,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
+import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -64,19 +70,29 @@ import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 @Service
 public class StorefrontService {
+    private static final Logger LOGGER = LoggerFactory.getLogger(StorefrontService.class);
     private static final String PAYMENT_METHOD_WECHAT = "WECHAT";
     private static final String PAYMENT_METHOD_FRIEND = "FRIEND";
     private static final String STATE_KEY = "storefront";
     private static final int DEFAULT_DELIVERY_FEE = 500;
     private static final int DEFAULT_PACKAGE_FEE = 100;
     private static final int PAYMENT_TIMEOUT_HOURS = 6;
+    private static final int LEGACY_IDEMPOTENCY_WINDOW_MINUTES = 10;
+    private static final int MAX_IDEMPOTENCY_KEY_LENGTH = 128;
+    private static final String REFUND_STATUS_PENDING = "待审核";
+    private static final String REFUND_STATUS_PROCESSING = "退款中";
+    private static final String REFUND_STATUS_FAILED = "退款失败";
+    private static final String REFUND_STATUS_SUCCESS = "退款成功";
     private static final ZoneId STORE_ZONE = ZoneId.of("Asia/Shanghai");
     private static final Pattern DELIVERY_TIME_RANGE_PATTERN =
             Pattern.compile("(\\d{1,2}:\\d{2})\\s*[-~—至]\\s*(\\d{1,2}:\\d{2})");
@@ -90,6 +106,7 @@ public class StorefrontService {
     private final Path storagePath;
     private final StateStore stateStore;
     private final PrintJobService printJobService;
+    private final ObjectProvider<LotteryOrderLifecycle> lotteryLifecycleProvider;
 
     private final AtomicLong cartId = new AtomicLong(10);
     private final AtomicLong addressId = new AtomicLong(10);
@@ -115,6 +132,9 @@ public class StorefrontService {
     private final Map<Long, String> paymentStartedAts = new LinkedHashMap<>();
     private final Map<Long, String> paymentMethods = new LinkedHashMap<>();
     private final Map<String, PaymentShareState> paymentShares = new LinkedHashMap<>();
+    private final Map<String, OrderCreationIdempotencyState> orderCreationIdempotency = new LinkedHashMap<>();
+    private final Map<String, Long> refundAttemptIds = new LinkedHashMap<>();
+    private final Map<Long, OrderPromotionProjection> orderPromotions = new LinkedHashMap<>();
 
     private SettingsDto settings = new SettingsDto("禹邻优鲜", "/assets/products/store-logo.png", 0, DEFAULT_DELIVERY_FEE, DEFAULT_PACKAGE_FEE, "08:00-20:00", "400-800-1234", false, true, List.of());
 
@@ -123,12 +143,14 @@ public class StorefrontService {
             @Value("${storefront.storage-path:data/storefront-state.json}") String storagePath,
             @Value("${storefront.seed-demo-data:false}") boolean seedDemoData,
             StateStore stateStore,
-            PrintJobService printJobService
+            PrintJobService printJobService,
+            ObjectProvider<LotteryOrderLifecycle> lotteryLifecycleProvider
     ) {
         Path configuredPath = Path.of(storagePath);
         this.storagePath = configuredPath.isAbsolute() ? configuredPath : Path.of(System.getProperty("user.dir")).resolve(configuredPath);
         this.stateStore = stateStore;
         this.printJobService = printJobService;
+        this.lotteryLifecycleProvider = lotteryLifecycleProvider;
         if (!loadState()) {
             if (seedDemoData) {
                 seedDemoDataInternal();
@@ -150,7 +172,7 @@ public class StorefrontService {
     }
 
     public StorefrontService(String storagePath, boolean seedDemoData) {
-        this(storagePath, seedDemoData, new FileStateStore(), null);
+        this(storagePath, seedDemoData, new FileStateStore(), null, null);
     }
 
     public synchronized HomeDto home() {
@@ -660,7 +682,25 @@ public class StorefrontService {
     }
 
     public synchronized OrderDetailDto createOrder(CreateOrderRequest request) {
+        return createOrderIdempotently(request).order();
+    }
+
+    /**
+     * 新客户端应为每次“创建订单”意图生成稳定且唯一的幂等键。旧客户端未传键时，
+     * 服务端会在十分钟兼容窗口内按同一用户和同一请求指纹去重，并把生成的键返回给控制器。
+     */
+    public synchronized OrderCreationResult createOrderIdempotently(CreateOrderRequest request) {
         Long userId = currentUserId();
+        LocalDateTime now = LocalDateTime.now(STORE_ZONE);
+        OrderCreationResolution idempotency = resolveOrderCreation(request, userId, now);
+        if (idempotency.replayedOrder() != null) {
+            return new OrderCreationResult(
+                    toOrderDetailDto(idempotency.replayedOrder()),
+                    idempotency.key(),
+                    true
+            );
+        }
+
         boolean cartCheckout = hasCartItems(request.cartItemIds());
         OrderPreviewDto preview = buildOrderPreview(
                 request.addressId(),
@@ -678,7 +718,6 @@ public class StorefrontService {
         }
         reserveStock(preview.items());
         long id = orderId.incrementAndGet();
-        LocalDateTime now = LocalDateTime.now(STORE_ZONE);
         String createdAt = now.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME);
         String deliveryDate = deliveryDateForSlot(preview.deliverySlot().label(), now.toLocalDate()).toString();
         String orderNo = "XD" + now.format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss")) + id;
@@ -707,8 +746,129 @@ public class StorefrontService {
         if (cartCheckout) {
             request.cartItemIds().forEach(cartItems::remove);
         }
+        orderCreationIdempotency.put(
+                orderCreationMapKey(userId, idempotency.key()),
+                new OrderCreationIdempotencyState(
+                        userId,
+                        idempotency.key(),
+                        idempotency.fingerprint(),
+                        id,
+                        createdAt,
+                        idempotency.legacy()
+                )
+        );
         persist();
-        return toOrderDetailDto(state);
+        return new OrderCreationResult(toOrderDetailDto(state), idempotency.key(), false);
+    }
+
+    private OrderCreationResolution resolveOrderCreation(
+            CreateOrderRequest request,
+            Long userId,
+            LocalDateTime now
+    ) {
+        String fingerprint = orderRequestFingerprint(request);
+        String suppliedKey = normalizeIdempotencyKey(request.idempotencyKey());
+        if (suppliedKey != null) {
+            OrderCreationIdempotencyState existing =
+                    orderCreationIdempotency.get(orderCreationMapKey(userId, suppliedKey));
+            return orderCreationResolution(existing, userId, suppliedKey, fingerprint, false);
+        }
+
+        OrderCreationIdempotencyState legacyReplay = orderCreationIdempotency.values().stream()
+                .filter(OrderCreationIdempotencyState::legacy)
+                .filter(state -> state.userId().equals(userId))
+                .filter(state -> state.requestFingerprint().equals(fingerprint))
+                .filter(state -> isWithinLegacyIdempotencyWindow(state.createdAt(), now))
+                .max(Comparator.comparing(OrderCreationIdempotencyState::createdAt))
+                .orElse(null);
+        if (legacyReplay != null) {
+            return orderCreationResolution(
+                    legacyReplay,
+                    userId,
+                    legacyReplay.key(),
+                    fingerprint,
+                    true
+            );
+        }
+        return new OrderCreationResolution(
+                UUID.randomUUID().toString(),
+                fingerprint,
+                true,
+                null
+        );
+    }
+
+    private OrderCreationResolution orderCreationResolution(
+            OrderCreationIdempotencyState existing,
+            Long userId,
+            String key,
+            String fingerprint,
+            boolean legacy
+    ) {
+        if (existing == null) {
+            return new OrderCreationResolution(key, fingerprint, legacy, null);
+        }
+        if (!existing.userId().equals(userId)) {
+            throw new BusinessException(409, "订单幂等键已被其他用户占用");
+        }
+        if (!existing.requestFingerprint().equals(fingerprint)) {
+            throw new BusinessException(409, "订单幂等键已用于不同的下单请求");
+        }
+        OrderState replayedOrder = orders.get(existing.orderId());
+        if (replayedOrder == null) {
+            throw new BusinessException(409, "订单幂等记录异常，请更换幂等键后重试");
+        }
+        return new OrderCreationResolution(key, fingerprint, existing.legacy(), replayedOrder);
+    }
+
+    private String normalizeIdempotencyKey(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        String normalized = value.trim();
+        if (normalized.length() > MAX_IDEMPOTENCY_KEY_LENGTH
+                || normalized.chars().anyMatch(Character::isISOControl)) {
+            throw new BusinessException(400, "订单幂等键长度不能超过 128 且不能包含控制字符");
+        }
+        return normalized;
+    }
+
+    private String orderCreationMapKey(Long userId, String key) {
+        return userId + "\u0000" + key;
+    }
+
+    private String orderRequestFingerprint(CreateOrderRequest request) {
+        String cartItemIds = request.cartItemIds() == null
+                ? ""
+                : request.cartItemIds().stream().map(String::valueOf).reduce((left, right) -> left + "," + right).orElse("");
+        String quantity = request.quantity() == null
+                ? ""
+                : request.quantity().stripTrailingZeros().toPlainString();
+        String canonical = String.join(
+                "\u001f",
+                Objects.toString(request.addressId(), ""),
+                Objects.toString(request.deliverySlotId(), ""),
+                Objects.toString(request.remark(), ""),
+                cartItemIds,
+                Objects.toString(request.productId(), ""),
+                Objects.toString(request.skuId(), ""),
+                quantity
+        );
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            return HexFormat.of().formatHex(digest.digest(canonical.getBytes(StandardCharsets.UTF_8)));
+        } catch (Exception exception) {
+            throw new IllegalStateException("无法生成订单幂等指纹", exception);
+        }
+    }
+
+    private boolean isWithinLegacyIdempotencyWindow(String createdAt, LocalDateTime now) {
+        try {
+            LocalDateTime created = LocalDateTime.parse(createdAt);
+            return !created.isBefore(now.minusMinutes(LEGACY_IDEMPOTENCY_WINDOW_MINUTES));
+        } catch (RuntimeException exception) {
+            return false;
+        }
     }
 
     public synchronized List<OrderDto> orders(String status) {
@@ -844,6 +1004,7 @@ public class StorefrontService {
         OrderState next = order.withStatus("已取消");
         orders.put(id, next);
         persist();
+        notifyLotteryCancelled(order.id(), "USER_CANCELLED");
         return toOrderDetailDto(next);
     }
 
@@ -875,7 +1036,24 @@ public class StorefrontService {
             );
         }
 
-        reserveStock(restarted.items());
+        LotteryOrderLifecycle lotteryLifecycle = lotteryLifecycle();
+        boolean lotteryRestarted = false;
+        try {
+            if (lotteryLifecycle != null) {
+                lotteryLifecycle.onOrderRestarting(restarted.id());
+                lotteryRestarted = true;
+            }
+            reserveStock(restarted.items());
+        } catch (RuntimeException exception) {
+            if (lotteryRestarted) {
+                try {
+                    lotteryLifecycle.onOrderRestartFailed(restarted.id());
+                } catch (RuntimeException compensationException) {
+                    exception.addSuppressed(compensationException);
+                }
+            }
+            throw exception;
+        }
         String paymentStartedAt = now.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME);
         paymentStartedAts.put(id, paymentStartedAt);
         paymentOrderNos.put(id, restartedPaymentOrderNo(restarted, now));
@@ -908,6 +1086,7 @@ public class StorefrontService {
             restoreStock(order.items());
             orders.put(order.id(), order.withStatus("已关闭"));
             invalidatePaymentShares(order.id());
+            notifyLotteryExpired(order.id());
         }
         persist();
         return expired.size();
@@ -962,6 +1141,10 @@ public class StorefrontService {
         OrderState order = orderState(id);
         if (!"待支付".equals(order.status())) {
             throw new BusinessException(409, "当前订单不可发起好友代付");
+        }
+        LotteryOrderLifecycle lotteryLifecycle = lotteryLifecycle();
+        if (lotteryLifecycle != null) {
+            lotteryLifecycle.lockForPaymentShare(order.id(), order.userId());
         }
         invalidatePaymentShares(order.id());
         paymentMethods.put(order.id(), PAYMENT_METHOD_FRIEND);
@@ -1030,30 +1213,78 @@ public class StorefrontService {
         if (!"SUCCESS".equalsIgnoreCase(request.tradeState())) {
             throw new BusinessException(400, "支付状态不是成功");
         }
-        closeExpiredOrders(LocalDateTime.now(STORE_ZONE));
+        LocalDateTime now = LocalDateTime.now(STORE_ZONE);
+        closeExpiredOrders(now);
         OrderState order = orderByPaymentNo(request.orderNo());
-        if (request.totalAmount() != null && !request.totalAmount().equals(order.payableAmount())) {
+        if (request.totalAmount() == null || !request.totalAmount().equals(order.payableAmount())) {
             throw new BusinessException(409, "微信支付回调金额与订单金额不一致");
         }
-        if (!paymentOrderNo(order).equals(request.orderNo())) {
-            return new PaymentConfirmationResult(toOrderDetailDto(order), false);
+        if (request.transactionId() == null || request.transactionId().isBlank()) {
+            throw new BusinessException(409, "微信支付回调缺少交易单号");
         }
-        if (!"待支付".equals(order.status())) {
-            if (order.paidAmount() > 0 && request.transactionId() != null && !request.transactionId().isBlank()) {
-                paymentTransactionIds.put(order.orderNo(), request.transactionId().trim());
+
+        String transactionId = request.transactionId().trim();
+        String recordedTransactionId = paymentTransactionIds.get(order.orderNo());
+        if (order.paidAmount() > 0) {
+            if (recordedTransactionId != null
+                    && !recordedTransactionId.isBlank()
+                    && !recordedTransactionId.equals(transactionId)) {
+                throw new BusinessException(409, "订单已记录其他微信支付交易单号");
             }
+            paymentTransactionIds.put(order.orderNo(), transactionId);
+            RefundDto automaticRefund = automaticPaymentRefund(order.id());
+            Long retryRefundId = automaticRefund != null
+                    && List.of(REFUND_STATUS_PENDING, REFUND_STATUS_FAILED).contains(automaticRefund.status())
+                    ? automaticRefund.id()
+                    : null;
             persist();
-            return new PaymentConfirmationResult(toOrderDetailDto(order), false);
+            return new PaymentConfirmationResult(toOrderDetailDto(order), false, retryRefundId);
         }
-        if (request.transactionId() != null && !request.transactionId().isBlank()) {
-            paymentTransactionIds.put(order.orderNo(), request.transactionId().trim());
-        }
+
+        paymentTransactionIds.put(order.orderNo(), transactionId);
         String nextStatus = Boolean.FALSE.equals(settings.autoDeliveryEnabled()) ? "已支付/待接单" : "备货中";
-        OrderState paid = order.withStatus(nextStatus).withPaidAmount(order.payableAmount());
-        orders.put(order.id(), paid);
+        if ("待支付".equals(order.status())) {
+            OrderState paid = order.withStatus(nextStatus).withPaidAmount(order.payableAmount());
+            orders.put(order.id(), paid);
+            invalidatePaymentShares(order.id());
+            persist();
+            return new PaymentConfirmationResult(toOrderDetailDto(paid), true);
+        }
+
+        boolean fulfillmentRecovered = false;
+        if ("已关闭".equals(order.status()) && !requiresDeliverySlotSelection(order, now)) {
+            try {
+                reserveStock(order.items());
+                fulfillmentRecovered = true;
+            } catch (BusinessException ignored) {
+                fulfillmentRecovered = false;
+            }
+        }
+        if (fulfillmentRecovered) {
+            OrderState paid = order.withStatus(nextStatus).withPaidAmount(order.payableAmount());
+            orders.put(order.id(), paid);
+            invalidatePaymentShares(order.id());
+            persist();
+            return new PaymentConfirmationResult(toOrderDetailDto(paid), true);
+        }
+
+        String originalStatus = order.status();
+        OrderState paidForRefund = order
+                .withPaidAmount(order.payableAmount())
+                .withStatus(REFUND_STATUS_FAILED);
+        orders.put(order.id(), paidForRefund);
         invalidatePaymentShares(order.id());
+        RefundDto automaticRefund = createAutomaticPaymentRefund(
+                paidForRefund,
+                originalStatus,
+                request.orderNo()
+        );
         persist();
-        return new PaymentConfirmationResult(toOrderDetailDto(paid), true);
+        return new PaymentConfirmationResult(
+                toOrderDetailDto(paidForRefund),
+                true,
+                automaticRefund.id()
+        );
     }
 
     public synchronized RefundDto createRefund(RefundRequest request) {
@@ -1061,7 +1292,7 @@ public class StorefrontService {
         if ("待支付".equals(order.status())) {
             throw new BusinessException(409, "待支付订单不能申请退款");
         }
-        if ("退款中".equals(order.status())) {
+        if (List.of(REFUND_STATUS_PROCESSING, REFUND_STATUS_FAILED).contains(order.status())) {
             throw new BusinessException(409, "退款申请处理中，请勿重复提交");
         }
         int refundable = refundableAmount(order, request.orderItemIds(), null);
@@ -1072,8 +1303,9 @@ public class StorefrontService {
         Long userId = currentUserId();
         RefundDto refund = createRefundRecord(id, userId, order, request.refundAmount(), request.reason(), "USER", evidenceImages(request.evidenceImages()));
         refunds.put(id, new RefundState(userId, refund));
+        refundAttemptIds.put(refund.refundNo(), id);
         refundOriginalStatuses.putIfAbsent(order.id(), order.status());
-        OrderState next = order.withStatus("退款中");
+        OrderState next = order.withStatus(REFUND_STATUS_PROCESSING);
         orders.put(order.id(), next);
         persist();
         return refund;
@@ -1094,8 +1326,9 @@ public class StorefrontService {
         long id = refundId.incrementAndGet();
         RefundDto refund = createRefundRecord(id, request.userId(), order, request.refundAmount(), request.reason(), "ADMIN", List.of());
         refunds.put(id, new RefundState(request.userId(), refund));
+        refundAttemptIds.put(refund.refundNo(), id);
         refundOriginalStatuses.putIfAbsent(order.id(), order.status());
-        orders.put(order.id(), order.withStatus("退款中"));
+        orders.put(order.id(), order.withStatus(REFUND_STATUS_PROCESSING));
         persist();
         return refund;
     }
@@ -1158,16 +1391,67 @@ public class StorefrontService {
     public synchronized RefundDto approveRefund(Long id) {
         RefundState state = refundState(id);
         RefundDto current = normalizeRefund(state);
-        if (!List.of("待审核", "退款中").contains(current.status())) {
+        if (REFUND_STATUS_SUCCESS.equals(current.status())) {
+            return current;
+        }
+        if (!List.of(REFUND_STATUS_PENDING, REFUND_STATUS_PROCESSING, REFUND_STATUS_FAILED).contains(current.status())) {
             throw new BusinessException(409, "当前退款状态不可审核通过");
         }
-        RefundDto nextRefund = copyRefund(current, current.refundAmount(), current.reason(), "退款成功");
+        RefundDto nextRefund = copyRefundState(
+                current,
+                current.refundNo(),
+                current.refundAmount(),
+                current.reason(),
+                REFUND_STATUS_SUCCESS,
+                "",
+                "",
+                current.retryCount(),
+                current.lastAttemptAt()
+        );
         refunds.put(id, new RefundState(state.userId(), nextRefund));
         OrderState order = adminOrderState(current.orderId());
+        boolean orderAlreadyFulfilled = "已完成".equals(order.status())
+                || "已完成".equals(refundOriginalStatuses.get(order.id()));
         int refundedAmount = order.refundedAmount() + current.refundAmount();
         String orderStatus = refundedAmount >= order.paidAmount() ? "已退款" : "部分退款";
         orders.put(order.id(), order.withStatus(orderStatus).withRefundedAmount(refundedAmount));
         refundOriginalStatuses.remove(order.id());
+        persist();
+        if (refundedAmount >= order.paidAmount()) {
+            notifyLotteryFullyRefunded(order.id(), orderAlreadyFulfilled);
+        }
+        return nextRefund;
+    }
+
+    public synchronized RefundDto markRefundSubmitting(Long id) {
+        RefundState state = refundState(id);
+        RefundDto current = normalizeRefund(state);
+        if (REFUND_STATUS_SUCCESS.equals(current.status())) {
+            return current;
+        }
+        if (!List.of(REFUND_STATUS_PENDING, REFUND_STATUS_PROCESSING, REFUND_STATUS_FAILED).contains(current.status())) {
+            throw new BusinessException(409, "当前退款状态不可提交微信退款");
+        }
+        int retryCount = current.retryCount() + 1;
+        String refundNo = current.refundNo();
+        if (REFUND_STATUS_FAILED.equals(current.status()) && requiresNewRefundAttemptNo(current.failureCode())) {
+            refundNo = "RF" + current.id() + "R" + retryCount;
+        }
+        RefundDto nextRefund = copyRefundState(
+                current,
+                refundNo,
+                current.refundAmount(),
+                current.reason(),
+                REFUND_STATUS_PROCESSING,
+                "",
+                "",
+                retryCount,
+                LocalDateTime.now(STORE_ZONE).format(DateTimeFormatter.ISO_LOCAL_DATE_TIME)
+        );
+        refunds.put(id, new RefundState(state.userId(), nextRefund));
+        refundAttemptIds.put(refundNo, id);
+        OrderState order = adminOrderState(current.orderId());
+        orders.put(order.id(), order.withStatus(REFUND_STATUS_PROCESSING));
         persist();
         return nextRefund;
     }
@@ -1175,15 +1459,77 @@ public class StorefrontService {
     public synchronized RefundDto markRefundProcessing(Long id) {
         RefundState state = refundState(id);
         RefundDto current = normalizeRefund(state);
-        if (!"待审核".equals(current.status())) {
+        if (REFUND_STATUS_SUCCESS.equals(current.status())) {
+            return current;
+        }
+        if (!List.of(REFUND_STATUS_PENDING, REFUND_STATUS_PROCESSING, REFUND_STATUS_FAILED).contains(current.status())) {
             throw new BusinessException(409, "当前退款状态不可提交微信退款");
         }
-        RefundDto nextRefund = copyRefund(current, current.refundAmount(), current.reason(), "退款中");
+        RefundDto nextRefund = copyRefundState(
+                current,
+                current.refundNo(),
+                current.refundAmount(),
+                current.reason(),
+                REFUND_STATUS_PROCESSING,
+                "",
+                "",
+                current.retryCount(),
+                current.lastAttemptAt().isBlank()
+                        ? LocalDateTime.now(STORE_ZONE).format(DateTimeFormatter.ISO_LOCAL_DATE_TIME)
+                        : current.lastAttemptAt()
+        );
         refunds.put(id, new RefundState(state.userId(), nextRefund));
         OrderState order = adminOrderState(current.orderId());
-        orders.put(order.id(), order.withStatus("退款中"));
+        orders.put(order.id(), order.withStatus(REFUND_STATUS_PROCESSING));
         persist();
         return nextRefund;
+    }
+
+    public synchronized RefundDto markRefundFailed(Long id, String failureCode, String failureMessage) {
+        RefundState state = refundState(id);
+        RefundDto current = normalizeRefund(state);
+        if (REFUND_STATUS_SUCCESS.equals(current.status())) {
+            return current;
+        }
+        if ("已拒绝".equals(current.status())) {
+            throw new BusinessException(409, "已拒绝退款不能标记为失败");
+        }
+        RefundDto nextRefund = copyRefundState(
+                current,
+                current.refundNo(),
+                current.refundAmount(),
+                current.reason(),
+                REFUND_STATUS_FAILED,
+                cleanText(failureCode).isBlank() ? "UNKNOWN" : cleanText(failureCode),
+                cleanFailureMessage(failureMessage),
+                current.retryCount(),
+                current.lastAttemptAt().isBlank()
+                        ? LocalDateTime.now(STORE_ZONE).format(DateTimeFormatter.ISO_LOCAL_DATE_TIME)
+                        : current.lastAttemptAt()
+        );
+        refunds.put(id, new RefundState(state.userId(), nextRefund));
+        OrderState order = adminOrderState(current.orderId());
+        orders.put(order.id(), order.withStatus(REFUND_STATUS_FAILED));
+        persist();
+        return nextRefund;
+    }
+
+    public synchronized List<RefundDto> retryableRefunds() {
+        return refunds.values().stream()
+                .map(this::normalizeRefund)
+                .filter(refund -> REFUND_STATUS_FAILED.equals(refund.status()))
+                .sorted(Comparator.comparing(RefundDto::id))
+                .limit(50)
+                .toList();
+    }
+
+    public synchronized List<RefundDto> processingRefunds() {
+        return refunds.values().stream()
+                .map(this::normalizeRefund)
+                .filter(refund -> REFUND_STATUS_PROCESSING.equals(refund.status()))
+                .sorted(Comparator.comparing(RefundDto::id))
+                .limit(50)
+                .toList();
     }
 
     public synchronized RefundDto rejectRefund(Long id, String reason) {
@@ -1207,18 +1553,29 @@ public class StorefrontService {
     }
 
     public synchronized RefundDto confirmRefund(RefundNotifyRequest request) {
-        RefundState state = refunds.values().stream()
-                .filter(item -> item.refund().refundNo().equals(request.refundNo()))
-                .findFirst()
-                .orElseThrow(() -> new BusinessException(404, "退款申请不存在"));
-        if (!"SUCCESS".equalsIgnoreCase(request.refundStatus())) {
-            return normalizeRefund(state);
-        }
+        RefundState state = refundStateByAttemptNo(request.refundNo());
         RefundDto refund = normalizeRefund(state);
-        if ("退款成功".equals(refund.status())) {
+        if (REFUND_STATUS_SUCCESS.equals(refund.status())) {
             return refund;
         }
-        return approveRefund(refund.id());
+        String status = request.refundStatus() == null ? "" : request.refundStatus().trim().toUpperCase();
+        if ("SUCCESS".equals(status)) {
+            return approveRefund(refund.id());
+        }
+        if (!refund.refundNo().equals(request.refundNo())) {
+            return refund;
+        }
+        if ("PROCESSING".equals(status)) {
+            return markRefundProcessing(refund.id());
+        }
+        if ("CLOSED".equals(status) || "ABNORMAL".equals(status)) {
+            return markRefundFailed(refund.id(), status, "微信退款状态为 " + status + "，等待幂等重试");
+        }
+        return markRefundFailed(
+                refund.id(),
+                "UNKNOWN_STATUS",
+                "微信返回未知退款状态: " + (status.isBlank() ? "<empty>" : status)
+        );
     }
 
     public synchronized List<OrderStatusCountDto> orderStats() {
@@ -1251,7 +1608,11 @@ public class StorefrontService {
                 .filter(order -> List.of("待支付", "已支付/待接单", "备货中").contains(order.status()))
                 .count();
         long refundPendingCount = refunds.values().stream()
-                .filter(state -> "待审核".equals(state.refund().status()))
+                .filter(state -> List.of(
+                        REFUND_STATUS_PENDING,
+                        REFUND_STATUS_PROCESSING,
+                        REFUND_STATUS_FAILED
+                ).contains(state.refund().status()))
                 .filter(state -> createdDate(adminOrderState(state.refund().orderId())).equals(targetDate))
                 .count();
         return Map.of(
@@ -1384,21 +1745,25 @@ public class StorefrontService {
         if (!"配送中".equals(order.status())) {
             throw new BusinessException(409, "当前订单状态不可完成");
         }
-        return updateOrderStatus(order, "已完成");
+        OrderDetailDto completed = updateOrderStatus(order, "已完成");
+        notifyLotteryFulfilled(order.id());
+        return completed;
     }
 
     public synchronized OrderDetailDto adminCancelOrder(Long id) {
         OrderState order = adminOrderState(id);
-        if (!List.of("待支付", "已支付/待接单", "备货中").contains(order.status())) {
-            throw new BusinessException(409, "当前订单状态不可取消");
+        if (order.paidAmount() != null && order.paidAmount() > 0) {
+            throw new BusinessException(409, "已付款订单不能直接取消，请通过退款流程处理");
         }
-        if ("待支付".equals(order.status())) {
-            restoreStock(order.items());
+        if (!"待支付".equals(order.status())) {
+            throw new BusinessException(409, "仅待支付订单可以由后台取消");
         }
+        restoreStock(order.items());
         OrderState next = order.withStatus("已取消");
         orders.put(id, next);
         invalidatePaymentShares(order.id());
         persist();
+        notifyLotteryCancelled(order.id(), "ADMIN_CANCELLED");
         return toOrderDetailDto(next);
     }
 
@@ -1453,6 +1818,18 @@ public class StorefrontService {
             paymentMethods.putAll(snapshot.paymentMethods() == null ? Map.of() : snapshot.paymentMethods());
             paymentShares.clear();
             paymentShares.putAll(snapshot.paymentShares() == null ? Map.of() : snapshot.paymentShares());
+            orderCreationIdempotency.clear();
+            orderCreationIdempotency.putAll(
+                    snapshot.orderCreationIdempotency() == null ? Map.of() : snapshot.orderCreationIdempotency()
+            );
+            refundAttemptIds.clear();
+            refundAttemptIds.putAll(snapshot.refundAttemptIds() == null ? Map.of() : snapshot.refundAttemptIds());
+            refunds.values().forEach(refund -> refundAttemptIds.putIfAbsent(
+                    refund.refund().refundNo(),
+                    refund.refund().id()
+            ));
+            orderPromotions.clear();
+            orderPromotions.putAll(snapshot.orderPromotions() == null ? Map.of() : snapshot.orderPromotions());
             settings = settingsOrDefault(snapshot.settings());
             resetSequences();
             return true;
@@ -1483,6 +1860,9 @@ public class StorefrontService {
                 new LinkedHashMap<>(paymentStartedAts),
                 new LinkedHashMap<>(paymentMethods),
                 new LinkedHashMap<>(paymentShares),
+                new LinkedHashMap<>(orderCreationIdempotency),
+                new LinkedHashMap<>(refundAttemptIds),
+                new LinkedHashMap<>(orderPromotions),
                 settings
         );
         try {
@@ -2350,6 +2730,334 @@ public class StorefrontService {
         return paymentShares.entrySet().removeIf(entry -> Objects.equals(entry.getValue().orderId(), orderId));
     }
 
+    public synchronized OrderDetailDto lotteryOrder(long orderId, long userId) {
+        closeExpiredOrders(LocalDateTime.now(STORE_ZONE));
+        OrderState order = adminOrderState(orderId);
+        if (!Objects.equals(order.userId(), userId)) {
+            throw new BusinessException(404, "订单不存在");
+        }
+        return toOrderDetailDto(order);
+    }
+
+    public synchronized boolean hasActivePaymentShare(long orderId) {
+        OrderState order = orders.get(orderId);
+        if (order == null || !"待支付".equals(order.status())) {
+            return false;
+        }
+        return paymentShares.values().stream()
+                .anyMatch(share -> Objects.equals(share.orderId(), orderId))
+                && PAYMENT_METHOD_FRIEND.equals(paymentMethodCode(orderId));
+    }
+
+    public synchronized void validateLotteryGift(Long productId, Long selectedSkuId) {
+        lotteryGift(productId, selectedSkuId, null, null, null);
+    }
+
+    public synchronized boolean canReserveLotteryGift(Long productId, Long selectedSkuId) {
+        try {
+            ProductDto product = lotteryGiftProduct(productId);
+            ProductSkuDto sku = lotteryGiftSku(product, selectedSkuId);
+            BigDecimal stock = sku == null ? product.stockQty() : sku.stockQty();
+            return stock != null && stock.compareTo(BigDecimal.ONE) >= 0;
+        } catch (BusinessException exception) {
+            return false;
+        }
+    }
+
+    public synchronized Gift lotteryGift(
+            Long productId,
+            Long selectedSkuId,
+            Long drawId,
+            Long prizeId,
+            String prizeImageUrl
+    ) {
+        ProductDto product = lotteryGiftProduct(productId);
+        ProductSkuDto sku = lotteryGiftSku(product, selectedSkuId);
+        String imageUrl = hasText(prizeImageUrl)
+                ? prizeImageUrl.trim()
+                : sku != null && hasText(sku.imageUrl()) ? sku.imageUrl() : product.imageUrl();
+        return new Gift(
+                drawId,
+                prizeId,
+                product.id(),
+                sku == null ? null : sku.id(),
+                product.name(),
+                sku == null ? "" : sku.specificationText(),
+                imageUrl,
+                BigDecimal.ONE,
+                "RESERVED"
+        );
+    }
+
+    public synchronized OrderPromotionProjection applyLotteryPromotion(
+            long orderId,
+            long userId,
+            OrderPromotionProjection promotion
+    ) {
+        OrderState order = adminOrderState(orderId);
+        if (!Objects.equals(order.userId(), userId)) {
+            throw new BusinessException(404, "订单不存在");
+        }
+        if (!"待支付".equals(order.status())) {
+            throw new BusinessException(409, "仅待支付订单可以抽奖");
+        }
+        if (hasActivePaymentShare(orderId)) {
+            throw new BusinessException(409, "已有有效好友代付链接，不能再抽奖");
+        }
+        OrderPromotionProjection existing = orderPromotions.get(orderId);
+        if (existing != null) {
+            if (Objects.equals(existing.drawId(), promotion.drawId())) {
+                return existing;
+            }
+            throw new BusinessException(409, "同一订单最多抽奖一次");
+        }
+
+        int discountAmount = Math.max(promotion.discountAmount() == null ? 0 : promotion.discountAmount(), 0);
+        int payableAmount = Math.max(1, order.payableAmount() - discountAmount);
+        if (!Objects.equals(payableAmount, promotion.payableAmount())) {
+            throw new BusinessException(409, "抽奖减免金额与订单金额不一致");
+        }
+        for (Gift gift : promotion.gifts()) {
+            if (!canReserveLotteryGift(gift.productId(), gift.skuId())) {
+                throw new BusinessException(409, gift.productName() + " 奖品库存不足");
+            }
+        }
+        for (Gift gift : promotion.gifts()) {
+            decreaseLotteryGiftStock(gift);
+        }
+
+        OrderState adjusted = order.withPayableAmount(payableAmount);
+        orders.put(orderId, adjusted);
+        orderPromotions.put(orderId, promotion);
+        if (!Objects.equals(order.payableAmount(), payableAmount)) {
+            LocalDateTime now = LocalDateTime.now(STORE_ZONE);
+            String paymentOrderNo = restartedPaymentOrderNo(order, now);
+            if (paymentOrderNo.equals(paymentOrderNo(order))) {
+                paymentOrderNo = restartedPaymentOrderNo(order, now.plusNanos(1_000_000));
+            }
+            paymentOrderNos.put(orderId, paymentOrderNo);
+        }
+        persist();
+        return promotion;
+    }
+
+    public synchronized void releaseLotteryPromotion(long orderId, boolean voided) {
+        OrderPromotionProjection projection = orderPromotions.get(orderId);
+        if (projection == null) {
+            return;
+        }
+        List<Gift> gifts = projection.gifts().stream()
+                .map(gift -> {
+                    if ("RESERVED".equals(gift.status())) {
+                        restoreLotteryGiftStock(gift);
+                        return copyGiftWithStatus(gift, "RELEASED");
+                    }
+                    return gift;
+                })
+                .toList();
+        orderPromotions.put(orderId, copyPromotion(
+                projection,
+                gifts,
+                voided ? "VOIDED" : projection.status()
+        ));
+        persist();
+    }
+
+    public synchronized void reserveLotteryPromotion(long orderId) {
+        OrderPromotionProjection projection = orderPromotions.get(orderId);
+        if (projection == null || projection.gifts().stream().noneMatch(gift -> "RELEASED".equals(gift.status()))) {
+            return;
+        }
+        for (Gift gift : projection.gifts()) {
+            if ("RELEASED".equals(gift.status()) && !canReserveLotteryGift(gift.productId(), gift.skuId())) {
+                throw new BusinessException(409, gift.productName() + " 奖品库存不足，暂时无法重启订单");
+            }
+        }
+        List<Gift> gifts = projection.gifts().stream()
+                .map(gift -> {
+                    if ("RELEASED".equals(gift.status())) {
+                        decreaseLotteryGiftStock(gift);
+                        return copyGiftWithStatus(gift, "RESERVED");
+                    }
+                    return gift;
+                })
+                .toList();
+        orderPromotions.put(orderId, copyPromotion(projection, gifts, "APPLIED"));
+        persist();
+    }
+
+    public synchronized void fulfillLotteryPromotion(long orderId) {
+        OrderPromotionProjection projection = orderPromotions.get(orderId);
+        if (projection == null) {
+            return;
+        }
+        List<Gift> gifts = projection.gifts().stream()
+                .map(gift -> "RESERVED".equals(gift.status())
+                        ? copyGiftWithStatus(gift, "FULFILLED")
+                        : gift)
+                .toList();
+        orderPromotions.put(orderId, copyPromotion(projection, gifts, projection.status()));
+        persist();
+    }
+
+    public synchronized OrderPromotionProjection lotteryPromotion(long orderId) {
+        return orderPromotions.get(orderId);
+    }
+
+    public synchronized Map<Long, OrderPromotionProjection> lotteryPromotions() {
+        return new LinkedHashMap<>(orderPromotions);
+    }
+
+    public synchronized void repairLotteryProjection(long orderId, OrderPromotionProjection projection) {
+        if (projection == null || orderPromotions.containsKey(orderId)) {
+            return;
+        }
+        OrderState order = orders.get(orderId);
+        if (order == null) {
+            return;
+        }
+        for (Gift gift : projection.gifts()) {
+            if ("RESERVED".equals(gift.status()) && !canReserveLotteryGift(gift.productId(), gift.skuId())) {
+                throw new BusinessException(409, gift.productName() + " 奖品库存不足，无法修复抽奖投影");
+            }
+        }
+        for (Gift gift : projection.gifts()) {
+            if ("RESERVED".equals(gift.status())) {
+                decreaseLotteryGiftStock(gift);
+            }
+        }
+        if (projection.payableAmount() != null
+                && !Objects.equals(order.payableAmount(), projection.payableAmount())) {
+            OrderState repaired = order.withPayableAmount(projection.payableAmount());
+            if (order.paidAmount() != null && order.paidAmount() > 0) {
+                repaired = repaired.withPaidAmount(projection.payableAmount());
+            }
+            orders.put(orderId, repaired);
+        }
+        orderPromotions.put(orderId, projection);
+        persist();
+    }
+
+    public synchronized void rollbackLotteryPromotion(long orderId, long drawId, int payableBefore) {
+        OrderPromotionProjection projection = orderPromotions.get(orderId);
+        if (projection == null || !Objects.equals(projection.drawId(), drawId)) {
+            return;
+        }
+        OrderState order = orders.get(orderId);
+        if (order == null || !"待支付".equals(order.status())) {
+            return;
+        }
+        for (Gift gift : projection.gifts()) {
+            if ("RESERVED".equals(gift.status())) {
+                restoreLotteryGiftStock(gift);
+            }
+        }
+        orderPromotions.remove(orderId);
+        orders.put(orderId, order.withPayableAmount(payableBefore));
+        if (!Objects.equals(order.payableAmount(), payableBefore)) {
+            rotatePaymentAttempt(order.withPayableAmount(payableBefore), LocalDateTime.now(STORE_ZONE));
+            return;
+        }
+        persist();
+    }
+
+    private ProductDto lotteryGiftProduct(Long productId) {
+        ProductDto product = productId == null ? null : products.get(productId);
+        if (product == null) {
+            throw new BusinessException(400, "赠品关联商品不存在");
+        }
+        if (product.status() == null || product.status() != 1) {
+            throw new BusinessException(400, "赠品关联商品已下架");
+        }
+        return product;
+    }
+
+    private ProductSkuDto lotteryGiftSku(ProductDto product, Long selectedSkuId) {
+        if (Boolean.TRUE.equals(product.skuEnabled())) {
+            if (selectedSkuId == null) {
+                throw new BusinessException(400, "多规格赠品必须关联 SKU");
+            }
+            ProductSkuDto sku = findSku(product, selectedSkuId)
+                    .orElseThrow(() -> new BusinessException(400, "赠品关联 SKU 不属于该商品"));
+            if (sku.status() == null || sku.status() != 1) {
+                throw new BusinessException(400, "赠品关联 SKU 已下架");
+            }
+            return sku;
+        }
+        if (selectedSkuId != null) {
+            throw new BusinessException(400, "单规格赠品不能关联 SKU");
+        }
+        return null;
+    }
+
+    private void decreaseLotteryGiftStock(Gift gift) {
+        ProductDto product = lotteryGiftProduct(gift.productId());
+        ProductSkuDto sku = lotteryGiftSku(product, gift.skuId());
+        if (sku != null) {
+            BigDecimal next = sku.stockQty().subtract(gift.quantity());
+            if (next.compareTo(BigDecimal.ZERO) < 0) {
+                throw new BusinessException(409, gift.productName() + " 奖品 SKU 库存不足");
+            }
+            products.put(product.id(), updateSkuStock(product, sku.id(), next));
+            return;
+        }
+        BigDecimal next = product.stockQty().subtract(gift.quantity());
+        if (next.compareTo(BigDecimal.ZERO) < 0) {
+            throw new BusinessException(409, gift.productName() + " 奖品库存不足");
+        }
+        products.put(product.id(), copyProduct(product, next, product.status()));
+    }
+
+    private void restoreLotteryGiftStock(Gift gift) {
+        ProductDto product = products.get(gift.productId());
+        if (product == null) {
+            return;
+        }
+        if (gift.skuId() != null) {
+            ProductSkuDto sku = findSku(product, gift.skuId()).orElse(null);
+            if (sku != null) {
+                products.put(product.id(), updateSkuStock(product, sku.id(), sku.stockQty().add(gift.quantity())));
+            }
+            return;
+        }
+        products.put(product.id(), copyProduct(product, product.stockQty().add(gift.quantity()), product.status()));
+    }
+
+    private Gift copyGiftWithStatus(Gift gift, String status) {
+        return new Gift(
+                gift.drawId(),
+                gift.prizeId(),
+                gift.productId(),
+                gift.skuId(),
+                gift.productName(),
+                gift.skuName(),
+                gift.imageUrl(),
+                gift.quantity(),
+                status
+        );
+    }
+
+    private OrderPromotionProjection copyPromotion(
+            OrderPromotionProjection projection,
+            List<Gift> gifts,
+            String status
+    ) {
+        return new OrderPromotionProjection(
+                projection.drawId(),
+                projection.prizeId(),
+                projection.prizeIndex(),
+                projection.prizeType(),
+                projection.prizeName(),
+                projection.discountAmount(),
+                projection.productId(),
+                projection.skuId(),
+                projection.imageUrl(),
+                projection.payableAmount(),
+                gifts,
+                status
+        );
+    }
+
     private String paymentMethodCode(Long orderId) {
         String code = paymentMethods.get(orderId);
         if (PAYMENT_METHOD_WECHAT.equals(code) || PAYMENT_METHOD_FRIEND.equals(code)) {
@@ -2358,6 +3066,62 @@ public class StorefrontService {
         boolean hasActiveShare = paymentShares.values().stream()
                 .anyMatch(share -> Objects.equals(share.orderId(), orderId));
         return hasActiveShare ? PAYMENT_METHOD_FRIEND : PAYMENT_METHOD_WECHAT;
+    }
+
+    private LotteryOrderLifecycle lotteryLifecycle() {
+        return lotteryLifecycleProvider == null ? null : lotteryLifecycleProvider.getIfAvailable();
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
+    }
+
+    private void notifyLotteryCancelled(long orderId, String reason) {
+        LotteryOrderLifecycle lifecycle = lotteryLifecycle();
+        if (lifecycle == null) {
+            return;
+        }
+        try {
+            lifecycle.onOrderCancelled(orderId, reason);
+        } catch (RuntimeException exception) {
+            LOGGER.error("订单取消后的抽奖补偿失败，orderId={}", orderId, exception);
+        }
+    }
+
+    private void notifyLotteryExpired(long orderId) {
+        LotteryOrderLifecycle lifecycle = lotteryLifecycle();
+        if (lifecycle == null) {
+            return;
+        }
+        try {
+            lifecycle.onOrderExpired(orderId);
+        } catch (RuntimeException exception) {
+            LOGGER.error("订单超时后的抽奖库存释放失败，orderId={}", orderId, exception);
+        }
+    }
+
+    private void notifyLotteryFulfilled(long orderId) {
+        LotteryOrderLifecycle lifecycle = lotteryLifecycle();
+        if (lifecycle == null) {
+            return;
+        }
+        try {
+            lifecycle.onOrderFulfilled(orderId);
+        } catch (RuntimeException exception) {
+            LOGGER.error("订单履约后的赠品状态更新失败，orderId={}", orderId, exception);
+        }
+    }
+
+    private void notifyLotteryFullyRefunded(long orderId, boolean orderAlreadyFulfilled) {
+        LotteryOrderLifecycle lifecycle = lotteryLifecycle();
+        if (lifecycle == null) {
+            return;
+        }
+        try {
+            lifecycle.onOrderFullyRefunded(orderId, orderAlreadyFulfilled);
+        } catch (RuntimeException exception) {
+            LOGGER.error("订单全额退款后的抽奖补偿失败，orderId={}", orderId, exception);
+        }
     }
 
     private OrderState adminOrderState(Long id) {
@@ -2401,20 +3165,88 @@ public class StorefrontService {
                 "RF" + id,
                 refundAmount,
                 reason,
-                "待审核",
+                REFUND_STATUS_PENDING,
                 evidenceImages(evidenceImages),
                 userId,
                 order.orderNo(),
                 source,
-                LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME)
+                LocalDateTime.now(STORE_ZONE).format(DateTimeFormatter.ISO_LOCAL_DATE_TIME)
         );
     }
 
+    private RefundDto createAutomaticPaymentRefund(
+            OrderState order,
+            String originalStatus,
+            String paidPaymentOrderNo
+    ) {
+        RefundDto existing = automaticPaymentRefund(order.id());
+        if (existing != null) {
+            return existing;
+        }
+        long id = refundId.incrementAndGet();
+        String refundNo = "RF" + id;
+        RefundDto refund = new RefundDto(
+                id,
+                order.id(),
+                refundNo,
+                order.payableAmount(),
+                "支付成功时订单状态为" + originalStatus + "且无法安全恢复履约，自动原路退款",
+                REFUND_STATUS_FAILED,
+                List.of(),
+                order.userId(),
+                order.orderNo(),
+                "SYSTEM_PAYMENT_RECOVERY",
+                LocalDateTime.now(STORE_ZONE).format(DateTimeFormatter.ISO_LOCAL_DATE_TIME),
+                "PENDING_SUBMISSION",
+                "自动退款已持久化，等待提交微信",
+                0,
+                "",
+                paidPaymentOrderNo
+        );
+        refunds.put(id, new RefundState(order.userId(), refund));
+        refundAttemptIds.put(refundNo, id);
+        refundOriginalStatuses.putIfAbsent(order.id(), originalStatus);
+        return refund;
+    }
+
+    private RefundDto automaticPaymentRefund(Long orderId) {
+        return refunds.values().stream()
+                .map(this::normalizeRefund)
+                .filter(refund -> refund.orderId().equals(orderId))
+                .filter(refund -> "SYSTEM_PAYMENT_RECOVERY".equals(refund.source()))
+                .max(Comparator.comparing(RefundDto::id))
+                .orElse(null);
+    }
+
     private RefundDto copyRefund(RefundDto source, Integer refundAmount, String reason, String status) {
+        return copyRefundState(
+                source,
+                source.refundNo(),
+                refundAmount,
+                reason,
+                status,
+                source.failureCode(),
+                source.failureMessage(),
+                source.retryCount(),
+                source.lastAttemptAt()
+        );
+    }
+
+    private RefundDto copyRefundState(
+            RefundDto source,
+            String refundNo,
+            Integer refundAmount,
+            String reason,
+            String status,
+            String failureCode,
+            String failureMessage,
+            Integer retryCount,
+            String lastAttemptAt
+    ) {
         return new RefundDto(
                 source.id(),
                 source.orderId(),
-                source.refundNo(),
+                refundNo,
                 refundAmount,
                 reason,
                 status,
@@ -2422,7 +3254,12 @@ public class StorefrontService {
                 source.userId(),
                 source.orderNo(),
                 source.source(),
-                source.createdAt()
+                source.createdAt(),
+                failureCode,
+                failureMessage,
+                retryCount,
+                lastAttemptAt,
+                source.paymentOrderNo()
         );
     }
 
@@ -2450,7 +3287,12 @@ public class StorefrontService {
                 userId,
                 orderNo,
                 refundSource,
-                createdAt
+                createdAt,
+                source.failureCode(),
+                source.failureMessage(),
+                source.retryCount(),
+                source.lastAttemptAt(),
+                source.paymentOrderNo()
         );
     }
 
@@ -2460,6 +3302,28 @@ public class StorefrontService {
             throw new BusinessException(404, "退款申请不存在");
         }
         return state;
+    }
+
+    private RefundState refundStateByAttemptNo(String refundNo) {
+        Long refundId = refundAttemptIds.get(refundNo);
+        if (refundId != null) {
+            return refundState(refundId);
+        }
+        return refunds.values().stream()
+                .filter(item -> item.refund().refundNo().equals(refundNo))
+                .findFirst()
+                .orElseThrow(() -> new BusinessException(404, "退款申请不存在"));
+    }
+
+    private boolean requiresNewRefundAttemptNo(String failureCode) {
+        return List.of("CLOSED", "ABNORMAL", "UNKNOWN_STATUS").contains(
+                failureCode == null ? "" : failureCode.toUpperCase()
+        );
+    }
+
+    private String cleanFailureMessage(String message) {
+        String cleaned = cleanText(message);
+        return cleaned.length() <= 500 ? cleaned : cleaned.substring(0, 500);
     }
 
     private int refundableAmount(OrderState order, List<Long> orderItemIds, Long excludedRefundId) {
@@ -2479,7 +3343,11 @@ public class StorefrontService {
                 .map(this::normalizeRefund)
                 .filter(refund -> refund.orderId().equals(order.id()))
                 .filter(refund -> excludedRefundId == null || !refund.id().equals(excludedRefundId))
-                .filter(refund -> List.of("待审核", "退款中").contains(refund.status()))
+                .filter(refund -> List.of(
+                        REFUND_STATUS_PENDING,
+                        REFUND_STATUS_PROCESSING,
+                        REFUND_STATUS_FAILED
+                ).contains(refund.status()))
                 .mapToInt(refund -> refund.refundAmount() == null ? 0 : refund.refundAmount())
                 .sum();
         return Math.max(order.paidAmount() - order.refundedAmount() - reserved, 0);
@@ -2644,6 +3512,7 @@ public class StorefrontService {
     ) {
         OrderState order = candidate.order();
         OrderDto summary = toOrderDto(order);
+        OrderPromotionProjection promotion = orderPromotions.get(order.id());
         return new AdminOrderDto(
                 summary.id(),
                 summary.orderNo(),
@@ -2665,12 +3534,15 @@ public class StorefrontService {
                 buildingOrderPosition,
                 sameAddressOrderCount,
                 printStatus,
-                printJobId
+                printJobId,
+                promotion == null || promotion.discountAmount() == null ? 0 : promotion.discountAmount(),
+                promotion == null ? List.of() : promotion.gifts()
         );
     }
 
     private OrderDetailDto toOrderDetailDto(OrderState order) {
         RefundDto latestRefund = latestRefund(order.id());
+        OrderPromotionProjection promotion = orderPromotions.get(order.id());
         return new OrderDetailDto(
                 order.id(),
                 order.orderNo(),
@@ -2694,11 +3566,15 @@ public class StorefrontService {
                 paymentOrderNo(order),
                 paymentExpireAt(order),
                 "已关闭".equals(order.status()) && order.paidAmount() == 0,
-                requiresDeliverySlotSelection(order, LocalDateTime.now(STORE_ZONE))
+                requiresDeliverySlotSelection(order, LocalDateTime.now(STORE_ZONE)),
+                promotion == null || promotion.discountAmount() == null ? 0 : promotion.discountAmount(),
+                promotion == null ? List.of() : promotion.gifts(),
+                promotion == null ? null : promotion.toResult()
         );
     }
 
     private PaymentShareDto toPaymentShareDto(String token, OrderState order) {
+        OrderPromotionProjection promotion = orderPromotions.get(order.id());
         return new PaymentShareDto(
                 normalizePaymentShareToken(token),
                 settings.storeName(),
@@ -2718,7 +3594,10 @@ public class StorefrontService {
                                 item.amount(),
                                 item.specificationText()
                         ))
-                        .toList()
+                        .toList(),
+                promotion == null || promotion.discountAmount() == null ? 0 : promotion.discountAmount(),
+                promotion == null ? List.of() : promotion.gifts(),
+                promotion == null ? null : promotion.toResult()
         );
     }
 
@@ -3300,7 +4179,35 @@ public class StorefrontService {
             Map<Long, String> paymentStartedAts,
             Map<Long, String> paymentMethods,
             Map<String, PaymentShareState> paymentShares,
+            Map<String, OrderCreationIdempotencyState> orderCreationIdempotency,
+            Map<String, Long> refundAttemptIds,
+            Map<Long, OrderPromotionProjection> orderPromotions,
             SettingsDto settings
+    ) {
+    }
+
+    public record OrderCreationResult(
+            OrderDetailDto order,
+            String idempotencyKey,
+            boolean replayed
+    ) {
+    }
+
+    private record OrderCreationResolution(
+            String key,
+            String fingerprint,
+            boolean legacy,
+            OrderState replayedOrder
+    ) {
+    }
+
+    public record OrderCreationIdempotencyState(
+            Long userId,
+            String key,
+            String requestFingerprint,
+            Long orderId,
+            String createdAt,
+            boolean legacy
     ) {
     }
 
@@ -3478,6 +4385,10 @@ public class StorefrontService {
 
         OrderState withPaidAmount(Integer nextPaidAmount) {
             return new OrderState(id, userId, orderNo, status, address, deliverySlot, items, productAmount, deliveryFee, packageFee, payableAmount, nextPaidAmount, refundedAmount, remark, createdAt, deliveryDate);
+        }
+
+        OrderState withPayableAmount(Integer nextPayableAmount) {
+            return new OrderState(id, userId, orderNo, status, address, deliverySlot, items, productAmount, deliveryFee, packageFee, nextPayableAmount, paidAmount, refundedAmount, remark, createdAt, deliveryDate);
         }
 
         OrderState withRefundedAmount(Integer nextRefundedAmount) {

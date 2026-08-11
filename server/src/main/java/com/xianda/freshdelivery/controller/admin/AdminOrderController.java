@@ -70,7 +70,7 @@ public class AdminOrderController {
 
     @PostMapping("/{id}/cancel")
     public ApiResponse<OrderDetailDto> cancel(@PathVariable Long id) {
-        return ApiResponse.ok(storefrontService.adminCancelOrder(id));
+        return ApiResponse.ok(wechatPaymentService.cancelAdminOrder(id));
     }
 
     @PostMapping("/batch/prepare")

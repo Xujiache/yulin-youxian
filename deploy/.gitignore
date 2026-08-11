@@ -1,0 +1,14 @@
+/out/
+/*.env
+/env/*.env
+!/env/*.example
+*.pid
+*.dmp
+*.dump
+*.dumpstream
+*.token
+token.*
+*.keystore
+*.jks
+*.p12
+*.pfx

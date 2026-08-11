@@ -26,10 +26,12 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -65,8 +67,23 @@ public class WxOrderController {
     }
 
     @PostMapping("/orders")
-    public ApiResponse<OrderDetailDto> create(@Valid @RequestBody CreateOrderRequest request) {
-        return ApiResponse.ok(storefrontService.createOrder(request));
+    public ResponseEntity<ApiResponse<OrderDetailDto>> create(
+            @Valid @RequestBody CreateOrderRequest request,
+            @RequestHeader(value = "Idempotency-Key", required = false) String headerIdempotencyKey
+    ) {
+        String bodyIdempotencyKey = request.idempotencyKey();
+        if (hasText(headerIdempotencyKey)
+                && hasText(bodyIdempotencyKey)
+                && !headerIdempotencyKey.trim().equals(bodyIdempotencyKey.trim())) {
+            throw new BusinessException(400, "请求头与请求体中的订单幂等键不一致");
+        }
+        String requestedKey = hasText(headerIdempotencyKey) ? headerIdempotencyKey : bodyIdempotencyKey;
+        StorefrontService.OrderCreationResult result = storefrontService.createOrderIdempotently(
+                request.withIdempotencyKey(requestedKey)
+        );
+        return ResponseEntity.ok()
+                .header("Idempotency-Key", result.idempotencyKey())
+                .body(ApiResponse.ok(result.order()));
     }
 
     @PostMapping("/orders/{id}/cancel")
@@ -161,5 +178,9 @@ public class WxOrderController {
             return "";
         }
         return filename.substring(dotIndex).toLowerCase(Locale.ROOT);
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
     }
 }

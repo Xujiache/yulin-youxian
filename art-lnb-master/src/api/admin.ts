@@ -102,6 +102,8 @@ export interface OrderSummary {
   sameAddressOrderCount: number
   printStatus?: 'NONE' | 'PENDING' | 'SUCCESS' | 'FAILED'
   printJobId?: number | null
+  discountAmount?: number
+  gifts?: OrderGift[]
 }
 
 export interface Address {
@@ -129,6 +131,18 @@ export interface OrderItem {
   specificationText?: string
 }
 
+export interface OrderGift {
+  drawId: number
+  prizeId: number
+  productId: number
+  skuId?: number | null
+  productName: string
+  skuName?: string
+  imageUrl?: string
+  quantity: number
+  status: 'RESERVED' | 'RELEASED' | 'FULFILLED' | string
+}
+
 export interface OrderDetail {
   id: number
   orderNo: string
@@ -149,6 +163,8 @@ export interface OrderDetail {
   userId: number
   refunds: Refund[]
   transactionId: string
+  discountAmount?: number
+  gifts?: OrderGift[]
 }
 
 export interface BatchOrderActionResult {

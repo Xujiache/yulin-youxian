@@ -4,22 +4,18 @@ const { getHome } = require("../../api/catalog");
 const { getDeliverySlots } = require("../../api/delivery");
 const {
   cancelOrder,
-  changeToWechatPayment,
-  createPaymentShare,
   getOrders,
   getOrder,
   restartOrder
 } = require("../../api/orders");
+const { mapWithConcurrency } = require("../../utils/async-pool");
 const { syncTheme } = require("../../utils/theme");
-const {
-  isPaidOrder,
-  isPaymentCancelled,
-  paymentErrorMessage,
-  requestWechatPayment,
-  waitForPaymentResult
-} = require("../../utils/wechat-payment");
+const { isPaymentCancelled } = require("../../utils/wechat-payment");
 
 const DEFAULT_CONTACT_PHONE = "400-800-1234";
+const ORDER_DETAIL_CONCURRENCY = 4;
+const ORDER_DETAIL_CACHE_TTL = 30000;
+const orderDetailCache = new Map();
 
 const TABS = ["全部", "待支付", "待接单", "备货中", "配送中", "已完成", "售后"];
 
@@ -104,6 +100,42 @@ function refundNotice(order) {
   return `退款申请未通过：${order.latestRefundReason || "请联系门店客服了解原因"}`;
 }
 
+function readCachedOrderDetail(id) {
+  const key = String(id);
+  const cached = orderDetailCache.get(key);
+  if (!cached) {
+    return null;
+  }
+  if (Date.now() - cached.savedAt > ORDER_DETAIL_CACHE_TTL) {
+    orderDetailCache.delete(key);
+    return null;
+  }
+  return cached.order;
+}
+
+function cacheOrderDetail(id, order) {
+  orderDetailCache.set(String(id), {
+    order,
+    savedAt: Date.now()
+  });
+}
+
+function invalidateOrderDetail(id) {
+  orderDetailCache.delete(String(id));
+}
+
+function mergeOrderDetail(summary, detail) {
+  if (!detail) {
+    return summary;
+  }
+  return {
+    ...detail,
+    ...summary,
+    items: Array.isArray(detail.items) && detail.items.length ? detail.items : (summary.items || []),
+    refunds: Array.isArray(detail.refunds) ? detail.refunds : (summary.refunds || [])
+  };
+}
+
 Page({
   data: {
     glassMode: false,
@@ -122,6 +154,7 @@ Page({
   },
 
   onLoad(options) {
+    this._ordersRequestToken = 0;
     const status = decodeURIComponent(options.status || "全部");
     this.setData({ activeStatus: TABS.includes(status) ? status : "全部" });
   },
@@ -130,6 +163,10 @@ Page({
     syncTheme(this);
     this.updateOrders(this.data.activeStatus);
     this.loadCartCount();
+  },
+
+  onUnload() {
+    this._ordersRequestToken += 1;
   },
 
   async loadCartCount() {
@@ -145,6 +182,8 @@ Page({
   },
 
   async updateOrders(status) {
+    const requestToken = this._ordersRequestToken + 1;
+    this._ordersRequestToken = requestToken;
     const app = getApp();
     if (!app.isLoggedIn || !app.isLoggedIn()) {
       this.setData({
@@ -156,18 +195,29 @@ Page({
       });
       return;
     }
+    this.setData({ loading: true });
     try {
       const remoteOrders = await getOrders({ status });
-      const detailedOrders = await Promise.all(
-        remoteOrders.map(async (item) => {
+      const detailedOrders = await mapWithConcurrency(
+        remoteOrders,
+        ORDER_DETAIL_CONCURRENCY,
+        async (item) => {
+          const cached = readCachedOrderDetail(item.id);
+          if (cached) {
+            return mergeOrderDetail(item, cached);
+          }
           try {
             const detail = await getOrder(item.id);
-            return { ...item, ...detail };
+            cacheOrderDetail(item.id, detail);
+            return mergeOrderDetail(item, detail);
           } catch {
             return item;
           }
-        })
+        }
       );
+      if (requestToken !== this._ordersRequestToken) {
+        return;
+      }
 
       this.setData({
         loading: false,
@@ -211,6 +261,7 @@ Page({
             secondaryActionText: secondaryActionText(item),
             statusText: displayOrderStatus(item.status),
             isPendingPayment: item.status === "待支付",
+            canViewDelivery: item.status === "配送中",
             statusClass,
             primaryBtnClass,
             isSingleProduct,
@@ -226,6 +277,9 @@ Page({
           : "当前状态下没有订单，切换其它状态或去首页下单看看。"
       });
     } catch (error) {
+      if (requestToken !== this._ordersRequestToken) {
+        return;
+      }
       this.setData({
         loading: false,
         needsLogin: error && error.loginRequired,
@@ -257,6 +311,13 @@ Page({
     wx.navigateTo({ url: `/pages/order-detail/index?id=${id}` });
   },
 
+  // 配送中订单直达详情页的配送卡片
+  handleViewDelivery(event) {
+    const id = event.currentTarget.dataset.id;
+    if (!id) return;
+    wx.navigateTo({ url: `/pages/order-detail/index?id=${id}&focus=delivery` });
+  },
+
   async handleRestartableAction(event) {
     const id = Number(event.currentTarget.dataset.id);
     const action = event.currentTarget.dataset.action;
@@ -286,6 +347,7 @@ Page({
         deliverySlotId = selectedSlot.id;
       }
       await restartOrder(id, deliverySlotId);
+      invalidateOrderDetail(id);
       await this.updateOrders(this.data.activeStatus);
       wx.showToast({ title: "订单已重启", icon: "success" });
       wx.navigateTo({ url: `/pages/order-detail/index?id=${id}` });
@@ -320,52 +382,15 @@ Page({
   },
 
   async handleFriendPayment(id) {
-    this.setData({ payingOrderId: id });
-    try {
-      const share = await createPaymentShare(id);
-      if (!share || !share.token) {
-        throw new Error("支付链接生成失败，请稍后重试");
-      }
-      wx.navigateTo({
-        url: `/pages/pay-for-other/index?token=${encodeURIComponent(share.token)}&owner=1&orderId=${id}`
-      });
-    } catch (error) {
-      wx.showToast({ title: error.message || "支付链接生成失败", icon: "none" });
-    } finally {
-      this.setData({ payingOrderId: null });
-    }
+    wx.navigateTo({
+      url: `/pages/order-detail/index?id=${id}&payMethod=FRIEND`
+    });
   },
 
   async handleWechatPayment(id) {
-    this.setData({ payingOrderId: id });
-    try {
-      const payment = await changeToWechatPayment(id);
-      await requestWechatPayment(payment);
-      const order = await waitForPaymentResult(id);
-      if (!isPaidOrder(order)) {
-        wx.showModal({
-          title: "支付处理中",
-          content: "微信已返回支付结果，订单状态还在确认中，请稍后刷新订单。",
-          showCancel: false
-        });
-        return;
-      }
-      wx.showToast({ title: "支付成功", icon: "success" });
-      await this.updateOrders(this.data.activeStatus);
-    } catch (error) {
-      if (isPaymentCancelled(error)) {
-        wx.showToast({ title: "支付已取消", icon: "none" });
-        return;
-      }
-      wx.showModal({
-        title: "支付失败",
-        content: paymentErrorMessage(error, "支付失败，请稍后重试"),
-        showCancel: false
-      });
-      await this.updateOrders(this.data.activeStatus);
-    } finally {
-      this.setData({ payingOrderId: null });
-    }
+    wx.navigateTo({
+      url: `/pages/order-detail/index?id=${id}&payMethod=WECHAT`
+    });
   },
 
   async handleService() {
@@ -376,7 +401,7 @@ Page({
     } catch {}
     wx.showModal({
       title: "联系客服",
-      content: `禺邻优鲜客服电话：${phone}`,
+      content: `禹邻优鲜客服电话：${phone}`,
       confirmText: "拨打电话",
       cancelText: "取消",
       success(result) {
@@ -422,6 +447,7 @@ Page({
     this.setData({ cancelling: true, showCancelModal: false });
     try {
       await cancelOrder(id, returnToCart);
+      invalidateOrderDetail(id);
       wx.showToast({
         title: returnToCart ? "已取消并放回购物车" : "订单已取消",
         icon: "success"

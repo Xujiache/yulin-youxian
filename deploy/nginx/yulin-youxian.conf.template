@@ -1,0 +1,75 @@
+server {
+    listen 80;
+    listen [::]:80;
+    server_name ${PUBLIC_HOST};
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name ${PUBLIC_HOST};
+    server_tokens off;
+
+    ssl_certificate ${TLS_CERTIFICATE};
+    ssl_certificate_key ${TLS_CERTIFICATE_KEY};
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_session_cache shared:YulinTLS:10m;
+    ssl_session_timeout 1d;
+
+    root ${YULIN_ROOT}/current/admin/dist;
+    index index.html;
+    client_max_body_size 10m;
+
+    add_header X-Content-Type-Options nosniff always;
+    add_header Referrer-Policy strict-origin-when-cross-origin always;
+
+    # SSE must bypass every buffering layer or the dispatch board stalls.
+    location = /api/admin/delivery/board/stream {
+        proxy_pass http://127.0.0.1:${SERVER_PORT};
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header Connection "";
+        proxy_buffering off;
+        proxy_request_buffering off;
+        proxy_cache off;
+        gzip off;
+        add_header X-Accel-Buffering no always;
+        proxy_read_timeout 1h;
+        proxy_send_timeout 1h;
+    }
+
+    location /api/ {
+        proxy_pass http://127.0.0.1:${SERVER_PORT};
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_connect_timeout 5s;
+        proxy_read_timeout 60s;
+    }
+
+    location /uploads/ {
+        proxy_pass http://127.0.0.1:${SERVER_PORT};
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        expires 1h;
+    }
+
+    location ~* \.(?:js|css|svg|png|jpe?g|webp|woff2?)$ {
+        try_files $uri =404;
+        expires 7d;
+        add_header Cache-Control "public, immutable";
+    }
+
+    location / {
+        try_files $uri $uri/ /index.html;
+        add_header Cache-Control "no-cache";
+    }
+}

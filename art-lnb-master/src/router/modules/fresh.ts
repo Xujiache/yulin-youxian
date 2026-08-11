@@ -130,6 +130,122 @@ export const freshRoutes: AppRouteRecord = {
         icon: 'ri:database-2-line',
         keepAlive: false
       }
+    },
+    {
+      path: 'delivery/board',
+      name: 'FreshDeliveryBoard',
+      component: '/fresh/delivery/board/index',
+      meta: {
+        title: '配送调度台',
+        icon: 'ri:navigation-line',
+        keepAlive: true,
+        fixedTab: true
+      }
+    },
+    {
+      path: 'delivery/tasks',
+      name: 'FreshDeliveryTasks',
+      component: '/fresh/delivery/tasks/index',
+      meta: {
+        title: '配送任务'
+      }
+    },
+    {
+      path: 'delivery/waves',
+      name: 'FreshDeliveryWaves',
+      component: '/fresh/delivery/waves/index',
+      meta: {
+        title: '配送波次'
+      }
+    },
+    {
+      path: 'delivery/waves/:id',
+      name: 'FreshDeliveryWaveDetail',
+      component: '/fresh/delivery/waves/detail',
+      meta: {
+        title: '波次详情',
+        isHide: true
+      }
+    },
+    {
+      path: 'delivery/riders',
+      name: 'FreshDeliveryRiders',
+      component: '/fresh/delivery/riders/index',
+      meta: {
+        title: '骑手管理'
+      }
+    },
+    {
+      path: 'delivery/riders/:id',
+      name: 'FreshDeliveryRiderDetail',
+      component: '/fresh/delivery/riders/detail',
+      meta: {
+        title: '骑手详情',
+        isHide: true
+      }
+    },
+    {
+      path: 'delivery/exceptions',
+      name: 'FreshDeliveryExceptions',
+      component: '/fresh/delivery/exceptions/index',
+      meta: {
+        title: '异常处理'
+      }
+    },
+    {
+      path: 'delivery/settlements',
+      name: 'FreshDeliverySettlements',
+      component: '/fresh/delivery/settlements/index',
+      meta: {
+        title: '骑手结算'
+      }
+    },
+    {
+      path: 'delivery/analytics',
+      name: 'FreshDeliveryAnalytics',
+      component: '/fresh/delivery/analytics/index',
+      meta: {
+        title: '配送分析'
+      }
+    },
+    {
+      path: 'delivery/settings',
+      name: 'FreshDeliverySettings',
+      component: '/fresh/delivery/settings/index',
+      meta: {
+        title: '调度参数'
+      }
+    },
+    {
+      path: 'marketing',
+      name: 'FreshMarketing',
+      component: '',
+      meta: {
+        title: '营销中心',
+        icon: 'ri:megaphone-line'
+      },
+      children: [
+        {
+          path: 'lucky-draw',
+          name: 'FreshLuckyDraw',
+          component: '/fresh/marketing/lucky-draw/index',
+          meta: {
+            title: '随机减免',
+            icon: 'ri:coupon-3-line',
+            keepAlive: false
+          }
+        },
+        {
+          path: 'lucky-draw/records',
+          name: 'FreshLuckyDrawRecords',
+          component: '/fresh/marketing/lucky-draw/records',
+          meta: {
+            title: '中奖记录',
+            icon: 'ri:gift-line',
+            keepAlive: true
+          }
+        }
+      ]
     }
   ]
 }

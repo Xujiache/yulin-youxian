@@ -1,5 +1,7 @@
 package com.xianda.freshdelivery.dto;
 
+import com.xianda.freshdelivery.lottery.LotteryModels.DrawResult;
+import com.xianda.freshdelivery.lottery.LotteryModels.Gift;
 import java.util.List;
 
 public record OrderDetailDto(
@@ -25,8 +27,16 @@ public record OrderDetailDto(
         String paymentOrderNo,
         String paymentExpireAt,
         boolean canRestartPayment,
-        boolean requiresDeliverySlotSelection
+        boolean requiresDeliverySlotSelection,
+        Integer discountAmount,
+        List<Gift> gifts,
+        DrawResult lotteryResult
 ) {
+    public OrderDetailDto {
+        discountAmount = discountAmount == null ? 0 : discountAmount;
+        gifts = gifts == null ? List.of() : List.copyOf(gifts);
+    }
+
     public OrderDetailDto(
             Long id,
             String orderNo,
@@ -53,7 +63,8 @@ public record OrderDetailDto(
                 productAmount, deliveryFee, packageFee, payableAmount,
                 paidAmount, refundedAmount, remark, createdAt,
                 latestRefundStatus, latestRefundReason, userId, refunds,
-                transactionId, orderNo, "", false, false
+                transactionId, orderNo, "", false, false,
+                0, List.of(), null
         );
     }
 }

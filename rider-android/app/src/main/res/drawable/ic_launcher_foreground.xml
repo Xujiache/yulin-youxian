@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  自适应图标前景层:购物袋 + 叶片(生鲜)。
+  108x108 画布,前景只有中间 72x72 保证不被各厂商裁切形状切到,
+  所以图形都收在 x/y 30..84 之间。叶片用背景同色描出来,视觉上是镂空。
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- 提手 -->
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="5"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"
+        android:pathData="M43,47 A11,11 0 0 1 65,47" />
+
+    <!-- 袋身 -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M36,47 h36 a7,7 0 0 1 7,7 v24 a7,7 0 0 1 -7,7 h-36 a7,7 0 0 1 -7,-7 v-24 a7,7 0 0 1 7,-7 z" />
+
+    <!-- 叶片镂空 -->
+    <path
+        android:fillColor="#00843D"
+        android:pathData="M45,74 C45,64 52,58 63,58 C63,68 56,74 45,74 z" />
+    <path
+        android:strokeColor="#00843D"
+        android:strokeWidth="3"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"
+        android:pathData="M45,74 L58,62" />
+</vector>

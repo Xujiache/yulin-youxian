@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 品牌绿。自适应图标的背景层必须是纯色资源,不能直接写在 adaptive-icon 里 -->
+    <color name="ic_launcher_background">#00843D</color>
+</resources>

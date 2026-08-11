@@ -2,12 +2,14 @@ const { yuan, quantityText } = require("../../utils/format");
 const { getOrder, getPaymentShare, payPaymentShare } = require("../../api/orders");
 const { normalizeOrderItem } = require("../../api/normalize");
 const { requireLogin } = require("../../utils/auth-guard");
+const { navigateHome } = require("../../utils/navigation");
 const { syncTheme } = require("../../utils/theme");
 const {
   isPaidOrder,
   isPaymentCancelled,
   paymentErrorMessage,
-  requestWechatPayment
+  requestWechatPayment,
+  waitForPaymentShareResult
 } = require("../../utils/wechat-payment");
 
 function expireText(value) {
@@ -16,6 +18,36 @@ function expireText(value) {
   if (Number.isNaN(date.getTime())) return "";
   const pad = (number) => String(number).padStart(2, "0");
   return `请在 ${date.getMonth() + 1}月${date.getDate()}日 ${pad(date.getHours())}:${pad(date.getMinutes())} 前完成付款`;
+}
+
+function normalizeDiscountDetails(share, discountAmount) {
+  const rawDetails = Array.isArray(share.discountDetails)
+    ? share.discountDetails
+    : Array.isArray(share.discounts)
+      ? share.discounts
+      : [];
+  const details = rawDetails.map((detail, index) => {
+    const amount = Number(
+      detail.discountAmount !== undefined
+        ? detail.discountAmount
+        : detail.amount
+    );
+    return {
+      id: detail.id || `${index}-${detail.name || detail.title || "discount"}`,
+      name: detail.name || detail.title || detail.label || "优惠减免",
+      amountText: Number.isFinite(amount) ? yuan(amount) : "",
+      hasAmount: Number.isFinite(amount)
+    };
+  });
+  if (!details.length && discountAmount > 0) {
+    details.push({
+      id: "lottery-discount",
+      name: share.discountName || "分享抽奖减免",
+      amountText: yuan(discountAmount),
+      hasAmount: true
+    });
+  }
+  return details;
 }
 
 Page({
@@ -31,16 +63,26 @@ Page({
     productAmountText: "0.00",
     deliveryFeeText: "0.00",
     packageFeeText: "0.00",
+    discountAmountText: "0.00",
+    hasDiscount: false,
+    discountDetails: [],
+    lotteryPrizeName: "",
+    hasLotteryPrize: false,
     items: [],
     totalItemCount: 0,
     expireText: "",
     loadError: "",
     paying: false,
+    paymentConfirming: false,
+    paymentConfirmationText: "",
     paymentFinished: false,
     ownerPaid: false
   },
 
   onLoad(options = {}) {
+    this._pageActive = true;
+    this._paymentConfirmationToken = 0;
+    this._confirmingPaymentResult = false;
     const token = decodeURIComponent(options.token || "").trim();
     const ownerMode = options.owner === "1";
     const orderId = Number(options.orderId || 0);
@@ -63,6 +105,14 @@ Page({
     if (this.data.ownerMode && this.data.orderId) {
       this.refreshOwnerOrder();
     }
+    if (!this.data.ownerMode && this.data.paymentConfirming && !this.data.paymentFinished) {
+      this.confirmPaymentResult({ attempts: 3, interval: 1200 });
+    }
+  },
+
+  onUnload() {
+    this._pageActive = false;
+    this._paymentConfirmationToken += 1;
   },
 
   onShareAppMessage() {
@@ -78,6 +128,16 @@ Page({
     this.setData({ loading: true, loadError: "" });
     try {
       const share = await getPaymentShare(this.data.token);
+      const lotteryResult = share.lotteryResult || share.lottery || {};
+      const discountAmount = Number(
+        share.discountAmount !== undefined
+          ? share.discountAmount
+          : lotteryResult.discountAmount || 0
+      );
+      const lotteryPrizeName = share.lotteryPrizeName
+        || share.prizeName
+        || lotteryResult.prizeName
+        || "";
       this.setData({
         merchantName: share.merchantName || "禹邻优鲜",
         amountText: yuan(share.payableAmount),
@@ -85,6 +145,11 @@ Page({
         productAmountText: yuan(share.productAmount),
         deliveryFeeText: yuan(share.deliveryFee),
         packageFeeText: yuan(share.packageFee),
+        discountAmountText: yuan(discountAmount),
+        hasDiscount: discountAmount > 0,
+        discountDetails: normalizeDiscountDetails(share, discountAmount),
+        lotteryPrizeName,
+        hasLotteryPrize: Boolean(lotteryPrizeName),
         items: (share.items || []).map((item) => {
           const normalized = normalizeOrderItem(item);
           return {
@@ -115,15 +180,24 @@ Page({
   },
 
   async handlePay() {
-    if (this.data.ownerMode || this.data.paying || this.data.paymentFinished || this.data.loadError) return;
+    if (
+      this.data.ownerMode
+      || this.data.paying
+      || this.data.paymentConfirming
+      || this.data.paymentFinished
+      || this.data.loadError
+    ) return;
     const redirect = `/pages/pay-for-other/index?token=${encodeURIComponent(this.data.token)}`;
     if (!requireLogin(redirect)) return;
     this.setData({ paying: true });
     try {
       const payment = await payPaymentShare(this.data.token);
       await requestWechatPayment(payment);
-      // 代付人不查询订单状态；支付结果和后续配送信息只由订单发起人查看。
-      this.setData({ paymentFinished: true });
+      this.setData({
+        paymentConfirming: true,
+        paymentConfirmationText: "支付结果确认中，请勿重复付款。"
+      });
+      await this.confirmPaymentResult();
     } catch (error) {
       if (isPaymentCancelled(error)) {
         wx.showToast({ title: "已取消付款", icon: "none" });
@@ -139,6 +213,52 @@ Page({
     }
   },
 
+  async confirmPaymentResult(options = {}) {
+    if (
+      !this.data.token
+      || this.data.paymentFinished
+      || this._confirmingPaymentResult
+    ) {
+      return;
+    }
+    this._confirmingPaymentResult = true;
+    const confirmationToken = this._paymentConfirmationToken + 1;
+    this._paymentConfirmationToken = confirmationToken;
+    this.setData({
+      paymentConfirming: true,
+      paymentConfirmationText: "支付结果确认中，请勿重复付款。"
+    });
+    try {
+      const result = await waitForPaymentShareResult(this.data.token, {
+        attempts: options.attempts || 8,
+        interval: options.interval || 1000
+      });
+      if (!this._pageActive || confirmationToken !== this._paymentConfirmationToken) {
+        return;
+      }
+      if (result.confirmed) {
+        this.setData({
+          paymentConfirming: false,
+          paymentConfirmationText: "",
+          paymentFinished: true
+        });
+        return;
+      }
+      this.setData({
+        paymentConfirming: true,
+        paymentConfirmationText: result.state === "PENDING"
+          ? "微信支付结果仍在同步，请稍后重新确认；请勿重复付款。"
+          : "暂时无法连接服务端确认结果，请检查网络后重试；请勿重复付款。"
+      });
+    } finally {
+      this._confirmingPaymentResult = false;
+    }
+  },
+
+  handleConfirmPayment() {
+    this.confirmPaymentResult({ attempts: 4, interval: 1200 });
+  },
+
   handleViewOrder() {
     if (this.data.ownerMode && this.data.orderId) {
       wx.redirectTo({ url: `/pages/order-detail/index?id=${this.data.orderId}` });
@@ -146,6 +266,6 @@ Page({
   },
 
   handleBackHome() {
-    wx.switchTab({ url: "/pages/home/index" });
+    navigateHome(wx);
   }
 });

@@ -9,6 +9,7 @@
     "pages/product-detail/index",
     "pages/cart/index",
     "pages/checkout/index",
+    "pages/lucky-activity/index",
     "pages/pay-for-other/index",
     "pages/orders/index",
     "pages/order-detail/index",

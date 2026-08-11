@@ -422,6 +422,25 @@
   border: 1rpx solid #d6e0da;
 }
 
+.btn-delivery {
+  color: #006d37;
+  background: #e8f7ee;
+  border: 1rpx solid #cdeadb;
+  font-weight: 700;
+}
+
+.is-delivering-actions {
+  gap: 12rpx;
+}
+
+.is-delivering-actions .order-btn {
+  flex: 1 1 0;
+  width: 0;
+  min-width: 0;
+  padding: 0 8rpx;
+  font-size: 24rpx;
+}
+
 .btn-friend-pay {
   color: #96602a;
   background: #fff7ea;

@@ -29,6 +29,141 @@
     <text class="notice-text">{{refundNotice}}</text>
   </view>
 
+  <!-- 配送可视化：只有后端返回 hasDelivery 时才渲染，否则完全回退到上方状态条的静态文案 -->
+  <view wx:if="{{delivery.available}}" class="card delivery-card">
+    <view class="delivery-head">
+      <view class="delivery-head-text">
+        <text class="delivery-status">{{delivery.statusText || statusConfig.title}}</text>
+        <text wx:if="{{delivery.etaText}}" class="delivery-eta">{{delivery.etaText}}</text>
+        <text wx:if="{{delivery.remainingText}}" class="delivery-remaining">{{delivery.remainingText}}</text>
+      </view>
+      <view wx:if="{{delivery.showMap}}" class="delivery-fold" catchtap="toggleDeliveryMap">
+        {{mapExpanded ? '收起地图' : '展开地图'}}
+      </view>
+    </view>
+
+    <view wx:if="{{delivery.noticeText}}" class="delivery-notice">
+      <text>{{delivery.noticeText}}</text>
+    </view>
+
+    <view wx:if="{{delivery.phoneWarningText}}" class="delivery-phone-warning">
+      <text class="phone-warning-mark">!</text>
+      <text>{{delivery.phoneWarningText}}</text>
+    </view>
+
+    <view wx:if="{{delivery.waitingText}}" class="delivery-waiting">
+      <view class="waiting-dot"></view>
+      <text>{{delivery.waitingText}}</text>
+    </view>
+
+    <!-- 定位陈旧且没有地图可挂提示时，退回卡片内展示 -->
+    <view wx:if="{{delivery.staleText && !delivery.showMap}}" class="delivery-waiting is-stale">
+      <view class="waiting-dot"></view>
+      <text>{{delivery.staleText}}</text>
+    </view>
+
+    <!-- map 是原生组件，层级最高：与固定栏重叠或弹窗打开时直接卸载，保证真机操作可点击 -->
+    <view
+      wx:if="{{delivery.showMap && mapExpanded}}"
+      class="delivery-map-wrap"
+    >
+      <map
+        wx:if="{{mapViewportSafe && !showPaymentMethodModal && !showCancelModal && !showRatingSheet && !showLotteryChoice && !showLuckyWheel}}"
+        id="deliveryMap"
+        class="delivery-map"
+        latitude="{{delivery.destination.lat}}"
+        longitude="{{delivery.destination.lng}}"
+        scale="{{mapScale}}"
+        markers="{{markers}}"
+        polyline="{{polyline}}"
+        show-location="{{false}}"
+        enable-rotate="{{false}}"
+        enable-3D="{{false}}"
+        enable-traffic="{{false}}"
+        enable-overlooking="{{false}}"
+        enable-building="{{false}}"
+      >
+        <cover-view wx:if="{{delivery.staleText}}" class="map-stale">{{delivery.staleText}}</cover-view>
+        <cover-view class="map-recenter" bindtap="handleRecenterMap">定位到骑手</cover-view>
+      </map>
+      <view wx:else class="map-safety-placeholder">
+        <text class="map-safety-title">地图已暂时收起</text>
+        <text class="map-safety-desc">离开固定操作栏后会自动恢复，底部按钮仍可正常点击</text>
+      </view>
+    </view>
+
+    <view wx:if="{{delivery.stopsAheadText || delivery.distanceText}}" class="delivery-progress-row">
+      <text class="progress-stops">{{delivery.stopsAheadText}}</text>
+      <text class="progress-distance">{{delivery.distanceText}}</text>
+    </view>
+
+    <view wx:if="{{delivery.hasRider}}" class="rider-card">
+      <image class="rider-avatar" src="{{delivery.rider.avatarUrl}}" mode="aspectFill" />
+      <view class="rider-info">
+        <view class="rider-name-row">
+          <text class="rider-name">{{delivery.rider.name}}</text>
+          <view wx:if="{{delivery.rider.ratingText}}" class="star-bar">
+            <text class="star-bar-base">★★★★★</text>
+            <text class="star-bar-fill" style="width: {{delivery.rider.starPercent}}%">★★★★★</text>
+          </view>
+          <text wx:if="{{delivery.rider.ratingText}}" class="rider-score">{{delivery.rider.ratingText}}</text>
+        </view>
+        <text class="rider-vehicle">{{delivery.rider.vehicleText}}</text>
+      </view>
+      <view wx:if="{{delivery.rider.callNumber}}" class="rider-call" catchtap="handleCallRider">联系骑手</view>
+    </view>
+
+    <view class="delivery-timeline">
+      <view
+        wx:for="{{delivery.timeline}}"
+        wx:key="code"
+        class="timeline-node {{item.done ? 'is-done' : ''}}"
+      >
+        <view class="node-rail">
+          <view class="node-dot"></view>
+          <view wx:if="{{delivery.timeline.length - 1 > index}}" class="node-line"></view>
+        </view>
+        <view class="node-body">
+          <text class="node-label">{{item.label}}</text>
+          <text wx:if="{{item.timeText}}" class="node-time">{{item.timeText}}</text>
+        </view>
+      </view>
+    </view>
+
+    <view
+      wx:if="{{canSubscribe}}"
+      class="delivery-subscribe {{delivery.subscribed ? 'is-on' : ''}}"
+      catchtap="handleSubscribeDelivery"
+    >
+      {{delivery.subscribed ? '已开启送达提醒' : (subscribing ? '正在开启提醒…' : '送达时提醒我')}}
+    </view>
+  </view>
+
+  <view wx:if="{{delivery.available && (canRate || delivery.rating.rated)}}" class="card rating-card">
+    <view class="card-head">
+      <image class="card-icon" src="/assets/icons/status-completed.svg" mode="aspectFit" />
+      <text class="card-title">配送评价</text>
+    </view>
+    <block wx:if="{{delivery.rating.rated}}">
+      <view class="rating-result-row">
+        <view class="star-bar">
+          <text class="star-bar-base">★★★★★</text>
+          <text class="star-bar-fill" style="width: {{delivery.rating.star * 20}}%">★★★★★</text>
+        </view>
+        <text class="rating-score">{{delivery.rating.star}} 星</text>
+      </view>
+      <view wx:if="{{delivery.rating.tags.length}}" class="rating-result-tags">
+        <text wx:for="{{delivery.rating.tags}}" wx:key="*this" class="rating-result-tag">{{item}}</text>
+      </view>
+      <text wx:if="{{delivery.rating.comment}}" class="rating-result-comment">{{delivery.rating.comment}}</text>
+      <text class="rating-done-tip">本单已评价，感谢你的反馈</text>
+    </block>
+    <block wx:else>
+      <text class="rating-entry-desc">本单已送达，给骑手的服务打个分吧</text>
+      <view class="rating-entry-btn" catchtap="openRatingSheet">去评价</view>
+    </block>
+  </view>
+
   <view class="card address-card">
     <view class="card-head">
       <image class="card-icon" src="/assets/icons/location-green.svg" mode="aspectFit" />
@@ -81,6 +216,20 @@
       </view>
       <text class="goods-price">￥{{item.amountText}}</text>
     </view>
+    <view wx:for="{{gifts}}" wx:key="drawId" class="goods-item gift-item">
+      <image wx:if="{{item.imageUrl}}" class="goods-image" src="{{item.imageUrl}}" mode="aspectFill" lazy-load="{{true}}" />
+      <view wx:else class="goods-image gift-image-fallback">鲜</view>
+      <view class="goods-info">
+        <view class="gift-title-row">
+          <text class="gift-badge">鲜礼赠品</text>
+          <text class="gift-status">{{item.statusText}}</text>
+        </view>
+        <text class="goods-name">{{item.productName}}</text>
+        <text wx:if="{{item.skuName}}" class="goods-spec">{{item.skuName}}</text>
+        <text class="goods-count">数量 x{{item.quantityText}}</text>
+      </view>
+      <text class="gift-price">￥0.00</text>
+    </view>
   </view>
 
   <view class="card price-card">
@@ -95,6 +244,10 @@
     <view class="amount-row">
       <text class="amount-label">包装费</text>
       <text class="amount-value">￥{{packageFeeText}}</text>
+    </view>
+    <view wx:if="{{hasLotteryDiscount}}" class="amount-row">
+      <text class="amount-label">分享抽奖减免</text>
+      <text class="amount-value lottery-discount-color">-￥{{lotteryDiscountText}}</text>
     </view>
     <view wx:if="{{hasRefundedAmount}}" class="amount-row">
       <text class="amount-label">已退款</text>
@@ -187,6 +340,50 @@
     </view>
   </view>
 
+  <view wx:if="{{showRatingSheet}}" class="rating-mask" catchtap="closeRatingSheet">
+    <view class="rating-sheet" catchtap="stopRatingSheetTap">
+      <view class="sheet-handle"></view>
+      <text class="rating-sheet-title">评价本次配送</text>
+      <text class="rating-sheet-subtitle">评价只用于骑手服务分，不会展示给其他顾客</text>
+
+      <view class="rating-star-row">
+        <text
+          wx:for="{{ratingStars}}"
+          wx:key="*this"
+          class="rating-star {{ratingStar >= item ? 'is-on' : ''}}"
+          data-star="{{item}}"
+          catchtap="handleRatingStar"
+        >★</text>
+      </view>
+
+      <view class="rating-tag-list">
+        <view
+          wx:for="{{ratingTagList}}"
+          wx:key="tag"
+          class="rating-tag {{item.selected ? 'is-selected' : ''}}"
+          data-tag="{{item.tag}}"
+          catchtap="handleRatingTag"
+        >{{item.tag}}</view>
+      </view>
+
+      <textarea
+        class="rating-comment"
+        value="{{ratingComment}}"
+        placeholder="说说本次配送体验（选填）"
+        placeholder-class="rating-comment-placeholder"
+        maxlength="60"
+        fixed="{{true}}"
+        bindinput="handleRatingComment"
+      ></textarea>
+
+      <button
+        class="rating-submit {{ratingSubmitting ? 'is-disabled' : ''}}"
+        disabled="{{ratingSubmitting}}"
+        catchtap="confirmRating"
+      >{{ratingSubmitting ? '提交中…' : '提交评价'}}</button>
+    </view>
+  </view>
+
   <view wx:if="{{showCancelModal}}" class="cancel-modal-mask" catchtap="closeCancelModal">
     <view class="cancel-modal" catchtap="stopCancelModalTap">
       <text class="cancel-modal-title">取消订单</text>
@@ -197,4 +394,64 @@
       </view>
     </view>
   </view>
+
+  <view wx:if="{{showLotteryChoice}}" class="lottery-choice-mask">
+    <view class="lottery-choice-sheet">
+      <view class="choice-ticket-edge"></view>
+      <view class="choice-heading">
+        <view class="choice-mark">
+          <view class="choice-leaf"></view>
+          <text>鲜</text>
+        </view>
+        <view class="choice-title-copy">
+          <text class="choice-eyebrow">菜篮鲜礼签 · 本单仍可参与</text>
+          <text class="choice-title">{{lotteryState.campaign.name || '分享解锁随机鲜礼'}}</text>
+        </view>
+      </view>
+      <text class="choice-desc">{{lotteryState.campaign.shareDescription || '进入朋友圈分享入口后，返回即可抽取本单减免或随单鲜礼。'}}</text>
+
+      <scroll-view wx:if="{{wheelPrizes.length}}" class="choice-prizes" scroll-x enhanced show-scrollbar="{{false}}">
+        <view class="choice-prizes-inner">
+          <view wx:for="{{wheelPrizes}}" wx:key="id" class="choice-prize">
+            <image wx:if="{{item.imageUrl}}" class="choice-prize-image" src="{{item.imageUrl}}" mode="aspectFill" />
+            <view wx:else class="choice-prize-fallback">
+              <view class="choice-produce-leaf"></view>
+              <view class="choice-produce"></view>
+            </view>
+            <text>{{item.name}}</text>
+          </view>
+        </view>
+      </scroll-view>
+
+      <view class="choice-facts">
+        <view class="choice-fact"><text class="fact-dot"></text><text>分享后仍由服务端确认资格</text></view>
+        <view class="choice-fact"><text class="fact-dot"></text><text>实物鲜礼随本订单一同配送</text></view>
+      </view>
+      <button
+        class="choice-share-button {{lotteryBusy ? 'is-disabled' : ''}}"
+        disabled="{{lotteryBusy}}"
+        bindtap="handleUnlockLottery"
+      >{{lotteryBusy ? '正在准备分享凭证…' : '分享解锁抽奖'}}</button>
+      <button
+        class="choice-original-button"
+        disabled="{{lotteryBusy}}"
+        bindtap="handleSkipLottery"
+      >不参加，原价支付</button>
+      <text class="choice-footnote">不会自动拉起分享；下一页会引导你使用微信右上角菜单</text>
+    </view>
+  </view>
+
+  <lucky-wheel
+    id="detailLuckyWheel"
+    visible="{{showLuckyWheel}}"
+    prizes="{{wheelPrizes}}"
+    initial-result="{{wheelInitialResult}}"
+    draw-loading="{{drawLoading}}"
+    continue-loading="{{lotteryContinueLoading}}"
+    continue-text="{{wheelContinueText}}"
+    bind:draw="handleLotteryDraw"
+    bind:finish="handleLotteryFinish"
+    bind:continue="handleLuckyWheelContinue"
+    bind:close="handleLuckyWheelClose"
+  />
 </view>

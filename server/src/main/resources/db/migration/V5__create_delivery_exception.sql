@@ -1,0 +1,76 @@
+CREATE TABLE delivery_exception (
+    id              BIGINT       NOT NULL AUTO_INCREMENT,
+    exception_no    VARCHAR(32)  NOT NULL,
+    task_id         BIGINT       NULL,
+    wave_id         BIGINT       NULL,
+    rider_id        BIGINT       NULL,
+    order_id        BIGINT       NULL,
+    exception_type  VARCHAR(32)  NOT NULL
+        COMMENT 'CUSTOMER_UNREACHABLE/WRONG_ADDRESS/CUSTOMER_REFUSED/GOODS_DAMAGED/GOODS_LEAKING/WEIGHT_DISPUTE/ITEM_MISSING/ACCESS_DENIED/VEHICLE_FAILURE/RIDER_UNWELL/BAD_WEATHER/STORE_SLOW/OTHER',
+    severity        VARCHAR(16)  NOT NULL DEFAULT 'NORMAL' COMMENT 'LOW/NORMAL/HIGH/URGENT',
+    status          VARCHAR(24)  NOT NULL DEFAULT 'OPEN'
+                                 COMMENT 'OPEN/PROCESSING/RESOLVED/CLOSED',
+    source          VARCHAR(24)  NOT NULL DEFAULT 'RIDER' COMMENT 'RIDER/ADMIN/SYSTEM',
+    description     VARCHAR(1024) NULL,
+    lat             DECIMAL(10,7) NULL,
+    lng             DECIMAL(10,7) NULL,
+    hold_until_at   DATETIME(6)  NULL COMMENT '如联系不上顾客挂起30分钟',
+    resolution_type VARCHAR(32)  NULL COMMENT 'CONTINUE/RETURN/REASSIGN/REFUND/CANCEL/IGNORE',
+    resolution_note VARCHAR(1024) NULL,
+    rider_exempt    TINYINT(1)   NOT NULL DEFAULT 1 COMMENT '是否免除骑手责任',
+    handled_by      VARCHAR(64)  NULL,
+    handled_at      DATETIME(6)  NULL,
+    client_event_at DATETIME(6)  NULL,
+    created_at      DATETIME(6)  NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    updated_at      DATETIME(6)  NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_exception_no (exception_no),
+    KEY idx_exception_status (status, severity, created_at),
+    KEY idx_exception_task (task_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE delivery_evidence (
+    id              BIGINT       NOT NULL AUTO_INCREMENT,
+    task_id         BIGINT       NULL,
+    exception_id    BIGINT       NULL,
+    order_id        BIGINT       NULL,
+    rider_id        BIGINT       NULL,
+    evidence_type   VARCHAR(32)  NOT NULL
+        COMMENT 'PICKUP/DELIVERED/EXCEPTION/WEIGHT_SCALE/RETURN/SIGNATURE',
+    file_url        VARCHAR(512) NOT NULL,
+    file_size       INT          NULL,
+    width           INT          NULL,
+    height          INT          NULL,
+    lat             DECIMAL(10,7) NULL,
+    lng             DECIMAL(10,7) NULL,
+    watermark_text  VARCHAR(256) NULL,
+    captured_at     DATETIME(6)  NULL COMMENT '拍摄时刻',
+    uploaded_at     DATETIME(6)  NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    PRIMARY KEY (id),
+    KEY idx_evidence_task (task_id, evidence_type),
+    KEY idx_evidence_exception (exception_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE delivery_weight_check (
+    id                  BIGINT       NOT NULL AUTO_INCREMENT,
+    order_id            BIGINT       NOT NULL,
+    task_id             BIGINT       NULL,
+    order_item_id       BIGINT       NULL,
+    product_name        VARCHAR(128) NOT NULL,
+    ordered_qty         DECIMAL(10,3) NOT NULL,
+    picked_weight_kg    DECIMAL(10,3) NULL COMMENT '门店拣货称重',
+    customer_weight_kg  DECIMAL(10,3) NULL COMMENT '顾客复称',
+    tolerance_percent   DECIMAL(5,2) NOT NULL DEFAULT 3.00,
+    diff_percent        DECIMAL(6,2) NULL,
+    scale_evidence_id   BIGINT       NULL COMMENT '门店电子秤照片',
+    customer_evidence_id BIGINT      NULL,
+    verdict             VARCHAR(24)  NULL COMMENT 'PASS/AUTO_REFUND/MANUAL_REVIEW/REJECTED',
+    refund_amount       INT          NOT NULL DEFAULT 0,
+    handled_by          VARCHAR(64)  NULL,
+    handled_at          DATETIME(6)  NULL,
+    created_at          DATETIME(6)  NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    updated_at          DATETIME(6)  NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+    PRIMARY KEY (id),
+    KEY idx_weight_order (order_id),
+    KEY idx_weight_verdict (verdict, created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

@@ -1,6 +1,8 @@
 spring:
   application:
     name: fresh-delivery-server
+  jackson:
+    time-zone: Asia/Shanghai
   datasource:
     url: ${MYSQL_URL:jdbc:mysql://127.0.0.1:3306/yulin_fresh?useUnicode=true&characterEncoding=UTF-8&connectionCollation=utf8mb4_unicode_ci&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true}
     username: ${MYSQL_USERNAME:yulin_fresh}
@@ -50,10 +52,16 @@ wechat:
 
 auth:
   admin:
-    username: ${ADMIN_USERNAME:admin}
-    password: ${ADMIN_PASSWORD:Admin@123456}
+    username: ${ADMIN_USERNAME:}
+    password: ${ADMIN_PASSWORD:}
     additional-username: ${ADMIN_ADDITIONAL_USERNAME:}
     additional-password: ${ADMIN_ADDITIONAL_PASSWORD:}
+    session-ttl-ms: ${ADMIN_SESSION_TTL_MS:28800000}
+    login-rate-limit:
+      max-attempts: ${ADMIN_LOGIN_RATE_LIMIT_MAX_ATTEMPTS:5}
+      window-ms: ${ADMIN_LOGIN_RATE_LIMIT_WINDOW_MS:900000}
+  user:
+    session-ttl-ms: ${AUTH_USER_SESSION_TTL_MS:2592000000}
   profile-storage-path: ${AUTH_PROFILE_STORAGE_PATH:data/user-profiles.json}
 
 storefront:
@@ -66,7 +74,6 @@ persistence:
   mode: ${PERSISTENCE_MODE:mysql}
   mysql:
     shadow-write-legacy-json: ${MYSQL_SHADOW_WRITE_LEGACY_JSON:true}
-    reject-suspicious-question-marks: ${MYSQL_REJECT_SUSPICIOUS_QUESTION_MARKS:true}
 
 backup:
   directory: ${BACKUP_DIRECTORY:data/backups}
@@ -76,3 +83,36 @@ backup:
   realtime-debounce-ms: ${BACKUP_REALTIME_DEBOUNCE_MS:1500}
   scheduled-interval-ms: ${BACKUP_SCHEDULED_INTERVAL_MS:300000}
   scheduled-initial-delay-ms: ${BACKUP_SCHEDULED_INITIAL_DELAY_MS:30000}
+
+marketing:
+  lottery:
+    challenge-ttl-seconds: ${MARKETING_LOTTERY_CHALLENGE_TTL_SECONDS:600}
+    consistency-scan-ms: ${MARKETING_LOTTERY_CONSISTENCY_SCAN_MS:300000}
+    consistency-initial-delay-ms: ${MARKETING_LOTTERY_CONSISTENCY_INITIAL_DELAY_MS:30000}
+
+delivery:
+  enabled: ${DELIVERY_ENABLED:true}
+  store:
+    lat: ${DELIVERY_STORE_LAT:0}
+    lng: ${DELIVERY_STORE_LNG:0}
+  amap:
+    web-key: ${AMAP_WEB_KEY:}
+    js-key: ${AMAP_JS_KEY:}
+    enabled: ${AMAP_ENABLED:false}
+  push:
+    provider: ${PUSH_PROVIDER:NOOP}
+    jpush-app-key: ${JPUSH_APP_KEY:}
+    jpush-master-secret: ${JPUSH_MASTER_SECRET:}
+  privacy-number:
+    provider: ${PRIVACY_NUMBER_PROVIDER:NOOP}
+    aliyun-access-key-id: ${ALIYUN_AK_ID:}
+    aliyun-access-key-secret: ${ALIYUN_AK_SECRET:}
+    pool-key: ${ALIYUN_PNP_POOL_KEY:}
+  dispatch:
+    loop-enabled: ${DISPATCH_LOOP_ENABLED:true}
+    loop-interval-ms: ${DISPATCH_LOOP_INTERVAL_MS:5000}
+  tracking:
+    cleanup-cron: ${TRACKING_CLEANUP_CRON:0 30 3 * * *}
+    cleanup-zone: ${TRACKING_CLEANUP_ZONE:Asia/Shanghai}
+  upload:
+    delivery-path: ${DELIVERY_UPLOAD_PATH:data/uploads/delivery}
