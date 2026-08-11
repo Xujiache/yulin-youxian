@@ -1,6 +1,7 @@
 import java.time.LocalDate
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
+import java.util.Properties
 
 plugins {
     alias(libs.plugins.android.application)
@@ -22,6 +23,23 @@ val riderVersionCode = (project.findProperty("RIDER_VERSION_CODE") as String?)
 require(riderVersionCode > 0) { "RIDER_VERSION_CODE 必须是正整数" }
 val riderVersionName = (project.findProperty("RIDER_VERSION_NAME") as String?)
     ?.trim()?.takeIf { it.isNotEmpty() } ?: "0.1.0"
+
+val externalSigningPropertiesFile = sequenceOf(
+    System.getenv("RIDER_SIGNING_PROPERTIES_FILE"),
+    System.getProperty("user.home")?.let { "$it/.yulin/rider-signing.properties" },
+).mapNotNull { it?.trim()?.takeIf(String::isNotEmpty) }
+    .map(::file)
+    .first()
+val externalSigningProperties = Properties().apply {
+    if (externalSigningPropertiesFile.isFile) {
+        externalSigningPropertiesFile.inputStream().use(::load)
+    }
+}
+fun signingValue(name: String): String? = sequenceOf(
+    System.getenv(name),
+    externalSigningProperties.getProperty(name),
+).mapNotNull { it?.trim()?.takeIf(String::isNotEmpty) }
+    .firstOrNull()
 
 android {
     namespace = "com.yulin.rider"
@@ -46,29 +64,33 @@ android {
         manifestPlaceholders["AMAP_KEY"] = (project.findProperty("AMAP_KEY") as String?).orEmpty()
     }
 
-    val keystoreFile = rootProject.file(
-        (project.findProperty("RIDER_KEYSTORE_FILE") as String?) ?: "keystore/rider-release.jks"
-    )
-    val hasKeystore = keystoreFile.exists()
+    val keystorePath = signingValue("RIDER_KEYSTORE_PATH")
+    val keystoreFile = keystorePath?.let { path ->
+        file(path).let { candidate ->
+            if (candidate.isAbsolute) candidate else externalSigningPropertiesFile.parentFile.resolve(path)
+        }
+    }
+    val hasKeystore = keystoreFile?.isFile == true
     val missingSigningProperties = listOf(
+        "RIDER_KEYSTORE_PATH",
         "RIDER_KEYSTORE_PASSWORD",
         "RIDER_KEY_ALIAS",
         "RIDER_KEY_PASSWORD",
-    ).filter { (project.findProperty(it) as String?).isNullOrBlank() }
+    ).filter { signingValue(it).isNullOrBlank() }
     if (releaseRequested && (!hasKeystore || missingSigningProperties.isNotEmpty())) {
         throw GradleException(
-            "Release 签名配置不完整: keystore=${keystoreFile.absolutePath}, " +
+            "Release 签名配置不完整: keystore=${keystoreFile?.absolutePath ?: "未配置"}, " +
                 "缺少属性=${missingSigningProperties.joinToString().ifBlank { "无" }}"
         )
     }
 
     signingConfigs {
-        if (hasKeystore) {
+        if (hasKeystore && missingSigningProperties.isEmpty()) {
             create("release") {
                 storeFile = keystoreFile
-                storePassword = project.findProperty("RIDER_KEYSTORE_PASSWORD") as String?
-                keyAlias = project.findProperty("RIDER_KEY_ALIAS") as String?
-                keyPassword = project.findProperty("RIDER_KEY_PASSWORD") as String?
+                storePassword = signingValue("RIDER_KEYSTORE_PASSWORD")
+                keyAlias = signingValue("RIDER_KEY_ALIAS")
+                keyPassword = signingValue("RIDER_KEY_PASSWORD")
                 // minSdk 26,v1(JAR 签名)已无设备需要,AGP 也会忽略;v2 + v3 即可
                 enableV1Signing = false
                 enableV2Signing = true
@@ -90,7 +112,7 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = false
-            if (hasKeystore) {
+            if (hasKeystore && missingSigningProperties.isEmpty()) {
                 signingConfig = signingConfigs.getByName("release")
             }
             ndk {
@@ -145,7 +167,10 @@ tasks.register("verifyReleaseSignature") {
         if (execution.result.get().exitValue != 0) {
             throw GradleException("release APK 签名校验失败:\n$verification")
         }
-        val expected = (project.findProperty("RIDER_EXPECTED_CERT_SHA256") as String?)
+        val expected = (
+            signingValue("RIDER_EXPECTED_CERT_SHA256")
+                ?: (project.findProperty("RIDER_EXPECTED_CERT_SHA256") as String?)
+            )
             ?.replace(":", "")?.replace(" ", "")?.lowercase()
         if (!expected.isNullOrBlank()) {
             val normalizedOutput = verification.replace(":", "").replace(" ", "").lowercase()
