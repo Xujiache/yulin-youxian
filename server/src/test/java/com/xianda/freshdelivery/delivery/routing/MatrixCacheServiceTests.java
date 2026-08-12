@@ -54,7 +54,9 @@ class MatrixCacheServiceTests {
         service.buildMatrix(List.of(store, customer), TravelMode.EBIKE, provider);
 
         assertEquals(2, dao.size());
-        assertEquals(2, dao.deleteExpired(java.time.LocalDateTime.now().plusHours(7)));
+        // 过期时间由 RoutingTimes 投影到门店时区写入，这里必须用同一个时钟往后推，
+        // 否则在非 Asia/Shanghai 的机器上（CI 多为 UTC）算出来的时刻还没到期，一行都清不掉
+        assertEquals(2, dao.deleteExpired(RoutingTimes.now(RoutingTimes.systemClock()).plusHours(7)));
         assertEquals(0, dao.size());
     }
 }

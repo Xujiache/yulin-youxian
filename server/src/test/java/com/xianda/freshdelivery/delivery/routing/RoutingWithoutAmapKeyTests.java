@@ -44,7 +44,9 @@ class RoutingWithoutAmapKeyTests {
     @Test
     void theWholePlanningChainRunsOnHaversineAlone() {
         RoutePlanningPort port = port();
-        LocalDateTime windowEnd = LocalDateTime.now().plusHours(2);
+        // 迟到惩罚拿门店时区的当前时间比对，这里也必须用同一个时钟：
+        // 在 UTC 机器上用裸 LocalDateTime.now() 会让所有站点凭空迟到 8 小时，目标值直接被惩罚项打飞
+        LocalDateTime windowEnd = RoutingTimes.now(RoutingTimes.systemClock()).plusHours(2);
         List<RoutePlanningPort.RouteStopInput> stops = new ArrayList<>();
         stops.add(stopInput(9001L, 30.105d, 120.705d, "FROZEN", windowEnd));
         stops.add(stopInput(9002L, 30.112d, 120.716d, "NORMAL", windowEnd));
