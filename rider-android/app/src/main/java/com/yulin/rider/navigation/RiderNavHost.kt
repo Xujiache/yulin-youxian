@@ -40,6 +40,7 @@ import com.yulin.rider.feature.profile.SettingsScreen
 import com.yulin.rider.feature.shift.ShiftDutyBar
 import com.yulin.rider.feature.shift.ShiftStatusPill
 import com.yulin.rider.feature.task.ui.DeliverScreen
+import com.yulin.rider.feature.task.ui.DispatchScreen
 import com.yulin.rider.feature.task.ui.PickupScreen
 import com.yulin.rider.feature.task.ui.TaskDetailScreen
 import com.yulin.rider.feature.task.ui.TaskHomeScreen
@@ -194,6 +195,21 @@ fun RiderNavHost(
         }
 
         composable(
+            route = RiderRoutes.DISPATCH,
+            arguments = listOf(navArgument(RiderRoutes.ARG_TASK_ID) { type = NavType.LongType }),
+        ) { entry ->
+            val taskId = entry.arguments?.getLong(RiderRoutes.ARG_TASK_ID) ?: 0L
+            DispatchScreen(
+                taskId = taskId,
+                onDismiss = { navController.popBackStack() },
+                onAccepted = { accepted ->
+                    navController.popBackStack()
+                    navController.navigate(RiderRoutes.taskDetail(accepted))
+                },
+            )
+        }
+
+        composable(
             route = RiderRoutes.TASK_DETAIL,
             arguments = listOf(navArgument(RiderRoutes.ARG_TASK_ID) { type = NavType.LongType }),
         ) { entry ->
@@ -335,7 +351,7 @@ private fun SessionEventHandler(
     }
 }
 
-/** 派单通知点开后跳任务详情。 */
+/** 派单通知点开后跳派单页，接单后才落详情。 */
 @Composable
 private fun NewTaskIntentHandler(
     newTaskRequests: StateFlow<Long?>,
@@ -353,7 +369,7 @@ private fun NewTaskIntentHandler(
                 }
             }
             if (ready != null) {
-                navController.navigate(RiderRoutes.taskDetail(taskId)) { launchSingleTop = true }
+                navController.navigate(RiderRoutes.dispatch(taskId)) { launchSingleTop = true }
             }
             onHandled()
         }

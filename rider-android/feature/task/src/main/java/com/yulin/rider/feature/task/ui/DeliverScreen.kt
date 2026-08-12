@@ -17,6 +17,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -40,21 +41,27 @@ import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.viewmodel.CreationExtras
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewModelScope
-import com.yulin.rider.core.designsystem.BigActionButton
-import com.yulin.rider.core.designsystem.FreshBottomActionBar
 import com.yulin.rider.core.designsystem.FreshEmpty
 import com.yulin.rider.core.designsystem.FreshIcon
 import com.yulin.rider.core.designsystem.FreshIconType
-import com.yulin.rider.core.designsystem.FreshPanel
+import com.yulin.rider.core.designsystem.FreshRadius
 import com.yulin.rider.core.designsystem.FreshSpacing
 import com.yulin.rider.core.designsystem.FreshStackScaffold
-import com.yulin.rider.core.designsystem.FreshStatusBadge
+import com.yulin.rider.core.designsystem.MtAction
+import com.yulin.rider.core.designsystem.MtBottomActionBar
+import com.yulin.rider.core.designsystem.MtCard
+import com.yulin.rider.core.designsystem.MtDivider
+import com.yulin.rider.core.designsystem.MtInfoBar
+import com.yulin.rider.core.designsystem.MtPrimaryButton
+import com.yulin.rider.core.designsystem.MtScaffold
+import com.yulin.rider.core.designsystem.MtSectionTitle
+import com.yulin.rider.core.designsystem.MtTag
 import com.yulin.rider.core.designsystem.RiderColors
 import com.yulin.rider.core.designsystem.RiderDimens
 import com.yulin.rider.core.designsystem.RiderTextField
 import com.yulin.rider.core.designsystem.RiderTheme
-import com.yulin.rider.core.designsystem.SlideToConfirm
 import com.yulin.rider.core.designsystem.StatusTone
+import com.yulin.rider.core.designsystem.tabularFigures
 import com.yulin.rider.feature.task.data.ReceiveMethod
 import com.yulin.rider.feature.task.data.TaskCardUi
 import com.yulin.rider.feature.task.data.TaskRepository
@@ -126,6 +133,7 @@ class DeliverViewModel(
 fun DeliverScreen(
     taskId: Long,
     modifier: Modifier = Modifier,
+    onBack: () -> Unit = {},
     onDone: () -> Unit = {},
 ) {
     val viewModel: DeliverViewModel = viewModel(
@@ -188,6 +196,7 @@ fun DeliverScreen(
         verifyCode = verifyCode,
         infoSettled = infoSettled,
         modifier = modifier,
+        onBack = onBack,
         onTakePhoto = { viewModel.openCamera(true) },
         onMethodChange = viewModel::setMethod,
         onVerifyCodeChange = viewModel::setVerifyCode,
@@ -203,6 +212,7 @@ private fun DeliverContent(
     verifyCode: String,
     infoSettled: Boolean,
     modifier: Modifier = Modifier,
+    onBack: () -> Unit = {},
     onTakePhoto: () -> Unit = {},
     onMethodChange: (ReceiveMethod) -> Unit = {},
     onVerifyCodeChange: (String) -> Unit = {},
@@ -217,146 +227,162 @@ private fun DeliverContent(
         else -> null
     }
 
-    FreshStackScaffold(
+    MtScaffold(
         title = "确认送达",
         subtitle = task.card.taskNo,
         modifier = modifier,
+        onBack = onBack,
         bottomBar = {
-            FreshBottomActionBar(
-                reason = disabledReason,
-                reasonTone = if (photos.isEmpty()) StatusTone.DANGER else StatusTone.WARNING,
+            MtBottomActionBar(
+                hint = disabledReason,
+                hintTone = if (photos.isEmpty()) StatusTone.DANGER else StatusTone.WARNING,
             ) {
-                SlideToConfirm(
-                    text = "滑动确认已送达",
+                MtPrimaryButton(
+                    text = "我已送达",
+                    action = MtAction.DELIVER,
+                    modifier = Modifier.weight(1f),
                     enabled = canConfirm,
                     disabledReason = disabledReason,
-                    tone = StatusTone.SUCCESS,
-                    onConfirm = onConfirm,
+                    onClick = onConfirm,
                 )
             }
         },
-    ) { insets ->
+    ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(insets)
                 .verticalScroll(rememberScrollState())
-                .padding(FreshSpacing.Md),
-            verticalArrangement = Arrangement.spacedBy(FreshSpacing.Sm),
+                .padding(
+                    start = FreshSpacing.Sm,
+                    end = FreshSpacing.Sm,
+                    top = FreshSpacing.Xs,
+                    bottom = FreshSpacing.Md,
+                ),
+            verticalArrangement = Arrangement.spacedBy(FreshSpacing.Xs),
         ) {
             KeyInfoBlock(task)
 
-            FreshPanel(
-                title = "送达凭证",
-                eyebrow = "必拍",
-                spineTone = if (photos.isEmpty()) StatusTone.DANGER else StatusTone.SUCCESS,
-            ) {
-                if (photos.isEmpty()) {
-                    FreshStatusBadge(
-                        text = "尚未拍照",
-                        tone = StatusTone.DANGER,
-                        icon = FreshIconType.CAMERA,
+            MtCard {
+                MtSectionTitle("送达凭证", trailing = {
+                    MtTag(
+                        if (photos.isEmpty()) "必拍" else "${photos.size} 张",
+                        tone = if (photos.isEmpty()) StatusTone.DANGER else StatusTone.SUCCESS,
                     )
+                })
+                MtDivider()
+                if (photos.isEmpty()) {
                     Text(
-                        "照片需要包含门牌或货品，用于订单争议回查。",
+                        text = "照片需要包含门牌或货品，用于订单争议回查。",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(FreshSpacing.Sm),
                     )
                 } else {
-                    Row(horizontalArrangement = Arrangement.spacedBy(FreshSpacing.Xs)) {
+                    Row(
+                        modifier = Modifier.padding(FreshSpacing.Sm),
+                        horizontalArrangement = Arrangement.spacedBy(FreshSpacing.Xs),
+                    ) {
                         photos.forEach { path -> PhotoThumbnail(path) }
                     }
                 }
-                BigActionButton(
-                    text = if (photos.isEmpty()) "拍摄送达凭证" else "再拍一张",
-                    tone = if (photos.isEmpty()) StatusTone.WARNING else StatusTone.NORMAL,
-                    icon = FreshIconType.CAMERA,
-                    onClick = onTakePhoto,
-                )
+                Box(Modifier.padding(FreshSpacing.Sm)) {
+                    MtPrimaryButton(
+                        text = if (photos.isEmpty()) "拍摄送达凭证" else "再拍一张",
+                        action = if (photos.isEmpty()) MtAction.ACCEPT else MtAction.SECONDARY,
+                        modifier = Modifier.fillMaxWidth(),
+                        icon = FreshIconType.CAMERA,
+                        onClick = onTakePhoto,
+                    )
+                }
             }
 
-            FreshPanel(title = "送达方式", spineTone = StatusTone.INFO) {
-                ReceiveMethod.entries.chunked(2).forEach { options ->
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(FreshSpacing.Xs),
-                    ) {
-                        options.forEach { option ->
-                            FilterChip(
-                                selected = option == method,
-                                onClick = { onMethodChange(option) },
-                                label = {
-                                    Text(option.label, style = MaterialTheme.typography.labelLarge)
-                                },
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .heightIn(min = RiderDimens.TouchTarget),
-                            )
-                        }
-                        if (options.size == 1) {
-                            Box(Modifier.weight(1f))
+            MtCard {
+                MtSectionTitle("送达方式")
+                MtDivider()
+                Column(Modifier.padding(FreshSpacing.Sm)) {
+                    ReceiveMethod.entries.chunked(2).forEach { options ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = FreshSpacing.Xs),
+                            horizontalArrangement = Arrangement.spacedBy(FreshSpacing.Xs),
+                        ) {
+                            options.forEach { option ->
+                                val selected = option == method
+                                FilterChip(
+                                    selected = selected,
+                                    onClick = { onMethodChange(option) },
+                                    label = {
+                                        Text(
+                                            option.label,
+                                            style = MaterialTheme.typography.labelLarge,
+                                        )
+                                    },
+                                    shape = RoundedCornerShape(FreshRadius.Control),
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = RiderColors.PrimaryContainer,
+                                        selectedLabelColor = RiderColors.Ink,
+                                    ),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .heightIn(min = RiderDimens.TouchTarget),
+                                )
+                            }
+                            if (options.size == 1) Box(Modifier.weight(1f))
                         }
                     }
                 }
             }
 
             if (task.card.requireVerifyCode) {
-                FreshPanel(
-                    title = "顾客核销码",
-                    spineTone = if (codeOk) StatusTone.SUCCESS else StatusTone.WARNING,
-                ) {
-                    RiderTextField(
-                        value = verifyCode,
-                        onValueChange = onVerifyCodeChange,
-                        label = "请顾客出示核销码",
-                        leadingIcon = FreshIconType.LOCK,
-                    )
+                MtCard {
+                    MtSectionTitle("顾客核销码", trailing = {
+                        MtTag(
+                            if (codeOk) "已填写" else "待填写",
+                            tone = if (codeOk) StatusTone.SUCCESS else StatusTone.WARNING,
+                        )
+                    })
+                    MtDivider()
+                    Box(Modifier.padding(FreshSpacing.Sm)) {
+                        RiderTextField(
+                            value = verifyCode,
+                            onValueChange = onVerifyCodeChange,
+                            label = "请顾客出示核销码",
+                            leadingIcon = FreshIconType.LOCK,
+                        )
+                    }
                 }
             }
         }
     }
 }
 
+/** 送达前复核：楼层门牌放到最大，这是骑手站在楼下唯一要确认的东西。 */
 @Composable
 private fun KeyInfoBlock(task: TaskCardUi) {
     val card = task.card
-    FreshPanel(
-        title = card.addressDetail ?: card.areaLabel ?: "地址待补充",
-        eyebrow = "送达前复核",
-        spineTone = when {
-            card.overtimeRisk == "OVERTIME" -> StatusTone.DANGER
-            card.overtimeRisk in setOf("HIGH", "MEDIUM") -> StatusTone.WARNING
-            card.coldChainLevel in setOf("FROZEN", "CHILLED") -> StatusTone.COLD
-            else -> StatusTone.SUCCESS
-        },
-    ) {
-        card.floorNo?.let {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(FreshSpacing.Xs),
-            ) {
-                FreshIcon(
-                    FreshIconType.LOCATION,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                )
+    MtCard {
+        Column(Modifier.padding(FreshSpacing.Sm)) {
+            Text(
+                text = card.addressDetail ?: card.areaLabel ?: "地址待补充",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            card.floorNo?.let {
                 Text(
-                    "$it 楼 ${card.roomNo ?: ""}",
-                    style = MaterialTheme.typography.headlineSmall,
-                    color = MaterialTheme.colorScheme.primary,
+                    text = "$it 楼 ${card.roomNo ?: ""}".trim(),
+                    style = MaterialTheme.typography.displaySmall.tabularFigures(),
+                    color = RiderColors.Deliver,
                 )
             }
-        }
-        Text(
-            "${card.receiverName ?: "顾客"} · ${card.itemCount} 件",
-            style = MaterialTheme.typography.titleMedium,
-        )
-        card.customerRemark?.takeIf { it.isNotBlank() }?.let {
-            FreshStatusBadge(
-                text = "备注：$it",
-                tone = StatusTone.WARNING,
-                icon = FreshIconType.WARNING,
+            Text(
+                text = "${card.receiverName ?: "顾客"} · ${card.itemCount} 件",
+                style = MaterialTheme.typography.titleMedium.tabularFigures(),
+                color = RiderColors.Ink,
             )
+        }
+        card.customerRemark?.takeIf { it.isNotBlank() }?.let {
+            MtInfoBar(text = "顾客备注：$it", tone = StatusTone.WARNING)
         }
     }
 }
@@ -370,9 +396,9 @@ private fun PhotoThumbnail(path: String) {
     }
     Box(
         modifier = Modifier
-            .size(96.dp)
-            .clip(RoundedCornerShape(com.yulin.rider.core.designsystem.FreshRadius.Small))
-            .background(MaterialTheme.colorScheme.surfaceVariant),
+            .size(88.dp)
+            .clip(RoundedCornerShape(FreshRadius.Small))
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh),
         contentAlignment = Alignment.Center,
     ) {
         if (bitmap != null) {
@@ -387,9 +413,14 @@ private fun PhotoThumbnail(path: String) {
                 FreshIcon(
                     FreshIconType.CAMERA,
                     contentDescription = null,
-                    tint = RiderColors.Primary,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    size = 22.dp,
                 )
-                Text("已拍摄", style = MaterialTheme.typography.labelMedium)
+                Text(
+                    text = "已拍摄",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
     }

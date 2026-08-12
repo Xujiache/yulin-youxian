@@ -12,36 +12,44 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.CreationExtras
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewModelScope
-import com.yulin.rider.core.designsystem.FreshBottomActionBar
 import com.yulin.rider.core.designsystem.FreshEmpty
 import com.yulin.rider.core.designsystem.FreshIcon
 import com.yulin.rider.core.designsystem.FreshIconType
-import com.yulin.rider.core.designsystem.FreshPanel
 import com.yulin.rider.core.designsystem.FreshSpacing
 import com.yulin.rider.core.designsystem.FreshStackScaffold
-import com.yulin.rider.core.designsystem.FreshStatusBadge
+import com.yulin.rider.core.designsystem.MtAction
+import com.yulin.rider.core.designsystem.MtBottomActionBar
+import com.yulin.rider.core.designsystem.MtCard
+import com.yulin.rider.core.designsystem.MtDivider
+import com.yulin.rider.core.designsystem.MtMetric
+import com.yulin.rider.core.designsystem.MtPrimaryButton
+import com.yulin.rider.core.designsystem.MtScaffold
+import com.yulin.rider.core.designsystem.MtTag
+import com.yulin.rider.core.designsystem.RiderColors
 import com.yulin.rider.core.designsystem.RiderTheme
-import com.yulin.rider.core.designsystem.SlideToConfirm
 import com.yulin.rider.core.designsystem.StatusTone
+import com.yulin.rider.core.designsystem.tabularFigures
 import com.yulin.rider.feature.task.data.TaskCardUi
 import com.yulin.rider.feature.task.data.TaskRepository
 import com.yulin.rider.feature.task.data.TaskStatus
@@ -82,6 +90,7 @@ class PickupViewModel(app: Application, private val waveId: Long) : AndroidViewM
 fun PickupScreen(
     waveId: Long,
     modifier: Modifier = Modifier,
+    onBack: () -> Unit = {},
     onDone: () -> Unit = {},
 ) {
     val viewModel: PickupViewModel = viewModel(
@@ -107,6 +116,7 @@ fun PickupScreen(
         wave = current,
         checked = checked,
         modifier = modifier,
+        onBack = onBack,
         onToggle = viewModel::toggle,
         onCheckAll = { viewModel.checkAll(it) },
         onConfirm = { viewModel.confirmPickup(onDone) },
@@ -118,42 +128,50 @@ private fun PickupContent(
     wave: WaveUi,
     checked: Set<Long>,
     modifier: Modifier = Modifier,
+    onBack: () -> Unit = {},
     onToggle: (Long) -> Unit = {},
     onCheckAll: (List<Long>) -> Unit = {},
     onConfirm: () -> Unit = {},
 ) {
     val stops = wave.stops.filter { it.displayStatus == TaskStatus.ACCEPTED }.ifEmpty { wave.stops }
     val ids = stops.map { it.taskId }
-    val allChecked = stops.isNotEmpty() && checked.containsAll(ids)
+    val checkedCount = checked.intersect(ids.toSet()).size
+    val allChecked = stops.isNotEmpty() && checkedCount == stops.size
 
-    FreshStackScaffold(
+    MtScaffold(
         title = "取货核对",
         subtitle = wave.wave.waveNo,
         modifier = modifier,
+        onBack = onBack,
         bottomBar = {
-            FreshBottomActionBar(
-                reason = if (allChecked) null else "还有 ${stops.size - checked.intersect(ids.toSet()).size} 单未核对",
-                reasonTone = StatusTone.WARNING,
+            MtBottomActionBar(
+                hint = if (allChecked) null else "还有 ${stops.size - checkedCount} 单未核对",
             ) {
-                SlideToConfirm(
-                    text = if (allChecked) "滑动确认已全部取货" else "请先逐单勾选",
+                MtPrimaryButton(
+                    text = if (allChecked) "我已取货" else "请先逐单核对",
+                    action = MtAction.PICKUP,
+                    modifier = Modifier.weight(1f),
                     enabled = allChecked,
                     disabledReason = "需要核对本趟全部订单",
-                    tone = StatusTone.SUCCESS,
-                    onConfirm = onConfirm,
+                    onClick = onConfirm,
                 )
             }
         },
-    ) { insets ->
+    ) {
         LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(insets),
-            contentPadding = PaddingValues(FreshSpacing.Md),
-            verticalArrangement = Arrangement.spacedBy(FreshSpacing.Sm),
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(
+                start = FreshSpacing.Sm,
+                end = FreshSpacing.Sm,
+                top = FreshSpacing.Xs,
+                bottom = FreshSpacing.Md,
+            ),
+            verticalArrangement = Arrangement.spacedBy(FreshSpacing.Xs),
         ) {
             item {
                 PickupSummary(
                     stops = stops,
-                    checkedCount = checked.intersect(ids.toSet()).size,
+                    checkedCount = checkedCount,
                     onCheckAll = { onCheckAll(ids) },
                 )
             }
@@ -178,35 +196,50 @@ private fun PickupSummary(
     val totalPackages = stops.sumOf { it.card.packageCount.coerceAtLeast(1) }
     val totalWeight = stops.sumOf { it.card.totalWeightKg ?: 0.0 }
     val cold = stops.any { it.card.coldChainLevel in setOf("FROZEN", "CHILLED") }
+    val allChecked = checkedCount == stops.size
 
-    FreshPanel(
-        title = "本趟共 ${stops.size} 单",
-        eyebrow = "门店取货",
-        spineTone = if (cold) StatusTone.COLD else StatusTone.SUCCESS,
-        action = {
-            FreshStatusBadge(
-                text = "已核对 $checkedCount/${stops.size}",
-                tone = if (checkedCount == stops.size) StatusTone.SUCCESS else StatusTone.WARNING,
+    MtCard {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(FreshSpacing.Sm),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(FreshSpacing.Sm),
+        ) {
+            MtMetric(
+                label = "本趟订单",
+                value = "$checkedCount/${stops.size}",
+                valueColor = if (allChecked) RiderColors.Deliver else RiderColors.Ink,
+                modifier = Modifier.weight(1f),
             )
-        },
-    ) {
-        Text(
-            text = "$totalItems 件 · $totalPackages 袋" +
-                (RiderFormats.weight(totalWeight)?.let { " · $it" } ?: ""),
-            style = MaterialTheme.typography.titleLarge,
-        )
-        if (cold) {
-            FreshStatusBadge(
-                text = "含冷链商品，先装保温箱",
-                tone = StatusTone.COLD,
-                icon = FreshIconType.COLD,
+            MtMetric(label = "商品", value = "$totalItems", unit = "件", modifier = Modifier.weight(1f))
+            MtMetric(
+                label = "包裹",
+                value = "$totalPackages",
+                unit = RiderFormats.weight(totalWeight)?.let { "袋 · $it" } ?: "袋",
+                modifier = Modifier.weight(1f),
             )
         }
-        TextButton(onClick = onCheckAll, modifier = Modifier.fillMaxWidth()) {
-            Text(
-                if (checkedCount == stops.size) "取消全选" else "核对全部",
-                style = MaterialTheme.typography.labelLarge,
+        MtDivider()
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onCheckAll)
+                .padding(FreshSpacing.Sm),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(FreshSpacing.Xs),
+        ) {
+            FreshIcon(
+                type = if (allChecked) FreshIconType.CHECK else FreshIconType.ADD,
+                contentDescription = null,
+                tint = if (allChecked) RiderColors.Deliver else RiderColors.Ink,
+                size = 18.dp,
             )
+            Text(
+                text = if (allChecked) "取消全选" else "核对全部",
+                style = MaterialTheme.typography.titleSmall,
+                color = RiderColors.Ink,
+                modifier = Modifier.weight(1f),
+            )
+            if (cold) MtTag("含冷链，先装保温箱", tone = StatusTone.COLD)
         }
     }
 }
@@ -214,54 +247,57 @@ private fun PickupSummary(
 @Composable
 private fun PickupRow(task: TaskCardUi, checked: Boolean, onToggle: () -> Unit) {
     val cold = task.card.coldChainLevel in setOf("FROZEN", "CHILLED")
-    FreshPanel(
-        modifier = Modifier
-            .clickable(role = Role.Checkbox, onClick = onToggle)
-            .semantics {
-                role = Role.Checkbox
-                contentDescription = "${task.card.areaLabel ?: task.card.addressDetail ?: "订单"}，" +
-                    if (checked) "已核对" else "未核对"
-            },
-        eyebrow = "第 ${task.card.seqNo ?: "-"} 单",
-        spineTone = when {
-            checked -> StatusTone.SUCCESS
-            cold -> StatusTone.COLD
-            else -> StatusTone.NORMAL
+    MtCard(
+        modifier = Modifier.semantics {
+            role = Role.Checkbox
+            contentDescription = "${task.card.areaLabel ?: task.card.addressDetail ?: "订单"}，" +
+                if (checked) "已核对" else "未核对"
         },
-        action = {
-            if (cold) {
-                FreshStatusBadge(
-                    text = if (task.card.coldChainLevel == "FROZEN") "冷冻" else "冷藏",
-                    tone = StatusTone.COLD,
-                    icon = FreshIconType.COLD,
-                )
-            }
-        },
+        onClick = onToggle,
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().padding(FreshSpacing.Sm),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(FreshSpacing.Xs),
         ) {
-            Checkbox(checked = checked, onCheckedChange = { onToggle() })
+            Checkbox(
+                checked = checked,
+                onCheckedChange = { onToggle() },
+                colors = CheckboxDefaults.colors(
+                    checkedColor = RiderColors.Deliver,
+                    checkmarkColor = Color.White,
+                ),
+            )
             Column(modifier = Modifier.weight(1f)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(FreshSpacing.Xxs),
+                ) {
+                    Text(
+                        text = "第 ${task.card.seqNo ?: "-"} 单",
+                        style = MaterialTheme.typography.labelSmall.tabularFigures(),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    if (cold) {
+                        MtTag(
+                            if (task.card.coldChainLevel == "FROZEN") "冷冻" else "冷藏",
+                            tone = StatusTone.COLD,
+                        )
+                    }
+                }
                 Text(
-                    task.card.areaLabel ?: task.card.addressDetail.orEmpty(),
+                    text = task.card.areaLabel ?: task.card.addressDetail.orEmpty(),
                     style = MaterialTheme.typography.titleMedium,
+                    color = RiderColors.Ink,
                 )
                 Text(
-                    "${task.card.itemCount} 件" +
+                    text = "${task.card.itemCount} 件" +
                         (RiderFormats.weight(task.card.totalWeightKg)?.let { " · $it" } ?: "") +
                         (task.card.goodsSummary?.let { " · $it" } ?: ""),
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.bodyMedium.tabularFigures(),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            FreshIcon(
-                type = if (checked) FreshIconType.CHECK else FreshIconType.PACKAGE,
-                contentDescription = null,
-                tint = if (checked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-            )
         }
     }
 }

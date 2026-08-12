@@ -18,6 +18,9 @@ object RiderRoutes {
 
     const val WAVE_DETAIL = "wave_detail/{waveId}"
     const val TASK_DETAIL = "task_detail/{taskId}"
+
+    /** 派单页。派单通知点开后落这里，接单后才进入详情。 */
+    const val DISPATCH = "dispatch/{taskId}"
     const val PICKUP = "pickup/{waveId}"
     const val DELIVER = "deliver/{taskId}"
     const val EXCEPTION_REPORT = "exception/{taskId}"
@@ -43,6 +46,8 @@ object RiderRoutes {
     fun waveDetail(waveId: Long): String = "wave_detail/$waveId"
 
     fun taskDetail(taskId: Long): String = "task_detail/$taskId"
+
+    fun dispatch(taskId: Long): String = "dispatch/$taskId"
 
     fun pickup(waveId: Long): String = "pickup/$waveId"
 

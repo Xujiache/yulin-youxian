@@ -19,10 +19,13 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -33,6 +36,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
@@ -47,17 +51,16 @@ import com.yulin.rider.core.common.CAMERA_SAVE_FAILED_TEXT
 import com.yulin.rider.core.common.CameraPermissionState
 import com.yulin.rider.core.common.CameraReliability
 import com.yulin.rider.core.common.cameraCaptureErrorText
-import com.yulin.rider.core.designsystem.BigActionButton
-import com.yulin.rider.core.designsystem.EmptyState
-import com.yulin.rider.core.designsystem.FreshBanner
-import com.yulin.rider.core.designsystem.FreshEmpty
 import com.yulin.rider.core.designsystem.FreshIconType
+import com.yulin.rider.core.designsystem.FreshRadius
 import com.yulin.rider.core.designsystem.FreshSpacing
-import com.yulin.rider.core.designsystem.FreshStackScaffold
-import com.yulin.rider.core.designsystem.RiderColors
+import com.yulin.rider.core.designsystem.MtAction
+import com.yulin.rider.core.designsystem.MtEmptyState
+import com.yulin.rider.core.designsystem.MtInfoBar
+import com.yulin.rider.core.designsystem.MtPrimaryButton
+import com.yulin.rider.core.designsystem.MtScaffold
 import com.yulin.rider.core.designsystem.RiderDimens
 import com.yulin.rider.core.designsystem.RiderTheme
-import com.yulin.rider.core.designsystem.StatusTone
 import com.yulin.rider.feature.task.data.EvidenceUploader
 
 /**
@@ -150,14 +153,14 @@ fun CameraCapture(
             },
         )
 
-        FreshBanner(
+        MtInfoBar(
             text = hint,
-            tone = StatusTone.INFO,
             icon = FreshIconType.CAMERA,
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .safeDrawingPadding()
-                .padding(FreshSpacing.Md),
+                .padding(FreshSpacing.Sm)
+                .clip(RoundedCornerShape(FreshRadius.Control)),
         )
 
         Column(
@@ -175,11 +178,12 @@ fun CameraCapture(
                 textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
             )
-            BigActionButton(
+            MtPrimaryButton(
                 text = if (capturing) "正在保存…" else if (captureError != null) "重新拍照" else "拍照",
+                action = MtAction.ACCEPT,
                 modifier = Modifier.fillMaxWidth(),
                 enabled = !capturing,
-                tone = StatusTone.SUCCESS,
+                disabledReason = "正在保存照片",
                 icon = FreshIconType.CAMERA,
             ) {
                 capturing = true
@@ -212,14 +216,20 @@ fun CameraCapture(
                     },
                 )
             }
-            Spacer(Modifier.height(12.dp))
-            BigActionButton(
-                text = "取消",
-                modifier = Modifier.fillMaxWidth(),
-                tone = StatusTone.NORMAL,
-                icon = FreshIconType.CLOSE,
+            Spacer(Modifier.height(FreshSpacing.Xs))
+            // 取消不给填充按钮：黑色取景画面上再放一块白底会抢走快门的位置
+            TextButton(
                 onClick = onCancel,
-            )
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = RiderDimens.TouchTarget),
+            ) {
+                Text(
+                    text = "取消",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = Color.White,
+                )
+            }
         }
     }
 }
@@ -232,17 +242,17 @@ private fun CameraPermissionContent(
     onOpenSettings: () -> Unit,
     onCancel: () -> Unit,
 ) {
-    FreshStackScaffold(
+    MtScaffold(
         title = "相机权限",
         subtitle = "拍摄送达凭证",
         onBack = onCancel,
         modifier = modifier,
-    ) { insets ->
+    ) {
         Column(
-            modifier = Modifier.fillMaxSize().padding(insets).padding(FreshSpacing.Md),
+            modifier = Modifier.fillMaxSize().padding(FreshSpacing.Sm),
             verticalArrangement = Arrangement.Center,
         ) {
-            FreshEmpty(
+            MtEmptyState(
                 title = when (state) {
                     CameraPermissionState.NO_CAMERA -> "未检测到可用相机"
                     CameraPermissionState.PERMANENTLY_DENIED -> "相机权限已关闭"
@@ -257,12 +267,14 @@ private fun CameraPermissionContent(
                 icon = FreshIconType.CAMERA,
             )
             if (state != CameraPermissionState.NO_CAMERA) {
-                BigActionButton(
+                MtPrimaryButton(
                     text = if (state == CameraPermissionState.PERMANENTLY_DENIED) {
                         "打开系统设置"
                     } else {
                         "开启相机权限"
                     },
+                    action = MtAction.ACCEPT,
+                    modifier = Modifier.fillMaxWidth(),
                     icon = if (state == CameraPermissionState.PERMANENTLY_DENIED) {
                         FreshIconType.SETTINGS
                     } else {
@@ -274,12 +286,12 @@ private fun CameraPermissionContent(
                         onRequest
                     },
                 )
-                Spacer(Modifier.height(FreshSpacing.Sm))
+                Spacer(Modifier.height(FreshSpacing.Xs))
             }
-            BigActionButton(
+            MtPrimaryButton(
                 text = "返回任务",
-                tone = StatusTone.NORMAL,
-                icon = FreshIconType.BACK,
+                action = MtAction.SECONDARY,
+                modifier = Modifier.fillMaxWidth(),
                 onClick = onCancel,
             )
         }
@@ -287,7 +299,9 @@ private fun CameraPermissionContent(
 }
 
 private val CONTROL_SCRIM = Color.Black.copy(alpha = 0.55f)
-private val ERROR_TEXT = RiderColors.DangerBright
+
+/** 报错文字压在黑色取景画面上，用比标准错误红更亮的一档才读得清。 */
+private val ERROR_TEXT = Color(0xFFFF7875)
 
 private fun ImageProxy.toJpegBytes(): ByteArray {
     val buffer = planes[0].buffer
