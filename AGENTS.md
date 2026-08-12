@@ -70,3 +70,35 @@ With MySQL up and the backend running, start the admin dev server and log in at
 `http://localhost:3006/` with the configured admin credentials. A good core-feature smoke
 test is creating a rider under 配送任务 → 骑手管理 (`/#/fresh/delivery/riders`); it writes a
 row to the MySQL `rider` table.
+
+### Rider app (`rider-android`) — build & unit tests (headless)
+
+- Install the Android SDK once (baked into the snapshot): command-line tools + `platforms;android-36`,
+  `build-tools;36.0.0`, `platform-tools`. Set `sdk.dir` in `rider-android/local.properties`
+  (git-ignored) and copy `gradle.properties.example` → `gradle.properties`.
+- Build/test (matches CI, needs JDK 17 + `ANDROID_HOME`): `./gradlew --no-daemon clean testDebugUnitTest assembleDebug`.
+  Produces `app/build/outputs/apk/debug/app-debug.apk`; unit tests live in `app` + `core:*` modules.
+- Mirror gotcha (important): `settings.gradle.kts` puts Aliyun mirrors first, and the Aliyun mirror
+  intermittently returns HTTP 502 for some artifacts (seen with the KSP plugin marker
+  `com.google.devtools.ksp:...:2.3.11`). A 502 from the first repo makes Gradle abort resolution even
+  though Maven Central / Google / Gradle Plugin Portal have the artifact. Fix without editing the repo:
+  a `~/.gradle/init.gradle` (baked into the snapshot) reorders `pluginManagement`/`dependencyResolutionManagement`
+  to prefer `gradlePluginPortal()`/`mavenCentral()`/`google()` and keep Aliyun only as fallback. If Android
+  builds start failing with "plugin ... was not found", verify that init script still exists.
+- Debug variant `BASE_URL` defaults to `http://10.0.2.2:8080` (emulator loopback → host backend) and the
+  `src/debug` network-security-config permits cleartext, so a debug APK talks to a local backend with no rebuild.
+- Emulator GUI run: the Android emulator (even with KVM usable) does not finish booting in this Firecracker
+  micro-VM (device stays `offline`); nested-virt limitation, not a code issue. Validate rider↔backend behavior
+  via the `/api/rider/**` endpoints + unit tests instead of a live emulator.
+
+### Cross-end delivery flow (order → dispatch → deliver), all against MySQL
+
+WeChat customer login needs real mini-app credentials (`jscode2session`, no dev bypass), so place orders
+via the seeded demo order instead (enable `STOREFRONT_SEED_DEMO_DATA=true`). Path that works headless:
+`POST /api/admin/orders/{id}/accept` → `POST /api/admin/delivery/orders/{id}/pick-ready` (creates a
+`delivery_task`, PENDING) → `POST /api/admin/delivery/tasks/{taskId}/assign` with `{"riderId":..,"force":true}`
+(manual dispatch sets `task.rider_id`; the auto-dispatch loop won't assign a probation rider / stale-location /
+far task) → rider `accept` → `waves/{id}/pickup` → `depart` → `arrive` → upload a photo via
+`POST /api/rider/evidences` → `deliver` with `evidenceIds` (delivery config requires photo proof).
+Note: changing a rider password revokes the current rider token (re-login), and admin login is rate-limited
+(`ADMIN_LOGIN_RATE_LIMIT_MAX_ATTEMPTS`, default 5 / 15 min) — cache one token instead of re-logging in.
