@@ -72,10 +72,14 @@ log "building admin with locked Node and npm versions"
 (
   cd "$REPO_ROOT/art-lnb-master"
   HUSKY=0 npm ci --ignore-scripts=false
-  npx --no-install vue-tsc --noEmit
+  # 必须先 build 再 typecheck：ref/computed/ElMessage 这些全局符号的类型声明
+  # (src/types/import/*.d.ts) 由 unplugin-auto-import 在构建时生成，且按上游模板的做法
+  # 不入库。先跑 vue-tsc 的话，全新 clone 上这些名字全都「找不到」，几百条误报。
+  # 顺序调换不影响门禁：类型不过照样在这里失败，只是多花一次构建的时间。
   npx --no-install vite build \
     --outDir "$STAGING/admin-dist" \
     --emptyOutDir
+  npx --no-install vue-tsc --noEmit
 )
 mv "$STAGING/admin-dist" "$STAGING/release/admin/dist"
 
