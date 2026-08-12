@@ -20,6 +20,18 @@
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.VIBRATE" />
+
+    <!--
+      声明相机与定位权限会被系统隐式当成硬件要求，从而把没有这些硬件的设备
+      （ChromeOS、部分平板）挡在应用市场之外。这里显式声明为非必需：
+      缺相机时送达拍照会退化成权限说明页，缺定位时文字路线照常可用。
+    -->
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.camera.any" android:required="false" />
+    <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
+    <uses-feature android:name="android.hardware.location" android:required="false" />
+    <uses-feature android:name="android.hardware.location.gps" android:required="false" />
+
     <!-- Android 11+ 包可见性:保活向导要跳厂商设置页,不声明会 queryIntentActivities 全空 -->
     <queries>
         <intent>

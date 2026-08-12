@@ -1,11 +1,15 @@
 package com.yulin.rider
 
+import android.Manifest
 import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
 import com.yulin.rider.core.location.DutyStateStore
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
@@ -21,6 +25,14 @@ class DutyRecoveryReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent?) {
         if (intent?.action !in SUPPORTED_ACTIONS || !dutyStateStore.current().onDuty) return
+        // Android 13+ 通知需要运行时授权。骑手拒绝过就发不出这条恢复提醒，
+        // 但重启后本来也无法静默拉起定位，只能等下次进 App 时由首页校验班次。
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            return
+        }
         RiderNotificationChannels.createAll(context)
         val launch = context.packageManager.getLaunchIntentForPackage(context.packageName)
             ?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
