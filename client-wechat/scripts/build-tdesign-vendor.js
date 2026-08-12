@@ -1,4 +1,5 @@
 const fs = require("node:fs");
+const os = require("node:os");
 const path = require("node:path");
 
 const projectRoot = path.resolve(__dirname, "..");
@@ -8,8 +9,7 @@ const sourceRoot = path.join(
   "tdesign-miniprogram",
   "miniprogram_dist"
 );
-const targetRoot = path.join(projectRoot, "components", "tdesign");
-const legacyNpmOutput = path.join(projectRoot, "miniprogram_npm");
+const targetRoot = path.join(projectRoot, "components", "tdesign-cascade");
 const entryComponent = path.join(sourceRoot, "cascader", "cascader");
 const componentExtensions = [".js", ".json", ".wxml", ".wxss"];
 
@@ -159,23 +159,49 @@ while (pending.length) {
   }
 }
 
-const temporaryTarget = `${targetRoot}.tmp`;
-fs.rmSync(temporaryTarget, { recursive: true, force: true });
-for (const sourceFile of runtimeFiles) {
-  const relative = outputRelative(sourceFile);
-  const targetFile = path.join(temporaryTarget, relative);
-  fs.mkdirSync(path.dirname(targetFile), { recursive: true });
-  if ([".js", ".wxs"].includes(path.extname(sourceFile))) {
-    const source = fs.readFileSync(sourceFile, "utf8");
-    fs.writeFileSync(targetFile, rewriteBareImports(sourceFile, source), "utf8");
-  } else {
-    fs.copyFileSync(sourceFile, targetFile);
-  }
-}
+const temporaryTarget = fs.mkdtempSync(path.join(os.tmpdir(), "yulin-tdesign-cascade-"));
+const expectedFiles = new Set();
 
-fs.rmSync(targetRoot, { recursive: true, force: true });
-fs.renameSync(temporaryTarget, targetRoot);
-fs.rmSync(legacyNpmOutput, { recursive: true, force: true });
+try {
+  for (const sourceFile of runtimeFiles) {
+    const relative = outputRelative(sourceFile);
+    expectedFiles.add(relative);
+    const temporaryFile = path.join(temporaryTarget, relative);
+    fs.mkdirSync(path.dirname(temporaryFile), { recursive: true });
+    if ([".js", ".wxs"].includes(path.extname(sourceFile))) {
+      const source = fs.readFileSync(sourceFile, "utf8");
+      fs.writeFileSync(temporaryFile, rewriteBareImports(sourceFile, source), "utf8");
+    } else {
+      fs.copyFileSync(sourceFile, temporaryFile);
+    }
+  }
+
+  // Keep the published component tree continuously available while DevTools is watching it.
+  // Files are copied over in place; the component directory is never renamed or removed.
+  for (const relative of expectedFiles) {
+    const temporaryFile = path.join(temporaryTarget, relative);
+    const targetFile = path.join(targetRoot, relative);
+    fs.mkdirSync(path.dirname(targetFile), { recursive: true });
+    const unchanged = fs.existsSync(targetFile)
+      && fs.readFileSync(targetFile).equals(fs.readFileSync(temporaryFile));
+    if (!unchanged) {
+      fs.copyFileSync(temporaryFile, targetFile);
+    }
+  }
+
+  if (fs.existsSync(targetRoot)) {
+    const existingFiles = fs.readdirSync(targetRoot, { recursive: true, withFileTypes: true })
+      .filter((entry) => entry.isFile())
+      .map((entry) => path.relative(targetRoot, path.join(entry.parentPath, entry.name)));
+    for (const relative of existingFiles) {
+      if (!expectedFiles.has(relative)) {
+        fs.rmSync(path.join(targetRoot, relative), { force: true });
+      }
+    }
+  }
+} finally {
+  fs.rmSync(temporaryTarget, { recursive: true, force: true });
+}
 
 const cascaderEntry = path.join(targetRoot, "cascader", "cascader.json");
 if (!fs.existsSync(cascaderEntry)) {
