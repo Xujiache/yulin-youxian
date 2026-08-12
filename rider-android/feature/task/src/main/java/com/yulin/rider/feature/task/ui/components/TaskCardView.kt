@@ -2,39 +2,31 @@ package com.yulin.rider.feature.task.ui.components
 
 import android.content.Intent
 import android.net.Uri
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.role
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.tooling.preview.Preview
-import com.yulin.rider.core.designsystem.CountdownText
-import com.yulin.rider.core.designsystem.FreshBanner
-import com.yulin.rider.core.designsystem.FreshIcon
 import com.yulin.rider.core.designsystem.FreshIconType
-import com.yulin.rider.core.designsystem.FreshPanel
-import com.yulin.rider.core.designsystem.FreshSecondaryButton
 import com.yulin.rider.core.designsystem.FreshSpacing
-import com.yulin.rider.core.designsystem.FreshStatusBadge
-import com.yulin.rider.core.designsystem.RiderColors
+import com.yulin.rider.core.designsystem.MtAction
+import com.yulin.rider.core.designsystem.MtCard
+import com.yulin.rider.core.designsystem.MtCardHeader
+import com.yulin.rider.core.designsystem.MtDivider
+import com.yulin.rider.core.designsystem.MtGhostAction
+import com.yulin.rider.core.designsystem.MtLeg
+import com.yulin.rider.core.designsystem.MtLegBlock
+import com.yulin.rider.core.designsystem.MtPrimaryButton
+import com.yulin.rider.core.designsystem.MtTag
 import com.yulin.rider.core.designsystem.RiderTheme
-import com.yulin.rider.core.designsystem.SlideToConfirm
 import com.yulin.rider.core.designsystem.StatusTone
+import com.yulin.rider.core.designsystem.tabularFigures
 import com.yulin.rider.feature.task.data.NextStep
 import com.yulin.rider.feature.task.data.TaskCardUi
 import com.yulin.rider.feature.task.data.TaskStatus
@@ -42,287 +34,201 @@ import com.yulin.rider.feature.task.ui.previewTask
 import com.yulin.rider.feature.task.util.RiderFormats
 
 /**
- * 驾驶舱任务卡。地址与楼层优先，左侧进度脊同时编码冷链、预警与超时风险。
+ * 任务卡。
+ *
+ * 按当前所处的行程段切三种形态，和美团骑手端一致：
+ * 待接单显示两点距离与黄色接单按钮；待取货把取货段点亮、按钮转橙红；
+ * 配送中把送达段点亮、按钮转绿色。骑手不读文字，靠颜色就知道下一步去哪。
  */
 @Composable
 fun TaskCardView(
     task: TaskCardUi,
     modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null,
-    onSlideConfirm: (() -> Unit)? = null,
+    onAdvance: (() -> Unit)? = null,
 ) {
     val card = task.card
-    val interactive = if (onClick != null) {
-        Modifier
-            .clickable(role = Role.Button, onClick = onClick)
-            .semantics {
-                role = Role.Button
-                contentDescription = "${task.displayStatusText}，${card.shortAddress()}，打开任务详情"
-            }
-    } else {
-        Modifier
-    }
+    val leg = task.activeLeg()
 
-    FreshPanel(
-        modifier = modifier.fillMaxWidth().then(interactive),
-        eyebrow = buildString {
-            if (card.seqNo != null && card.totalStops != null) append("第 ${card.seqNo}/${card.totalStops} 站")
-            task.waveNo?.let { if (isNotEmpty()) append(" · "); append("波次 $it") }
-        }.ifBlank { "独立任务" },
-        spineTone = task.spineTone(),
-        action = {
-            FreshStatusBadge(
-                text = task.displayStatusText,
-                tone = task.displayStatus.tone(),
-            )
-        },
-    ) {
-        SequenceAndAddress(task)
-        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-        ColdChainAndLoad(task)
-        ReceiverRow(task)
+    MtCard(modifier = modifier, onClick = onClick) {
+        MtCardHeader(
+            scheduled = card.slotLabel != null,
+            timeText = headerTimeText(task),
+            highlight = null,
+            trailing = { HeaderTrailing(task) },
+        )
 
-        val remarks = listOfNotNull(card.customerRemark, card.deliveryInstruction)
-            .distinct()
-            .filter { it.isNotBlank() }
-        if (remarks.isNotEmpty() || card.highlightNotes.isNotEmpty()) {
-            RemarkBlock(remarks, card.highlightNotes)
-        }
+        MtLegBlock(
+            pickupTitle = card.pickupName(),
+            pickupSubtitle = card.pickupAddress(),
+            pickupDistance = if (leg == MtLeg.PICKUP) {
+                RiderFormats.distance(card.distanceFromRiderMeters)
+            } else {
+                null
+            },
+            deliverTitle = card.deliverTitle(),
+            deliverSubtitle = card.deliverSubtitle(),
+            deliverDistance = if (leg == MtLeg.PICKUP) {
+                task.legDistanceMeters?.let { RiderFormats.distance(it) }
+            } else {
+                null
+            },
+            activeLeg = leg,
+            modifier = Modifier.padding(horizontal = FreshSpacing.Sm),
+        )
 
-        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-        DistanceRow(task)
-        DeadlineRow(task)
+        TagRow(task)
 
         if (task.pendingSync || task.syncFailed) {
-            FreshBanner(
-                text = if (task.syncFailed) {
-                    "同步异常，可在首页手动重试"
+            Text(
+                text = if (task.syncFailed) "同步异常，可在首页手动重试" else "操作已离线记录，联网后自动上报",
+                style = MaterialTheme.typography.bodySmall,
+                color = if (task.syncFailed) {
+                    MaterialTheme.colorScheme.error
                 } else {
-                    "操作已离线记录，联网后自动上报"
+                    MaterialTheme.colorScheme.onSurfaceVariant
                 },
-                tone = if (task.syncFailed) StatusTone.DANGER else StatusTone.WARNING,
-                icon = if (task.syncFailed) FreshIconType.ERROR else FreshIconType.OFFLINE,
+                modifier = Modifier.padding(
+                    horizontal = FreshSpacing.Sm,
+                    vertical = FreshSpacing.Xxs,
+                ),
             )
         }
 
-        if (onSlideConfirm != null && task.nextStep != NextStep.NONE) {
-            SlideToConfirm(
-                text = task.nextStep.slideText,
-                modifier = Modifier.fillMaxWidth(),
-                tone = StatusTone.SUCCESS,
-                onConfirm = onSlideConfirm,
-            )
+        if (onAdvance != null && task.nextStep != NextStep.NONE) {
+            MtDivider(Modifier.padding(top = FreshSpacing.Xs))
+            ActionRow(task = task, onAdvance = onAdvance)
         }
     }
 }
 
 @Composable
-private fun SequenceAndAddress(task: TaskCardUi) {
-    val card = task.card
-    Column(modifier = Modifier.fillMaxWidth()) {
+private fun HeaderTrailing(task: TaskCardUi) {
+    val seq = task.card.seqNo
+    if (seq != null) {
         Text(
-            text = card.shortAddress(),
-            style = MaterialTheme.typography.headlineSmall,
-            color = MaterialTheme.colorScheme.onSurface,
-        )
-        card.floorLine()?.let { floor ->
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(FreshSpacing.Xs),
-            ) {
-                FreshIcon(
-                    type = FreshIconType.LOCATION,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                )
-                Text(
-                    text = floor,
-                    style = MaterialTheme.typography.titleLarge,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun ColdChainAndLoad(task: TaskCardUi) {
-    val card = task.card
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
-    ) {
-        val coldText = card.coldChainText ?: card.coldChainLevel.coldChainLabel()
-        if (coldText != null) {
-            FreshStatusBadge(
-                text = coldText,
-                tone = StatusTone.COLD,
-                icon = FreshIconType.COLD,
-            )
-        } else {
-            Spacer(Modifier.width(FreshSpacing.Xxs))
-        }
-        val load = buildList {
-            if (card.itemCount > 0) add("${card.itemCount} 件")
-            RiderFormats.weight(card.totalWeightKg)?.let(::add)
-            if (card.packageCount > 1) add("${card.packageCount} 袋")
-        }.joinToString(" · ")
-        if (load.isNotEmpty()) {
-            Text(text = load, style = MaterialTheme.typography.titleSmall)
-        }
-    }
-}
-
-@Composable
-private fun ReceiverRow(task: TaskCardUi) {
-    val context = LocalContext.current
-    val card = task.card
-    val phone = card.callNumber ?: card.receiverPhoneMasked
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(FreshSpacing.Sm),
-    ) {
-        FreshIcon(
-            type = FreshIconType.PROFILE,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.secondary,
-        )
-        Column(modifier = Modifier.weight(1f)) {
-            Text(card.receiverName ?: "顾客", style = MaterialTheme.typography.titleMedium)
-            if (phone != null) {
-                Text(phone, style = MaterialTheme.typography.bodyLarge)
-            }
-            if (card.sameAddressTaskCount > 1) {
-                Text(
-                    "同门牌 ${card.sameAddressTaskCount} 单，可一起送",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = RiderColors.Warning,
-                )
-            }
-        }
-        if (!card.callNumber.isNullOrBlank()) {
-            FreshSecondaryButton(
-                text = "拨号",
-                icon = FreshIconType.PHONE,
-                tone = StatusTone.INFO,
-            ) {
-                context.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:${card.callNumber}")))
-            }
-        }
-    }
-}
-
-@Composable
-private fun RemarkBlock(remarks: List<String>, highlights: List<String>) {
-    FreshBanner(
-        text = buildList {
-            remarks.forEach { add("备注：$it") }
-            highlights.forEach { add(it) }
-        }.joinToString("\n"),
-        tone = if (highlights.isNotEmpty()) StatusTone.DANGER else StatusTone.WARNING,
-        icon = FreshIconType.WARNING,
-    )
-}
-
-@Composable
-private fun DistanceRow(task: TaskCardUi) {
-    val fromMe = RiderFormats.distance(task.card.distanceFromRiderMeters)
-    val leg = task.legDistanceMeters?.let { RiderFormats.distance(it) }
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(FreshSpacing.Xs),
-    ) {
-        FreshIcon(
-            type = FreshIconType.ROUTE,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.secondary,
-        )
-        Text(
-            text = if (leg != null) "距我 $fromMe · 本段 $leg" else "距我 $fromMe",
-            style = MaterialTheme.typography.bodyMedium,
+            text = "# $seq",
+            style = MaterialTheme.typography.titleSmall.tabularFigures(),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }
 
 @Composable
-private fun DeadlineRow(task: TaskCardUi) {
+private fun TagRow(task: TaskCardUi) {
     val card = task.card
-    val deadline = card.promisedAt ?: card.etaAt
-    val target = RiderFormats.parseEpochMillis(deadline)
-        ?: card.remainingSeconds?.let { System.currentTimeMillis() + it * 1000 }
-    val riskTone = card.overtimeRisk.riskTone()
+    val cold = card.coldChainText ?: card.coldChainLevel.coldChainLabel()
+    val load = buildList {
+        if (card.itemCount > 0) add("${card.itemCount} 件")
+        RiderFormats.weight(card.totalWeightKg)?.let(::add)
+        if (card.packageCount > 1) add("${card.packageCount} 袋")
+    }.joinToString(" · ")
+
+    if (cold == null && load.isEmpty() && card.highlightNotes.isEmpty()) return
+
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = FreshSpacing.Sm, vertical = FreshSpacing.Xxs),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(FreshSpacing.Xs),
+        horizontalArrangement = Arrangement.spacedBy(FreshSpacing.Xxs),
     ) {
-        FreshIcon(
-            type = FreshIconType.CLOCK,
-            contentDescription = null,
-            tint = riskToneColor(riskTone),
-        )
-        Text(
-            text = RiderFormats.hourMinute(deadline)?.let { "$it 前送达" } ?: (card.slotLabel ?: "无时限"),
-            style = MaterialTheme.typography.titleSmall,
-            modifier = Modifier.weight(1f),
-        )
-        if (target != null) {
-            CountdownText(
-                targetEpochMillis = target,
-                prefix = "剩余 ",
-                overtimePrefix = "已超时 ",
+        if (cold != null) MtTag(cold, tone = StatusTone.COLD)
+        card.highlightNotes.take(1).forEach { MtTag(it, tone = StatusTone.WARNING) }
+        if (load.isNotEmpty()) {
+            Text(
+                text = load,
+                style = MaterialTheme.typography.bodySmall.tabularFigures(),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = FreshSpacing.Xxs),
             )
         }
     }
 }
 
+/** 底部动作行：左侧联系，右侧主按钮，按行程段换色。 */
 @Composable
-private fun riskToneColor(tone: StatusTone) = when (tone) {
-    StatusTone.DANGER -> MaterialTheme.colorScheme.error
-    StatusTone.WARNING -> RiderColors.Warning
-    else -> MaterialTheme.colorScheme.primary
+private fun ActionRow(task: TaskCardUi, onAdvance: () -> Unit) {
+    val context = LocalContext.current
+    val phone = task.card.callNumber
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(FreshSpacing.Xs),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(FreshSpacing.Xs),
+    ) {
+        if (!phone.isNullOrBlank()) {
+            MtGhostAction("联系", FreshIconType.PHONE) {
+                context.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:$phone")))
+            }
+        }
+        MtPrimaryButton(
+            text = task.nextStep.slideText,
+            action = task.nextStep.toAction(),
+            modifier = Modifier.weight(1f),
+            onClick = onAdvance,
+        )
+    }
 }
 
-private fun TaskCardUi.spineTone(): StatusTone = when {
-    card.overtimeRisk == "OVERTIME" -> StatusTone.DANGER
-    card.overtimeRisk in setOf("HIGH", "MEDIUM") -> StatusTone.WARNING
-    card.coldChainLevel in setOf("FROZEN", "CHILLED") -> StatusTone.COLD
-    displayStatus == TaskStatus.DELIVERED -> StatusTone.SUCCESS
-    else -> displayStatus.tone()
+/** 下一步动作决定按钮颜色：取货段橙红、送达段绿色、其余走品牌黄。 */
+private fun NextStep.toAction(): MtAction = when (this) {
+    NextStep.PICKUP -> MtAction.PICKUP
+    NextStep.DELIVER -> MtAction.DELIVER
+    else -> MtAction.ACCEPT
 }
 
-private fun com.yulin.rider.core.model.TaskCard.shortAddress(): String {
+/** 已经取到货就把送达段点亮，否则高亮取货段。 */
+private fun TaskCardUi.activeLeg(): MtLeg = when (displayStatus) {
+    TaskStatus.DELIVERING, TaskStatus.ARRIVED, TaskStatus.DELIVERED -> MtLeg.DELIVER
+    else -> MtLeg.PICKUP
+}
+
+private fun headerTimeText(task: TaskCardUi): String {
+    val card = task.card
+    val deadline = RiderFormats.hourMinute(card.promisedAt ?: card.etaAt)
+    val remaining = card.remainingSeconds
+    return when {
+        remaining != null && remaining > 0 -> {
+            val minutes = (remaining / 60).coerceAtLeast(1)
+            if (deadline != null) "还剩${minutes}分钟($deadline)送达" else "还剩${minutes}分钟送达"
+        }
+
+        remaining != null -> "已超时，尽快送达"
+        deadline != null -> "$deadline 前送达"
+        else -> card.slotLabel ?: "无时限"
+    }
+}
+
+// 自营单门店，取货点恒为本店；取货段的有效信息是「要拿什么」，所以副标题给商品摘要。
+private fun com.yulin.rider.core.model.TaskCard.pickupName(): String = "门店取货"
+
+private fun com.yulin.rider.core.model.TaskCard.pickupAddress(): String? =
+    goodsSummary?.takeIf { it.isNotBlank() }
+
+private fun com.yulin.rider.core.model.TaskCard.deliverTitle(): String {
     val head = listOfNotNull(
         areaLabel,
         buildingLabel,
         unitNo?.let { "$it 单元" },
+        floorNo?.let { "$it 楼" },
+        roomNo?.let { "$it 室" },
     ).joinToString(" ")
     return head.ifBlank { addressDetail ?: "地址待补充" }
 }
 
-private fun com.yulin.rider.core.model.TaskCard.floorLine(): String? {
-    val parts = listOfNotNull(
-        floorNo?.let { "$it 楼" },
-        roomNo?.let { "$it 室" },
-    )
-    if (parts.isNotEmpty()) return parts.joinToString(" ")
-    return addressDetail?.takeIf { areaLabel != null || buildingLabel != null }
+private fun com.yulin.rider.core.model.TaskCard.deliverSubtitle(): String? {
+    val name = receiverName ?: "顾客"
+    val phone = receiverPhoneMasked ?: callNumber
+    return if (phone != null) "$name  $phone" else name
 }
 
 private fun String?.coldChainLabel(): String? = when (this) {
-    "FROZEN" -> "冷冻 · 优先送达"
+    "FROZEN" -> "冷冻"
     "CHILLED" -> "冷藏"
     "NORMAL", null -> null
     else -> this
-}
-
-private fun String?.riskTone(): StatusTone = when (this) {
-    "OVERTIME" -> StatusTone.DANGER
-    "HIGH", "MEDIUM" -> StatusTone.WARNING
-    else -> StatusTone.SUCCESS
 }
 
 internal fun String.tone(): StatusTone = when (this) {
@@ -332,36 +238,25 @@ internal fun String.tone(): StatusTone = when (this) {
     else -> StatusTone.NORMAL
 }
 
-@Preview(name = "任务卡 · 冷链预警", showBackground = true)
+@Preview(name = "任务卡 · 待取货", showBackground = true, backgroundColor = 0xFFF5F5F5)
 @Composable
-private fun TaskCardColdPreview() {
+private fun TaskCardPickupPreview() {
     RiderTheme {
         TaskCardView(
             task = previewTask(),
-            modifier = Modifier.padding(FreshSpacing.Md),
-            onSlideConfirm = {},
+            modifier = Modifier.padding(FreshSpacing.Sm),
+            onAdvance = {},
         )
     }
 }
 
-@Preview(name = "任务卡 · 离线", showBackground = true)
-@Composable
-private fun TaskCardOfflinePreview() {
-    RiderTheme {
-        TaskCardView(
-            task = previewTask().copy(pendingSync = true),
-            modifier = Modifier.padding(FreshSpacing.Md),
-        )
-    }
-}
-
-@Preview(name = "任务卡 · 已完成", showBackground = true)
+@Preview(name = "任务卡 · 已完成", showBackground = true, backgroundColor = 0xFFF5F5F5)
 @Composable
 private fun TaskCardDonePreview() {
     RiderTheme {
         TaskCardView(
             task = previewTask(status = TaskStatus.DELIVERED, cold = false),
-            modifier = Modifier.padding(FreshSpacing.Md),
+            modifier = Modifier.padding(FreshSpacing.Sm),
         )
     }
 }

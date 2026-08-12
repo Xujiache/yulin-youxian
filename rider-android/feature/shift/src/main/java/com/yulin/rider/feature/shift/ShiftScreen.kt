@@ -54,7 +54,6 @@ fun ShiftScreen(
                     .padding(insets)
                     .verticalScroll(rememberScrollState()),
             ) {
-                ShiftSwitchBar(viewModel = viewModel)
                 ShiftStatsContent(state = state)
             }
         }
@@ -67,11 +66,7 @@ private fun ShiftStatsContent(state: ShiftUiState) {
         modifier = Modifier.padding(FreshSpacing.Md),
         verticalArrangement = Arrangement.spacedBy(FreshSpacing.Sm),
     ) {
-        FreshPanel(
-            title = "本班统计",
-            eyebrow = if (state.shift.onDuty) "实时更新" else "最近班次",
-            spineTone = if (state.shift.onDuty) StatusTone.SUCCESS else StatusTone.NORMAL,
-        ) {
+        FreshPanel(title = "本班统计") {
             StatLine("在线时长", formatDuration(state.liveOnlineSeconds))
             StatLine("今日单量", "${state.shift.taskCount} 单")
             StatLine("已完成", "${state.shift.deliveredCount} 单")

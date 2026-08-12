@@ -1,5 +1,8 @@
 package com.yulin.rider.feature.map
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -7,11 +10,16 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -21,35 +29,55 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import com.yulin.rider.core.designsystem.BigActionButton
-import com.yulin.rider.core.designsystem.FreshBanner
-import com.yulin.rider.core.designsystem.FreshEmpty
+import com.yulin.rider.core.designsystem.FreshBorder
+import com.yulin.rider.core.designsystem.FreshElevation
 import com.yulin.rider.core.designsystem.FreshError
 import com.yulin.rider.core.designsystem.FreshIcon
 import com.yulin.rider.core.designsystem.FreshIconType
 import com.yulin.rider.core.designsystem.FreshLoading
-import com.yulin.rider.core.designsystem.FreshPageHeader
-import com.yulin.rider.core.designsystem.FreshPanel
-import com.yulin.rider.core.designsystem.FreshSecondaryButton
-import com.yulin.rider.core.designsystem.FreshShell
+import com.yulin.rider.core.designsystem.FreshRadius
 import com.yulin.rider.core.designsystem.FreshSpacing
-import com.yulin.rider.core.designsystem.FreshStatusBadge
+import com.yulin.rider.core.designsystem.MtAction
+import com.yulin.rider.core.designsystem.MtCard
+import com.yulin.rider.core.designsystem.MtDivider
+import com.yulin.rider.core.designsystem.MtEmptyState
+import com.yulin.rider.core.designsystem.MtGhostAction
+import com.yulin.rider.core.designsystem.MtInfoBar
+import com.yulin.rider.core.designsystem.MtLeg
+import com.yulin.rider.core.designsystem.MtLegBadge
+import com.yulin.rider.core.designsystem.MtMapControl
+import com.yulin.rider.core.designsystem.MtMapSheet
+import com.yulin.rider.core.designsystem.MtPrimaryButton
+import com.yulin.rider.core.designsystem.MtTag
+import com.yulin.rider.core.designsystem.RiderColors
+import com.yulin.rider.core.designsystem.RiderDimens
 import com.yulin.rider.core.designsystem.RiderTheme
 import com.yulin.rider.core.designsystem.StatusTone
+import com.yulin.rider.core.designsystem.tabularFigures
 import com.yulin.rider.core.location.AmapKeyState
 import kotlinx.coroutines.delay
 
 /**
- * 配送地图是底部 tab，因此页头明确不显示返回按钮。无地图 Key 时文字路线保持完整可操作。
+ * 配送地图。
+ *
+ * 整屏是地图，路线与站点压在下方的圆角抽屉里，右侧悬浮定位与刷新 —— 与美团骑手端的地图页同构。
+ * 没有地图 Key 时底图退化成说明卡，抽屉里的文字路线照常可用。
  */
 @Composable
 fun RiderMapScreen(
     state: RiderMapUiState,
     modifier: Modifier = Modifier,
-    @Suppress("UNUSED_PARAMETER") onBack: () -> Unit = {},
+    onBack: () -> Unit = {},
     onRetry: () -> Unit = {},
     onStopClick: (MapStop) -> Unit = {},
 ) {
@@ -91,6 +119,7 @@ fun RiderMapScreen(
         mapAvailable = mapAvailable,
         notice = notice,
         modifier = modifier,
+        onBack = onBack,
         onRetry = onRetry,
         onNavigate = ::navigate,
         onStopClick = onStopClick,
@@ -103,81 +132,191 @@ private fun MapContent(
     mapAvailable: Boolean,
     notice: String?,
     modifier: Modifier = Modifier,
+    onBack: () -> Unit = {},
     onRetry: () -> Unit = {},
     onNavigate: (MapStop) -> Unit = {},
     onStopClick: (MapStop) -> Unit = {},
 ) {
-    FreshShell(
-        modifier = modifier,
-        topBar = {
-            FreshPageHeader(
-                title = "配送地图",
-                subtitle = state.nextStop?.let { "下一站 · ${it.title}" } ?: "本趟文字路线",
-                showBack = false,
-            )
-        },
-    ) { insets ->
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background),
+    ) {
         when {
-            state.loading && state.stops.isEmpty() -> FreshLoading(
-                modifier = Modifier.padding(insets).fillMaxSize(),
-                label = "正在加载配送路线",
-            )
+            state.loading && state.stops.isEmpty() ->
+                FreshLoading(modifier = Modifier.fillMaxSize(), label = "正在加载配送路线")
 
-            state.error != null && state.stops.isEmpty() -> FreshError(
-                message = state.error,
-                modifier = Modifier.padding(insets).fillMaxSize(),
-                onRetry = onRetry,
-            )
+            state.error != null && state.stops.isEmpty() ->
+                FreshError(
+                    message = state.error,
+                    modifier = Modifier.fillMaxSize(),
+                    onRetry = onRetry,
+                )
 
-            else -> LazyColumn(
-                modifier = Modifier.fillMaxSize().padding(insets),
-                contentPadding = PaddingValues(FreshSpacing.Md),
-                verticalArrangement = Arrangement.spacedBy(FreshSpacing.Sm),
+            else -> {
+                if (mapAvailable && state.hasAnyGeo) {
+                    AmapMapCanvas(state = state, modifier = Modifier.fillMaxSize())
+                } else {
+                    MapPlaceholder(mapAvailable)
+                }
+
+                MapOverlay(
+                    state = state,
+                    notice = notice,
+                    onBack = onBack,
+                    onRetry = onRetry,
+                )
+
+                RouteSheet(
+                    state = state,
+                    modifier = Modifier.align(Alignment.BottomCenter),
+                    onNavigate = onNavigate,
+                    onStopClick = onStopClick,
+                )
+            }
+        }
+    }
+}
+
+/** 压在地图上的一层：返回、下一站气泡、右侧圆形控件。 */
+@Composable
+private fun MapOverlay(
+    state: RiderMapUiState,
+    notice: String?,
+    onBack: () -> Unit,
+    onRetry: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .safeDrawingPadding()
+            .padding(FreshSpacing.Sm),
+        verticalArrangement = Arrangement.spacedBy(FreshSpacing.Xs),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Surface(
+                modifier = Modifier
+                    .size(RiderDimens.TouchTarget)
+                    .clickable(onClick = onBack)
+                    .semantics {
+                        contentDescription = "返回"
+                        role = Role.Button
+                    },
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.surface,
+                shadowElevation = FreshElevation.StickyBar,
             ) {
-                item {
-                    Box(
-                        modifier = Modifier.fillMaxWidth().height(MAP_HEIGHT),
+                Box(contentAlignment = Alignment.Center) {
+                    FreshIcon(
+                        FreshIconType.BACK,
+                        contentDescription = null,
+                        tint = RiderColors.Ink,
+                        size = 20.dp,
+                    )
+                }
+            }
+
+            state.nextStop?.distanceFromRiderMeters?.let { meters ->
+                // 白色小气泡显示到下一站的直线距离，和美团地图上的「距取 908m」是同一处
+                Surface(
+                    modifier = Modifier.padding(start = FreshSpacing.Xs),
+                    shape = RoundedCornerShape(FreshRadius.Pill),
+                    color = MaterialTheme.colorScheme.surface,
+                    shadowElevation = FreshElevation.StickyBar,
+                ) {
+                    Row(
+                        modifier = Modifier.padding(
+                            horizontal = FreshSpacing.Sm,
+                            vertical = FreshSpacing.Xxs,
+                        ),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(FreshSpacing.Xxs),
                     ) {
-                        if (mapAvailable && state.hasAnyGeo) {
-                            AmapMapCanvas(state = state, modifier = Modifier.fillMaxSize())
-                        } else {
-                            MapPlaceholderCard(mapAvailable)
-                        }
-                    }
-                }
-
-                item { RouteSummary(state) }
-
-                if (notice != null) {
-                    item {
-                        FreshBanner(
-                            text = notice,
-                            tone = StatusTone.WARNING,
-                            icon = FreshIconType.MAP,
+                        MtLegBadge(MtLeg.DELIVER, size = 16.dp)
+                        Text(
+                            text = "距下一站 ${formatDistance(meters.toLong())}",
+                            style = MaterialTheme.typography.labelLarge.tabularFigures(),
+                            color = RiderColors.Ink,
                         )
                     }
                 }
+            }
+        }
 
-                state.nextStop?.let { next ->
-                    item {
-                        BigActionButton(
-                            text = "导航去下一站 · ${next.title}",
-                            icon = FreshIconType.ROUTE,
-                            onClick = { onNavigate(next) },
-                        )
-                    }
-                }
+        if (notice != null) {
+            MtInfoBar(
+                text = notice,
+                tone = StatusTone.WARNING,
+                icon = FreshIconType.MAP,
+                modifier = Modifier.clip(RoundedCornerShape(FreshRadius.Control)),
+            )
+        }
 
-                if (state.stops.isEmpty()) {
-                    item {
-                        FreshEmpty(
-                            title = "当前没有待配送站点",
-                            message = "接单后路线会自动出现在这里",
-                            icon = FreshIconType.MAP,
-                        )
-                    }
-                }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.End,
+        ) {
+            MtMapControl(
+                icon = FreshIconType.REFRESH,
+                contentDescription = "刷新路线",
+                onClick = onRetry,
+            )
+        }
+    }
+}
 
+/** 底部抽屉：本趟概览 + 站点列表 + 导航主按钮。 */
+@Composable
+private fun RouteSheet(
+    state: RiderMapUiState,
+    modifier: Modifier = Modifier,
+    onNavigate: (MapStop) -> Unit,
+    onStopClick: (MapStop) -> Unit,
+) {
+    val remaining = state.stops.count { it.kind == MapStopKind.PENDING }
+
+    MtMapSheet(modifier = modifier.heightIn(max = SHEET_MAX_HEIGHT)) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = FreshSpacing.Sm, vertical = FreshSpacing.Xxs),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(FreshSpacing.Xs),
+        ) {
+            Text(
+                text = "共 ${state.stops.size} 站 · 待送 $remaining 站",
+                style = MaterialTheme.typography.titleMedium.tabularFigures(),
+                color = RiderColors.Ink,
+                modifier = Modifier.weight(1f),
+            )
+            state.totalDistanceMeters?.let { meters ->
+                Text(
+                    text = formatDistance(meters) +
+                        (state.totalDurationSeconds?.let { " · ${it / 60} 分钟" } ?: ""),
+                    style = MaterialTheme.typography.bodySmall.tabularFigures(),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        MtDivider()
+
+        if (state.stops.isEmpty()) {
+            MtEmptyState(
+                title = "当前没有待配送站点",
+                message = "接单后路线会自动出现在这里",
+                icon = FreshIconType.MAP,
+            )
+        } else {
+            LazyColumn(
+                modifier = Modifier.weight(1f, fill = false),
+                contentPadding = PaddingValues(
+                    start = FreshSpacing.Sm,
+                    end = FreshSpacing.Sm,
+                    top = FreshSpacing.Xs,
+                    bottom = FreshSpacing.Xs,
+                ),
+                verticalArrangement = Arrangement.spacedBy(FreshSpacing.Xs),
+            ) {
                 items(state.stops, key = { it.taskId }) { stop ->
                     StopCard(
                         stop = stop,
@@ -187,81 +326,59 @@ private fun MapContent(
                 }
             }
         }
-    }
-}
 
-@Composable
-private fun MapPlaceholderCard(mapAvailable: Boolean) {
-    FreshPanel(
-        modifier = Modifier.fillMaxSize(),
-        title = if (mapAvailable) "坐标尚未同步" else "地图底图暂不可用",
-        eyebrow = "文字路线仍可使用",
-        spineTone = StatusTone.INFO,
-    ) {
-        Column(
-            modifier = Modifier.fillMaxSize(),
-            verticalArrangement = Arrangement.Center,
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            FreshIcon(
-                FreshIconType.MAP,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.secondary,
-                size = 48.dp,
-            )
-            Text(
-                text = if (mapAvailable) {
-                    "订单暂未拿到经纬度，按下方地址与站点顺序配送。"
-                } else {
-                    "不影响配送：下方保留完整地址、楼层、距离与系统地图导航。"
-                },
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = FreshSpacing.Sm),
-            )
-        }
-    }
-}
-
-@Composable
-private fun RouteSummary(state: RiderMapUiState) {
-    val remaining = state.stops.count { it.kind == MapStopKind.PENDING }
-    FreshPanel(
-        title = "本趟概览",
-        eyebrow = "路线状态",
-        spineTone = if (remaining == 0) StatusTone.SUCCESS else StatusTone.INFO,
-    ) {
-        Row(horizontalArrangement = Arrangement.spacedBy(FreshSpacing.Xs)) {
-            FreshStatusBadge("共 ${state.stops.size} 站")
-            FreshStatusBadge(
-                "待送 $remaining 站",
-                tone = if (remaining == 0) StatusTone.SUCCESS else StatusTone.WARNING,
-            )
-        }
-        state.totalDistanceMeters?.let { meters ->
-            Text(
-                "规划里程 ${formatDistance(meters)}" +
-                    (state.totalDurationSeconds?.let { " · 预计 ${it / 60} 分钟" } ?: ""),
-                style = MaterialTheme.typography.bodyLarge,
-            )
-        }
-        state.store?.let {
+        state.nextStop?.let { next ->
+            MtDivider()
             Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .safeDrawingPadding()
+                    .padding(FreshSpacing.Sm),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(FreshSpacing.Xs),
             ) {
-                FreshIcon(
-                    FreshIconType.STORE,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                )
-                Text(
-                    "起点：${it.title}",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                MtGhostAction("订单", FreshIconType.TASK) { onStopClick(next) }
+                MtPrimaryButton(
+                    text = "导航去 ${next.title}",
+                    action = MtAction.DELIVER,
+                    modifier = Modifier.weight(1f),
+                    icon = FreshIconType.NAVIGATE,
+                    onClick = { onNavigate(next) },
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun MapPlaceholder(mapAvailable: Boolean) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.surfaceContainer)
+            .padding(FreshSpacing.Xl),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        FreshIcon(
+            FreshIconType.MAP,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            size = 56.dp,
+        )
+        Text(
+            text = if (mapAvailable) "订单暂未拿到经纬度" else "地图底图暂不可用",
+            style = MaterialTheme.typography.titleMedium,
+            color = RiderColors.Ink,
+            modifier = Modifier.padding(top = FreshSpacing.Sm),
+        )
+        Text(
+            text = "不影响配送：下方保留完整地址、楼层、距离与系统地图导航。",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(top = FreshSpacing.Xxs),
+        )
     }
 }
 
@@ -272,73 +389,113 @@ private fun StopCard(
     onClick: () -> Unit,
 ) {
     val done = stop.kind == MapStopKind.DONE
-    val cold = !stop.coldChainText.isNullOrBlank()
-    FreshPanel(
-        title = "${stop.seqNo}. ${stop.title}",
-        eyebrow = if (done) "站点已完成" else "待配送站点",
-        spineTone = when {
-            done -> StatusTone.SUCCESS
-            cold -> StatusTone.COLD
-            else -> StatusTone.WARNING
-        },
-        action = {
-            FreshStatusBadge(
-                text = if (done) "已送达" else "待送",
-                tone = if (done) StatusTone.SUCCESS else StatusTone.WARNING,
-            )
-        },
-    ) {
-        if (cold) {
-            FreshStatusBadge(
-                text = stop.coldChainText.orEmpty(),
-                tone = StatusTone.COLD,
-                icon = FreshIconType.COLD,
-            )
-        }
-        stop.floorLabel?.let {
-            Text(
-                it,
-                style = MaterialTheme.typography.titleLarge,
-                color = MaterialTheme.colorScheme.primary,
-            )
-        }
-        if (stop.addressDetail.isNotBlank()) {
-            Text(stop.addressDetail, style = MaterialTheme.typography.bodyLarge)
-        }
-        stop.receiverLabel?.let {
-            Text(
-                it,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        Text(
-            buildList {
-                stop.distanceFromRiderMeters?.let { add("距我 ${formatDistance(it.toLong())}") }
-                stop.legDistanceMeters?.takeIf { it > 0 }?.let { add("本段 ${formatDistance(it)}") }
-                stop.etaText?.let { add("预计 $it 到达") }
-            }.joinToString(" · ").ifBlank { "距离待定位后计算" },
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+    MtCard(onClick = onClick) {
         Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(FreshSpacing.Sm),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(FreshSpacing.Sm),
+            verticalAlignment = Alignment.Top,
+            horizontalArrangement = Arrangement.spacedBy(FreshSpacing.Xs),
         ) {
-            FreshSecondaryButton(
-                text = "导航",
-                icon = FreshIconType.ROUTE,
-                enabled = !done,
-                tone = StatusTone.INFO,
-                modifier = Modifier.weight(1f),
-                onClick = onNavigate,
-            )
-            FreshSecondaryButton(
-                text = "查看订单",
-                icon = FreshIconType.TASK,
-                modifier = Modifier.weight(1f),
-                onClick = onClick,
-            )
+            if (done) {
+                Box(
+                    modifier = Modifier
+                        .size(20.dp)
+                        .background(RiderColors.DeliverContainer, CircleShape),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    FreshIcon(
+                        FreshIconType.CHECK,
+                        contentDescription = null,
+                        tint = RiderColors.Deliver,
+                        size = 13.dp,
+                    )
+                }
+            } else {
+                Box(
+                    modifier = Modifier
+                        .size(20.dp)
+                        .background(RiderColors.Deliver, CircleShape),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = "${stop.seqNo}",
+                        style = MaterialTheme.typography.labelSmall.tabularFigures(),
+                        color = Color.White,
+                    )
+                }
+            }
+
+            Column(Modifier.weight(1f)) {
+                Text(
+                    text = stop.floorLabel?.let { "${stop.title} $it" } ?: stop.title,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = if (done) MaterialTheme.colorScheme.onSurfaceVariant else RiderColors.Ink,
+                )
+                if (stop.addressDetail.isNotBlank()) {
+                    Text(
+                        text = stop.addressDetail,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                stop.receiverLabel?.let {
+                    Text(
+                        text = it,
+                        style = MaterialTheme.typography.bodySmall.tabularFigures(),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Row(
+                    modifier = Modifier.padding(top = FreshSpacing.Xxs),
+                    horizontalArrangement = Arrangement.spacedBy(FreshSpacing.Xxs),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    if (!stop.coldChainText.isNullOrBlank()) {
+                        MtTag(stop.coldChainText.orEmpty(), tone = StatusTone.COLD)
+                    }
+                    Text(
+                        text = buildList {
+                            stop.distanceFromRiderMeters?.let { add("距我 ${formatDistance(it.toLong())}") }
+                            stop.etaText?.let { add("预计 $it 到达") }
+                        }.joinToString(" · ").ifBlank { "距离待定位后计算" },
+                        style = MaterialTheme.typography.bodySmall.tabularFigures(),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+
+            if (!done) {
+                Box(
+                    modifier = Modifier
+                        .size(RiderDimens.TouchTarget)
+                        .clickable(onClick = onNavigate)
+                        .semantics {
+                            contentDescription = "导航到 ${stop.title}"
+                            role = Role.Button
+                        },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(30.dp)
+                            .background(MaterialTheme.colorScheme.surface, CircleShape)
+                            .border(
+                                FreshBorder.Hairline,
+                                MaterialTheme.colorScheme.outline,
+                                CircleShape,
+                            ),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        FreshIcon(
+                            FreshIconType.NAVIGATE,
+                            contentDescription = null,
+                            tint = RiderColors.Ink,
+                            size = 16.dp,
+                        )
+                    }
+                }
+            }
         }
     }
 }
@@ -346,10 +503,10 @@ private fun StopCard(
 private fun formatDistance(meters: Long): String =
     if (meters < 1000) "$meters 米" else String.format("%.1f 公里", meters / 1000.0)
 
-private val MAP_HEIGHT = 320.dp
+private val SHEET_MAX_HEIGHT = 420.dp
 private const val TOAST_MILLIS = 5_000L
 
-@Preview(name = "地图 · 文字路线", showBackground = true)
+@Preview(name = "地图 · 文字路线", showBackground = true, heightDp = 780)
 @Composable
 private fun MapRoutePreview() {
     RiderTheme {
@@ -361,13 +518,13 @@ private fun MapRoutePreview() {
     }
 }
 
-@Preview(name = "地图 · 空态", showBackground = true)
+@Preview(name = "地图 · 空态", showBackground = true, heightDp = 780)
 @Composable
 private fun MapEmptyPreview() {
     RiderTheme { MapContent(RiderMapUiState(), mapAvailable = false, notice = null) }
 }
 
-@Preview(name = "地图 · 错误", showBackground = true)
+@Preview(name = "地图 · 错误", showBackground = true, heightDp = 780)
 @Composable
 private fun MapErrorPreview() {
     RiderTheme {
@@ -392,7 +549,7 @@ private fun previewMapState() = RiderMapUiState(
             distanceFromRiderMeters = 860,
             legDistanceMeters = 1_260,
             etaText = "04:32",
-            coldChainText = "冷冻 · 优先送达",
+            coldChainText = "冷冻",
             receiverLabel = "林女士 138****6608",
         ),
         MapStop(

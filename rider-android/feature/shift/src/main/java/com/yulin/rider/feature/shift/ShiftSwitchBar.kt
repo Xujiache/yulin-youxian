@@ -3,10 +3,8 @@ package com.yulin.rider.feature.shift
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -14,39 +12,109 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.Alignment
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.yulin.rider.core.designsystem.BigActionButton
 import com.yulin.rider.core.designsystem.FreshBanner
 import com.yulin.rider.core.designsystem.FreshIcon
 import com.yulin.rider.core.designsystem.FreshIconType
-import com.yulin.rider.core.designsystem.FreshPanel
 import com.yulin.rider.core.designsystem.FreshSpacing
-import com.yulin.rider.core.designsystem.RiderColors
+import com.yulin.rider.core.designsystem.MtAction
+import com.yulin.rider.core.designsystem.MtPrimaryButton
+import com.yulin.rider.core.designsystem.MtStatusPill
 import com.yulin.rider.core.designsystem.RiderTheme
 import com.yulin.rider.core.designsystem.StatusTone
+import com.yulin.rider.core.designsystem.toneColor
 import com.yulin.rider.core.model.ShiftCurrent
 
 /**
- * 首页的在岗条。左侧「鲜绿进度脊」是全端的在线状态标志，文字与图标同步表达状态。
+ * 顶栏的在岗胶囊。
+ *
+ * 美团把在岗状态放在顶栏胶囊里，点开切换上下班；主界面因此不需要占一整张卡片来放开关。
+ * 与 [ShiftDutyBar] 共用同一个 ViewModel 实例，两处状态始终一致。
  */
 @Composable
-fun ShiftSwitchBar(
+fun ShiftStatusPill(
     modifier: Modifier = Modifier,
-    viewModel: ShiftViewModel = viewModel(key = "rider-shift"),
+    viewModel: ShiftViewModel = viewModel(key = SHIFT_VM_KEY),
+) {
+    val state by viewModel.state.collectAsState()
+    var confirmOffDuty by remember { mutableStateOf(false) }
+
+    MtStatusPill(
+        text = if (state.shift.onDuty) "上线中" else "下线中",
+        onDuty = state.shift.onDuty,
+        modifier = modifier,
+        onClick = {
+            if (state.shift.onDuty) confirmOffDuty = true else viewModel.openChecklist()
+        },
+    )
+
+    if (confirmOffDuty) {
+        AlertDialog(
+            onDismissRequest = { confirmOffDuty = false },
+            title = { Text("确认下线？", style = MaterialTheme.typography.titleLarge) },
+            text = {
+                Text(
+                    "下线后不再收到派单，正在配送的订单仍需送达。",
+                    style = MaterialTheme.typography.bodyLarge,
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        confirmOffDuty = false
+                        viewModel.offDuty()
+                    },
+                ) {
+                    Text("确认下线", style = MaterialTheme.typography.labelLarge)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmOffDuty = false }) {
+                    Text("继续在线", style = MaterialTheme.typography.labelLarge)
+                }
+            },
+        )
+    }
+}
+
+/**
+ * 底部操作条上的班次动作。
+ *
+ * 未上线时是黄色「上线」主按钮；已上线时换成白底「刷新列表」，
+ * 上下班改由顶栏胶囊承担 —— 这是美团主界面底部的固定形态。
+ * 上班前检查与提示弹窗挂在这里，保证首页始终有一个宿主。
+ */
+@Composable
+fun ShiftDutyBar(
+    modifier: Modifier = Modifier,
+    onRefresh: () -> Unit = {},
+    viewModel: ShiftViewModel = viewModel(key = SHIFT_VM_KEY),
 ) {
     val state by viewModel.state.collectAsState()
 
-    ShiftSwitchContent(
-        state = state,
-        modifier = modifier,
-        onToggle = {
-            if (state.shift.onDuty) viewModel.offDuty() else viewModel.openChecklist()
-        },
-    )
+    if (state.shift.onDuty) {
+        MtPrimaryButton(
+            text = "刷新列表",
+            action = MtAction.SECONDARY,
+            modifier = modifier.fillMaxWidth(),
+            icon = FreshIconType.REFRESH,
+            onClick = onRefresh,
+        )
+    } else {
+        MtPrimaryButton(
+            text = if (state.submitting) "正在上线…" else "上线",
+            action = MtAction.ACCEPT,
+            modifier = modifier.fillMaxWidth(),
+            enabled = !state.submitting && !state.loading,
+            disabledReason = if (state.loading) "正在读取班次状态" else "正在切换在岗状态",
+            onClick = viewModel::openChecklist,
+        )
+    }
 
     state.checklist?.let { checklist ->
         OnDutyChecklistDialog(
@@ -72,70 +140,7 @@ fun ShiftSwitchBar(
     }
 }
 
-@Composable
-private fun ShiftSwitchContent(
-    state: ShiftUiState,
-    modifier: Modifier = Modifier,
-    onToggle: () -> Unit,
-) {
-    val onDuty = state.shift.onDuty
-    FreshPanel(
-        modifier = modifier.padding(
-            horizontal = FreshSpacing.Md,
-            vertical = FreshSpacing.Xs,
-        ),
-        eyebrow = if (onDuty) "配送服务在线" else "配送服务暂停",
-        spineTone = if (onDuty) StatusTone.SUCCESS else StatusTone.NORMAL,
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(modifier = Modifier.weight(1f)) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(FreshSpacing.Xs),
-                ) {
-                    FreshIcon(
-                        type = if (onDuty) FreshIconType.RIDER else FreshIconType.CLOCK,
-                        contentDescription = null,
-                        tint = if (onDuty) RiderColors.Success else MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Text(
-                        text = if (onDuty) "已上班" else "未上班",
-                        style = MaterialTheme.typography.titleLarge,
-                        color = if (onDuty) RiderColors.Success else MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                Text(
-                    text = if (onDuty) {
-                        "在线 ${formatDuration(state.liveOnlineSeconds)}"
-                    } else {
-                        "上班后才会派单给你"
-                    },
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            Spacer(Modifier.width(FreshSpacing.Sm))
-            BigActionButton(
-                text = if (onDuty) "下班" else "上班",
-                modifier = Modifier.width(136.dp),
-                enabled = !state.submitting,
-                disabledReason = "正在切换在岗状态",
-                tone = if (onDuty) StatusTone.DANGER else StatusTone.SUCCESS,
-                icon = if (onDuty) FreshIconType.CLOSE else FreshIconType.CHECK,
-                onClick = onToggle,
-            )
-        }
-
-        if (onDuty) {
-            ShiftStatsRow(
-                taskCount = state.shift.taskCount,
-                deliveredCount = state.shift.deliveredCount,
-                onTimeCount = state.shift.onTimeCount,
-                mileageMeters = state.shift.mileageMeters.toLong(),
-            )
-        }
-    }
-}
+internal const val SHIFT_VM_KEY = "rider-shift"
 
 @Composable
 internal fun ShiftStatsRow(
@@ -144,7 +149,7 @@ internal fun ShiftStatsRow(
     onTimeCount: Int,
     mileageMeters: Long,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(FreshSpacing.Xs)) {
+    Column(verticalArrangement = Arrangement.spacedBy(FreshSpacing.Sm)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(FreshSpacing.Sm),
@@ -164,14 +169,11 @@ internal fun ShiftStatsRow(
 
 @Composable
 private fun StatCell(label: String, value: String, modifier: Modifier = Modifier) {
-    Column(modifier = modifier) {
-        Text(text = value, style = MaterialTheme.typography.titleMedium)
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-    }
+    com.yulin.rider.core.designsystem.MtMetric(
+        label = label,
+        value = value,
+        modifier = modifier,
+    )
 }
 
 /** 上班前检查。每项用矢量状态图标与文字双通道表达。 */
@@ -203,7 +205,11 @@ private fun OnDutyChecklistDialog(
                         FreshIcon(
                             type = if (item.satisfied) FreshIconType.CHECK else FreshIconType.ERROR,
                             contentDescription = if (item.satisfied) "已满足" else "未满足",
-                            tint = if (item.satisfied) RiderColors.Success else RiderColors.Danger,
+                            tint = if (item.satisfied) {
+                                StatusTone.SUCCESS.toneColor()
+                            } else {
+                                StatusTone.DANGER.toneColor()
+                            },
                         )
                         Column {
                             Text(item.label, style = MaterialTheme.typography.titleSmall)
@@ -262,34 +268,26 @@ internal fun formatKm(meters: Long): String =
     if (meters < 1000) "$meters m" else
         String.format(java.util.Locale.CHINA, "%.1f km", meters / 1000.0)
 
-@Preview(name = "在岗条 · 上班", showBackground = true)
+@Preview(name = "在岗胶囊与班次动作", showBackground = true, backgroundColor = 0xFFF5F5F5)
 @Composable
-private fun ShiftSwitchOnDutyPreview() {
+private fun ShiftPiecesPreview() {
     RiderTheme {
-        ShiftSwitchContent(
-            state = ShiftUiState(
-                shift = ShiftCurrent(
-                    onDuty = true,
-                    taskCount = 8,
-                    deliveredCount = 5,
-                    onTimeCount = 5,
-                    mileageMeters = 12_600,
-                ),
-                liveOnlineSeconds = 9_240,
-                loading = false,
-            ),
-            onToggle = {},
-        )
+        Column(
+            modifier = Modifier.padding(FreshSpacing.Sm),
+            verticalArrangement = Arrangement.spacedBy(FreshSpacing.Sm),
+        ) {
+            MtStatusPill("上线中", onDuty = true, onClick = {})
+            MtStatusPill("下线中", onDuty = false, onClick = {})
+            MtPrimaryButton("上线", MtAction.ACCEPT, Modifier.fillMaxWidth()) {}
+            ShiftStatsRow(
+                taskCount = 8,
+                deliveredCount = 5,
+                onTimeCount = 5,
+                mileageMeters = 12_600,
+            )
+        }
     }
 }
 
-@Preview(name = "在岗条 · 下班", showBackground = true)
-@Composable
-private fun ShiftSwitchOffDutyPreview() {
-    RiderTheme {
-        ShiftSwitchContent(
-            state = ShiftUiState(loading = false),
-            onToggle = {},
-        )
-    }
-}
+@Suppress("UNUSED")
+private val previewShift = ShiftCurrent(onDuty = true)

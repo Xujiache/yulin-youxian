@@ -5,7 +5,6 @@ import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -21,7 +20,6 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.yulin.rider.core.common.RiderResult
 import com.yulin.rider.core.common.RiderTime
-import com.yulin.rider.core.datastore.DarkModeOption
 import com.yulin.rider.core.datastore.RiderSettings
 import com.yulin.rider.core.datastore.RiderSettingsStore
 import com.yulin.rider.core.datastore.RiderTokenStore
@@ -98,16 +96,10 @@ class MainActivity : ComponentActivity() {
         setContent {
             val settings by settingsStore.settingsFlow.collectAsState(initial = RiderSettings())
 
-            val systemDark = isSystemInDarkTheme()
-            val darkTheme = when (settings.darkMode) {
-                DarkModeOption.FOLLOW_SYSTEM -> systemDark
-                DarkModeOption.LIGHT -> false
-                DarkModeOption.DARK -> true
-            }
-
             KeepScreenOn(enabled = settings.keepScreenOn)
 
-            RiderTheme(darkTheme = darkTheme) {
+            // 骑手端只有浅色一套，不再跟随系统或手动切换
+            RiderTheme {
                 val density = LocalDensity.current
                 CompositionLocalProvider(
                     LocalRiderSoundEnabled provides settings.soundEnabled,

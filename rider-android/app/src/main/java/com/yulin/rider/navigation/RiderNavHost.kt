@@ -1,13 +1,8 @@
 package com.yulin.rider.navigation
 
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawing
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
+import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.ModalNavigationDrawer
+import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -42,7 +37,8 @@ import com.yulin.rider.feature.message.MessageCenterScreen
 import com.yulin.rider.feature.profile.AboutScreen
 import com.yulin.rider.feature.profile.ProfileScreen
 import com.yulin.rider.feature.profile.SettingsScreen
-import com.yulin.rider.feature.shift.ShiftSwitchBar
+import com.yulin.rider.feature.shift.ShiftDutyBar
+import com.yulin.rider.feature.shift.ShiftStatusPill
 import com.yulin.rider.feature.task.ui.DeliverScreen
 import com.yulin.rider.feature.task.ui.PickupScreen
 import com.yulin.rider.feature.task.ui.TaskDetailScreen
@@ -167,11 +163,16 @@ fun RiderNavHost(
         }
 
         composable(RiderRoutes.HOME) {
-            RiderTabScaffold(navController = navController, currentRoute = RiderRoutes.HOME) { inset ->
+            RiderHomeShell(
+                onNavigate = { route -> navController.navigate(route) },
+            ) { openMenu ->
                 TaskHomeScreen(
-                    modifier = inset,
-                    // 不传这个插槽首页就没有上下班开关,骑手永远收不到派单
-                    shiftHeader = { ShiftSwitchBar() },
+                    onOpenMenu = openMenu,
+                    onOpenMessages = { navController.navigate(RiderRoutes.MESSAGE) },
+                    onOpenRoute = { navController.navigate(RiderRoutes.MAP) },
+                    // 这两个插槽是上下班的唯一入口，不传骑手就永远收不到派单
+                    statusPill = { ShiftStatusPill() },
+                    shiftHeader = { onRefresh -> ShiftDutyBar(onRefresh = onRefresh) },
                     onOpenTask = { navController.navigate(RiderRoutes.taskDetail(it)) },
                     onOpenWave = { navController.navigate(RiderRoutes.waveDetail(it)) },
                     onOpenPickup = { navController.navigate(RiderRoutes.pickup(it)) },
@@ -187,6 +188,7 @@ fun RiderNavHost(
             val waveId = entry.arguments?.getLong(RiderRoutes.ARG_WAVE_ID) ?: 0L
             WaveDetailScreen(
                 waveId = waveId,
+                onBack = { navController.popBackStack() },
                 onOpenTask = { navController.navigate(RiderRoutes.taskDetail(it)) },
             )
         }
@@ -198,6 +200,7 @@ fun RiderNavHost(
             val taskId = entry.arguments?.getLong(RiderRoutes.ARG_TASK_ID) ?: 0L
             TaskDetailScreen(
                 taskId = taskId,
+                onBack = { navController.popBackStack() },
                 onOpenPickup = { navController.navigate(RiderRoutes.pickup(it)) },
                 onOpenDeliver = { navController.navigate(RiderRoutes.deliver(it)) },
                 onOpenException = { navController.navigate(RiderRoutes.exceptionReport(it)) },
@@ -259,15 +262,13 @@ fun RiderNavHost(
             )
         }
 
+        // 路线、消息、我的、账户都从抽屉或顶栏进入，属于普通栈页面，各自带返回。
         composable(RiderRoutes.MAP) {
-            RiderTabScaffold(navController = navController, currentRoute = RiderRoutes.MAP) { inset ->
-                RiderMapRoute(
-                    locationController = locationController,
-                    modifier = inset,
-                    onBack = { navController.popBackStack() },
-                    onOpenTask = { navController.navigate(RiderRoutes.taskDetail(it)) },
-                )
-            }
+            RiderMapRoute(
+                locationController = locationController,
+                onBack = { navController.popBackStack() },
+                onOpenTask = { navController.navigate(RiderRoutes.taskDetail(it)) },
+            )
         }
 
         composable(RiderRoutes.EARNING) {
@@ -275,21 +276,16 @@ fun RiderNavHost(
         }
 
         composable(RiderRoutes.MESSAGE) {
-            RiderTabScaffold(navController = navController, currentRoute = RiderRoutes.MESSAGE) { inset ->
-                MessageCenterScreen(modifier = inset)
-            }
+            MessageCenterScreen()
         }
 
         composable(RiderRoutes.PROFILE) {
-            RiderTabScaffold(navController = navController, currentRoute = RiderRoutes.PROFILE) { inset ->
-                ProfileScreen(
-                    modifier = inset,
-                    onOpenSettings = { navController.navigate(RiderRoutes.SETTINGS) },
-                    onOpenAbout = { navController.navigate(RiderRoutes.ABOUT) },
-                    onOpenMessages = { navController.switchTab(RiderRoutes.MESSAGE) },
-                    onOpenStats = { navController.navigate(RiderRoutes.EARNING) },
-                )
-            }
+            ProfileScreen(
+                onOpenSettings = { navController.navigate(RiderRoutes.SETTINGS) },
+                onOpenAbout = { navController.navigate(RiderRoutes.ABOUT) },
+                onOpenMessages = { navController.navigate(RiderRoutes.MESSAGE) },
+                onOpenStats = { navController.navigate(RiderRoutes.EARNING) },
+            )
         }
 
         composable(RiderRoutes.SETTINGS) {
@@ -366,54 +362,38 @@ private fun NewTaskIntentHandler(
 
 private const val WAIT_FOR_BUSINESS_MILLIS = 30_000L
 
-private data class RiderTab(val route: String, val icon: FreshIconType, val label: String)
-
 /**
- * 四个常驻入口。首页之外的页面若不给固定入口,骑手就只能靠返回键找路——
- * 设置、保活向导、关于(备案号)全挂在「我的」下面,必须始终一步可达。
+ * 首页外壳。
+ *
+ * 主界面把整屏留给任务列表，其余入口收进左侧抽屉，与美团骑手端一致。
+ * [content] 拿到的是「打开抽屉」回调，由首页顶栏的菜单按钮触发。
  */
-private val RiderTabs = listOf(
-    RiderTab(RiderRoutes.HOME, FreshIconType.HOME, "首页"),
-    RiderTab(RiderRoutes.MAP, FreshIconType.MAP, "路线"),
-    RiderTab(RiderRoutes.MESSAGE, FreshIconType.MESSAGE, "消息"),
-    RiderTab(RiderRoutes.PROFILE, FreshIconType.PROFILE, "我的"),
-)
-
 @Composable
-private fun RiderTabScaffold(
-    navController: NavHostController,
-    currentRoute: String,
-    content: @Composable (Modifier) -> Unit,
+private fun RiderHomeShell(
+    onNavigate: (String) -> Unit,
+    content: @Composable (openMenu: () -> Unit) -> Unit,
 ) {
-    val backStackEntry by navController.currentBackStackEntryAsState()
-    val activeRoute = backStackEntry?.destination?.route ?: currentRoute
+    val drawerState = rememberDrawerState(DrawerValue.Closed)
+    val scope = rememberCoroutineScope()
 
-    Scaffold(
-        contentWindowInsets = WindowInsets.safeDrawing,
-        bottomBar = {
-            NavigationBar {
-                RiderTabs.forEach { tab ->
-                    NavigationBarItem(
-                        selected = tab.route == activeRoute,
-                        onClick = { if (tab.route != activeRoute) navController.switchTab(tab.route) },
-                        icon = {
-                            FreshIcon(
-                                type = tab.icon,
-                                contentDescription = "${tab.label}标签",
-                            )
-                        },
-                        label = {
-                            Text(
-                                text = tab.label,
-                                style = MaterialTheme.typography.labelMedium,
-                            )
-                        },
-                    )
-                }
-            }
+    ModalNavigationDrawer(
+        drawerState = drawerState,
+        drawerContent = {
+            RiderDrawerSheet(
+                riderName = "骑手",
+                riderNo = null,
+                onOpenProfile = {
+                    scope.launch { drawerState.close() }
+                    onNavigate(RiderRoutes.PROFILE)
+                },
+                onNavigate = { route ->
+                    scope.launch { drawerState.close() }
+                    onNavigate(route)
+                },
+            )
         },
-    ) { padding ->
-        content(Modifier.padding(padding))
+    ) {
+        content { scope.launch { drawerState.open() } }
     }
 }
 

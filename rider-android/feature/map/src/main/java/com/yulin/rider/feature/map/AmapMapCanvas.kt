@@ -104,14 +104,31 @@ private class MapRenderer {
         if (shouldFitCamera) fitCamera(map, state)
     }
 
+    /**
+     * 路线分两段上色：骑手到门店是取货段走橙色，门店到各站点是送达段走绿色。
+     * 与卡片上的按钮颜色和「取」「送」标记一致，骑手扫一眼颜色就知道自己在哪一段。
+     */
     private fun drawRoute(map: AMap, state: RiderMapUiState) {
         val line = state.routeLine.ifEmpty { state.fallbackRouteLine() }
         if (line.size < 2) return
+
+        val rider = state.riderPoint
+        val store = state.store?.point
+        if (rider != null && store != null && state.hasPendingPickup()) {
+            map.addPolyline(
+                PolylineOptions()
+                    .add(rider.toLatLng(), store.toLatLng())
+                    .width(POLYLINE_WIDTH)
+                    .color(RiderColors.Pickup.toArgb())
+                    .geodesic(false)
+            )
+        }
+
         map.addPolyline(
             PolylineOptions()
                 .addAll(line.map { it.toLatLng() })
                 .width(POLYLINE_WIDTH)
-                .color(RiderColors.Primary.toArgb())
+                .color(RiderColors.Deliver.toArgb())
                 .geodesic(false)
         )
     }
@@ -124,7 +141,8 @@ private class MapRenderer {
                 .position(point.toLatLng())
                 .icon(
                     BitmapDescriptorFactory.fromBitmap(
-                        MapMarkerIcons.labeledPin(metrics, "店", RiderColors.Primary.toArgb())
+                        // 自营单门店，门店就是取货点，直接用美团那套「取」标记
+                        MapMarkerIcons.labeledPin(metrics, "取", RiderColors.Pickup.toArgb())
                     )
                 )
                 .anchor(0.5f, 1f)
@@ -139,13 +157,13 @@ private class MapRenderer {
             val icon = when (stop.kind) {
                 MapStopKind.DONE -> MapMarkerIcons.checkedPin(
                     metrics,
-                    RiderColors.Primary.toArgb(),
+                    RiderColors.Deliver.toArgb(),
                 )
                 else -> MapMarkerIcons.numberedPin(
                     metrics,
                     stop.seqNo,
                     if (stop.coldChainText.isNullOrBlank()) {
-                        RiderColors.Warning.toArgb()
+                        RiderColors.Deliver.toArgb()
                     } else {
                         RiderColors.Ice.toArgb()
                     },
@@ -170,7 +188,7 @@ private class MapRenderer {
                 .position(point.toLatLng())
                 .icon(
                     BitmapDescriptorFactory.fromBitmap(
-                        MapMarkerIcons.riderArrow(metrics, RiderColors.Success.toArgb())
+                        MapMarkerIcons.riderArrow(metrics, RiderColors.Info.toArgb())
                     )
                 )
                 .anchor(0.5f, 0.5f)
@@ -212,6 +230,10 @@ private fun RiderMapUiState.fallbackRouteLine(): List<GeoPoint> = buildList {
     store?.point?.let { add(it) }
     stops.filter { it.kind != MapStopKind.DONE }.mapNotNullTo(this) { it.point }
 }
+
+/** 还有站点没取货时才画骑手到门店那段橙线；全都取过了就只剩送达段。 */
+private fun RiderMapUiState.hasPendingPickup(): Boolean =
+    stops.any { it.kind == MapStopKind.PENDING }
 
 private fun RiderMapUiState.stopSignature(): Int =
     stops.joinToString(",") { "${it.taskId}:${it.kind}" }.hashCode() * 31 + (store?.point?.hashCode() ?: 0)

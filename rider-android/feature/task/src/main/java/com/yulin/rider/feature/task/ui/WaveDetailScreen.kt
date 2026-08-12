@@ -1,16 +1,19 @@
 package com.yulin.rider.feature.task.ui
 
 import android.app.Application
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -18,11 +21,11 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -32,12 +35,17 @@ import androidx.lifecycle.viewModelScope
 import com.yulin.rider.core.designsystem.FreshEmpty
 import com.yulin.rider.core.designsystem.FreshIcon
 import com.yulin.rider.core.designsystem.FreshIconType
-import com.yulin.rider.core.designsystem.FreshPanel
 import com.yulin.rider.core.designsystem.FreshSpacing
 import com.yulin.rider.core.designsystem.FreshStackScaffold
-import com.yulin.rider.core.designsystem.FreshStatusBadge
+import com.yulin.rider.core.designsystem.MtCard
+import com.yulin.rider.core.designsystem.MtDivider
+import com.yulin.rider.core.designsystem.MtMetric
+import com.yulin.rider.core.designsystem.MtScaffold
+import com.yulin.rider.core.designsystem.MtTag
+import com.yulin.rider.core.designsystem.RiderColors
 import com.yulin.rider.core.designsystem.RiderTheme
 import com.yulin.rider.core.designsystem.StatusTone
+import com.yulin.rider.core.designsystem.tabularFigures
 import com.yulin.rider.feature.task.data.TaskCardUi
 import com.yulin.rider.feature.task.data.TaskRepository
 import com.yulin.rider.feature.task.data.TaskStatus
@@ -63,6 +71,7 @@ class WaveDetailViewModel(app: Application, waveId: Long) : AndroidViewModel(app
 fun WaveDetailScreen(
     waveId: Long,
     modifier: Modifier = Modifier,
+    onBack: () -> Unit = {},
     onOpenTask: (Long) -> Unit = {},
 ) {
     val viewModel: WaveDetailViewModel = viewModel(
@@ -81,47 +90,70 @@ fun WaveDetailScreen(
         }
         return
     }
-    WaveDetailContent(current, modifier, onOpenTask)
+    WaveDetailContent(current, modifier, onBack, onOpenTask)
 }
 
 @Composable
 private fun WaveDetailContent(
     wave: WaveUi,
     modifier: Modifier = Modifier,
+    onBack: () -> Unit = {},
     onOpenTask: (Long) -> Unit = {},
 ) {
-    FreshStackScaffold(
-        title = "波次路线",
+    val completed = wave.wave.completedCount >= wave.wave.taskCount
+    MtScaffold(
+        title = "本趟路线",
         subtitle = wave.wave.waveNo,
         modifier = modifier,
-    ) { insets ->
+        onBack = onBack,
+    ) {
         LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(insets),
-            contentPadding = PaddingValues(FreshSpacing.Md),
-            verticalArrangement = Arrangement.spacedBy(FreshSpacing.Sm),
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(
+                start = FreshSpacing.Sm,
+                end = FreshSpacing.Sm,
+                top = FreshSpacing.Xs,
+                bottom = FreshSpacing.Xl,
+            ),
+            verticalArrangement = Arrangement.spacedBy(FreshSpacing.Xs),
         ) {
             item {
-                val completed = wave.wave.completedCount >= wave.wave.taskCount
-                FreshPanel(
-                    title = "共 ${wave.wave.taskCount} 站",
-                    eyebrow = "本趟进度",
-                    spineTone = if (completed) StatusTone.SUCCESS else StatusTone.INFO,
-                    action = {
-                        FreshStatusBadge(
-                            text = "完成 ${wave.wave.completedCount}/${wave.wave.taskCount}",
-                            tone = if (completed) StatusTone.SUCCESS else StatusTone.WARNING,
+                MtCard {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(FreshSpacing.Sm),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(FreshSpacing.Sm),
+                    ) {
+                        MtMetric(
+                            label = "本趟站点",
+                            value = "${wave.wave.taskCount}",
+                            unit = "站",
+                            modifier = Modifier.weight(1f),
                         )
-                    },
-                ) {
-                    Text(
-                        text = buildList {
-                            add("全程 ${RiderFormats.distance(wave.wave.planDistanceMeters)}")
-                            wave.wave.planDurationSeconds?.let { add(RiderFormats.duration(it)) }
-                            RiderFormats.hourMinute(wave.wave.planReturnAt)?.let { add("预计 $it 回店") }
-                        }.joinToString(" · "),
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                        MtMetric(
+                            label = "已完成",
+                            value = "${wave.wave.completedCount}",
+                            unit = "站",
+                            valueColor = if (completed) RiderColors.Deliver else RiderColors.Ink,
+                            modifier = Modifier.weight(1f),
+                        )
+                        MtMetric(
+                            label = "全程",
+                            value = RiderFormats.distance(wave.wave.planDistanceMeters),
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                    RiderFormats.hourMinute(wave.wave.planReturnAt)?.let { back ->
+                        MtDivider()
+                        Text(
+                            text = "预计 $back 回店" +
+                                (wave.wave.planDurationSeconds
+                                    ?.let { " · 在途 ${RiderFormats.duration(it)}" } ?: ""),
+                            style = MaterialTheme.typography.bodySmall.tabularFigures(),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(FreshSpacing.Sm),
+                        )
+                    }
                 }
             }
             items(wave.stops, key = { it.taskId }) { stop ->
@@ -135,65 +167,67 @@ private fun WaveDetailContent(
     }
 }
 
+/** 站点行沿用列表的轨道语言：序号圆点 + 地址主信息，完成的整行转灰。 */
 @Composable
 private fun StopRow(stop: TaskCardUi, total: Int, onClick: () -> Unit) {
     val done = stop.displayStatus == TaskStatus.DELIVERED
     val cold = stop.card.coldChainLevel in setOf("FROZEN", "CHILLED")
-    FreshPanel(
-        modifier = Modifier
-            .clickable(role = Role.Button, onClick = onClick)
-            .semantics {
-                role = Role.Button
-                contentDescription = "第 ${stop.card.seqNo ?: "-"} 站，${stop.card.addressDetail ?: "地址待补充"}"
-            },
-        eyebrow = "第 ${stop.card.seqNo ?: "-"}/$total 站 · ${stop.card.areaLabel.orEmpty()}",
-        spineTone = when {
-            done -> StatusTone.SUCCESS
-            stop.card.overtimeRisk == "OVERTIME" -> StatusTone.DANGER
-            stop.card.overtimeRisk in setOf("HIGH", "MEDIUM") -> StatusTone.WARNING
-            cold -> StatusTone.COLD
-            else -> StatusTone.NORMAL
-        },
-        action = {
-            FreshStatusBadge(
-                text = stop.displayStatusText,
-                tone = stop.displayStatus.tone(),
-            )
+    MtCard(
+        onClick = onClick,
+        modifier = Modifier.semantics {
+            contentDescription =
+                "第 ${stop.card.seqNo ?: "-"} 站，共 $total 站，${stop.card.addressDetail ?: "地址待补充"}"
         },
     ) {
         Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(FreshSpacing.Sm),
+            modifier = Modifier.fillMaxWidth().padding(FreshSpacing.Sm),
+            verticalAlignment = Alignment.Top,
+            horizontalArrangement = Arrangement.spacedBy(FreshSpacing.Xs),
         ) {
-            FreshIcon(
-                type = if (done) FreshIconType.CHECK else FreshIconType.LOCATION,
-                contentDescription = null,
-                tint = if (done) {
-                    MaterialTheme.colorScheme.primary
+            Box(
+                modifier = Modifier
+                    .size(22.dp)
+                    .background(
+                        if (done) RiderColors.DeliverContainer else RiderColors.Deliver,
+                        CircleShape,
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                if (done) {
+                    FreshIcon(
+                        FreshIconType.CHECK,
+                        contentDescription = null,
+                        tint = RiderColors.Deliver,
+                        size = 14.dp,
+                    )
                 } else {
-                    MaterialTheme.colorScheme.secondary
-                },
-            )
+                    Text(
+                        text = "${stop.card.seqNo ?: 0}",
+                        style = MaterialTheme.typography.labelSmall.tabularFigures(),
+                        color = Color.White,
+                    )
+                }
+            }
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = stop.card.addressDetail ?: "地址待补充",
                     style = MaterialTheme.typography.titleMedium,
+                    color = if (done) MaterialTheme.colorScheme.onSurfaceVariant else RiderColors.Ink,
                 )
                 Text(
                     text = "${stop.card.itemCount} 件 · " +
                         (stop.legDistanceMeters?.let { "本段 ${RiderFormats.distance(it)}" }
                             ?: "距我 ${RiderFormats.distance(stop.card.distanceFromRiderMeters)}"),
-                    style = MaterialTheme.typography.bodySmall,
+                    style = MaterialTheme.typography.bodySmall.tabularFigures(),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                if (cold) {
+                    Box(Modifier.padding(top = FreshSpacing.Xxs)) {
+                        MtTag(stop.card.coldChainText ?: "冷链", tone = StatusTone.COLD)
+                    }
+                }
             }
-            if (cold) {
-                FreshIcon(
-                    FreshIconType.COLD,
-                    contentDescription = "冷链",
-                    tint = com.yulin.rider.core.designsystem.RiderColors.Ice,
-                )
-            }
+            MtTag(stop.displayStatusText, tone = stop.displayStatus.tone())
         }
     }
 }

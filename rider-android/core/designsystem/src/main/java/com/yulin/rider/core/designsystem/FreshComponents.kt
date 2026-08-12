@@ -331,7 +331,7 @@ fun FreshBanner(
                     Modifier.semantics { stateDescription = tone.accessibleLabel() }
                 }
             ),
-        color = accent.copy(alpha = if (isDarkScheme()) 0.18f else 0.10f),
+        color = tone.toneContainer(),
         contentColor = MaterialTheme.colorScheme.onSurface,
     ) {
         Row(
@@ -450,7 +450,7 @@ fun FreshStatusBadge(
     Row(
         modifier = modifier
             .clip(RoundedCornerShape(FreshRadius.Pill))
-            .background(accent.copy(alpha = if (isDarkScheme()) .20f else .11f))
+            .background(tone.toneContainer())
             .border(
                 FreshBorder.Hairline,
                 accent.copy(alpha = .34f),
