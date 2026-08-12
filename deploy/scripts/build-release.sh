@@ -36,7 +36,7 @@ BUILD_RIDER_APK="${RIDER_APK:-0}"
 if [[ "$BUILD_RIDER_APK" == "1" ]]; then
   [[ -x "$REPO_ROOT/rider-android/gradlew" ]] || die "rider Gradle wrapper is missing or not executable"
   [[ -f "$REPO_ROOT/rider-android/gradle.properties" ]] \
-    || die "rider-android/gradle.properties is missing; copy it from gradle.properties.example"
+    || die "rider-android/gradle.properties is missing; it is tracked in Git, restore it with: git checkout -- rider-android/gradle.properties"
   [[ -n "${ANDROID_HOME:-}${ANDROID_SDK_ROOT:-}" ]] \
     || die "ANDROID_HOME (or ANDROID_SDK_ROOT) must point at an Android SDK to build the rider APK"
 fi

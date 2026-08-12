@@ -25,11 +25,12 @@ server/.env.*
 
 # Android rider app
 rider-android/local.properties
+# 机器本地的 Gradle 覆盖参数与签名材料都不进版本库。
+# rider-android/gradle.properties 本身是入库的：里面只有 useAndroidX 这类编译开关，
+# 缺了它全新 clone 和 CI 都跑不起来；口令与 Key 走 local.properties 或 -P 参数。
 local.properties
 *.keystore
 *.jks
-# 本地 Gradle 参数文件不进版本库；release 签名材料必须保存在工作区外
-rider-android/gradle.properties
 rider-android/build/
 rider-android/**/build/
 rider-android/.gradle/
