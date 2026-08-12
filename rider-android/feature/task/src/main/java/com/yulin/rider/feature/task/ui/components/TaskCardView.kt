@@ -54,7 +54,6 @@ fun TaskCardView(
         MtCardHeader(
             scheduled = card.slotLabel != null,
             timeText = headerTimeText(task),
-            highlight = null,
             trailing = { HeaderTrailing(task) },
         )
 

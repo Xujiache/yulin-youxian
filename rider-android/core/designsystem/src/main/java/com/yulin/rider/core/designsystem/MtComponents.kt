@@ -8,10 +8,12 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -511,7 +513,6 @@ fun MtCardHeader(
     modifier: Modifier = Modifier,
     scheduled: Boolean = false,
     timeText: String,
-    highlight: String? = null,
     trailing: @Composable (() -> Unit)? = null,
 ) {
     Row(
@@ -550,37 +551,8 @@ fun MtCardHeader(
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
-        if (highlight != null) {
-            MtMoney(highlight)
-        }
         trailing?.invoke()
     }
-}
-
-/** 金额。数字大、货币符号小、统一红色。 */
-@Composable
-fun MtMoney(
-    amount: String,
-    modifier: Modifier = Modifier,
-    symbol: String = "¥",
-    symbolTrailing: Boolean = false,
-) {
-    val text = buildAnnotatedString {
-        if (!symbolTrailing) {
-            withStyle(SpanStyle(fontSize = 13.sp, fontWeight = FontWeight.Bold)) { append(symbol) }
-        }
-        withStyle(SpanStyle(fontSize = 22.sp, fontWeight = FontWeight.Bold)) { append(amount) }
-        if (symbolTrailing) {
-            withStyle(SpanStyle(fontSize = 13.sp, fontWeight = FontWeight.Bold)) { append(" $symbol") }
-        }
-    }
-    Text(
-        text = text,
-        modifier = modifier.semantics { contentDescription = "$amount 元" },
-        color = RiderColors.Money,
-        style = MaterialTheme.typography.headlineMedium.tabularFigures(),
-        maxLines = 1,
-    )
 }
 
 /** 行程段。取货段与送达段各一，未激活的一段整体转灰。 */
@@ -648,6 +620,9 @@ private fun MtLegRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            // 取 IntrinsicSize.Min 才能让左侧连接线随右侧文字高度伸缩；
+            // 不给这个约束的话轨道列高度无界，weight 拿不到剩余空间，线会连不到下一个圆点。
+            .height(IntrinsicSize.Min)
             .semantics(mergeDescendants = true) {
                 contentDescription = listOfNotNull(label, title, subtitle).joinToString("，")
             },
@@ -655,7 +630,9 @@ private fun MtLegRow(
     ) {
         // 轨道列：距离或圆点 + 连接线
         Column(
-            modifier = Modifier.width(44.dp),
+            modifier = Modifier
+                .width(44.dp)
+                .fillMaxHeight(),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             if (distance != null) {
@@ -674,8 +651,7 @@ private fun MtLegRow(
                 Box(
                     Modifier
                         .width(FreshBorder.Hairline)
-                        .heightIn(min = 22.dp)
-                        .weight(1f, fill = false)
+                        .weight(1f)
                         .background(MaterialTheme.colorScheme.outline)
                 )
             }
@@ -1106,7 +1082,7 @@ private fun MtTaskCardPreview() {
             verticalArrangement = Arrangement.spacedBy(FreshSpacing.Xs),
         ) {
             MtCard {
-                MtCardHeader(scheduled = false, timeText = "83分钟 送达", highlight = "19")
+                MtCardHeader(scheduled = false, timeText = "还剩83分钟送达")
                 MtLegBlock(
                     pickupTitle = "江西面馆（望京店）",
                     pickupSubtitle = "北京市朝阳区望京新荟城购物中心五层直梯口",

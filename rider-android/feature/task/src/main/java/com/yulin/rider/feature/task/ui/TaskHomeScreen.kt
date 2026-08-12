@@ -36,6 +36,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.yulin.rider.core.designsystem.FreshIcon
 import com.yulin.rider.core.designsystem.FreshIconType
 import com.yulin.rider.core.designsystem.FreshLoading
+import com.yulin.rider.core.designsystem.FreshRadius
 import com.yulin.rider.core.designsystem.FreshSpacing
 import com.yulin.rider.core.designsystem.MtCard
 import com.yulin.rider.core.designsystem.MtDivider
@@ -157,7 +158,8 @@ internal fun TaskHomeContent(
             trailing = {
                 Row(
                     modifier = Modifier
-                        .clip(RoundedCornerShape(6.dp))
+                        .clip(RoundedCornerShape(FreshRadius.Small))
+                        .clickable(onClick = onOpenRoute)
                         .padding(horizontal = FreshSpacing.Sm, vertical = FreshSpacing.Xs)
                         .semantics {
                             contentDescription = "查看配送路线"

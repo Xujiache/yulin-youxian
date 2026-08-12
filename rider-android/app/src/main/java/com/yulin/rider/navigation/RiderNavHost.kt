@@ -19,6 +19,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.yulin.rider.core.datastore.RiderSession
 import com.yulin.rider.core.datastore.RiderSettingsStore
 import com.yulin.rider.core.datastore.RiderTokenStore
 import com.yulin.rider.core.designsystem.FreshIcon
@@ -165,6 +166,7 @@ fun RiderNavHost(
 
         composable(RiderRoutes.HOME) {
             RiderHomeShell(
+                tokenStore = tokenStore,
                 onNavigate = { route -> navController.navigate(route) },
             ) { openMenu ->
                 TaskHomeScreen(
@@ -400,18 +402,22 @@ private const val WAIT_FOR_BUSINESS_MILLIS = 30_000L
  */
 @Composable
 private fun RiderHomeShell(
+    tokenStore: RiderTokenStore,
     onNavigate: (String) -> Unit,
     content: @Composable (openMenu: () -> Unit) -> Unit,
 ) {
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
+    val session by produceState<RiderSession?>(initialValue = null, tokenStore) {
+        value = tokenStore.current()
+    }
 
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
             RiderDrawerSheet(
-                riderName = "骑手",
-                riderNo = null,
+                riderName = session?.riderName?.takeIf { it.isNotBlank() } ?: "骑手",
+                riderNo = session?.riderPhone?.takeIf { it.isNotBlank() },
                 onOpenProfile = {
                     scope.launch { drawerState.close() }
                     onNavigate(RiderRoutes.PROFILE)
