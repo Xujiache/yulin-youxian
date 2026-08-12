@@ -172,14 +172,22 @@ fun MtScaffold(
     bottomBar: @Composable () -> Unit = {},
     content: @Composable ColumnScope.() -> Unit,
 ) {
+    // 底色取白而不是页面灰：状态栏与导航栏区域要和顶栏、吸底条同色，
+    // 否则安全区会在白色顶栏上方露出一条灰边。灰底只铺在中间的内容区。
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.background)
+            .background(MaterialTheme.colorScheme.surface)
             .safeDrawingPadding(),
     ) {
         MtPageHeader(title = title, subtitle = subtitle, onBack = onBack, actions = actions)
-        Column(modifier = Modifier.weight(1f)) { content() }
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .background(MaterialTheme.colorScheme.background),
+        ) {
+            content()
+        }
         bottomBar()
     }
 }

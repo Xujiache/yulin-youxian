@@ -1,9 +1,12 @@
 package com.yulin.rider
 
 import android.content.Intent
+import android.graphics.Color
 import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.compose.setContent
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
@@ -81,6 +84,14 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // targetSdk 35 起系统强制边到边，内容会画到状态栏与导航栏下面。
+        // 骑手端只有浅色，顶栏和吸底条都是白的，这里把系统栏图标固定成深色，
+        // 否则跟随系统深色时会是白图标压在白底上，等于看不见。
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT),
+            navigationBarStyle = SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT),
+        )
 
         installFeatureBridges()
         // 异常上报由 feature/exception 直接写队列,它调不到 feature/task 的即时重放,

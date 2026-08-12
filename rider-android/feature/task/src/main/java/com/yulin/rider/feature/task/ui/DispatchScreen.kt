@@ -130,6 +130,7 @@ private fun DispatchContent(
             .safeDrawingPadding()
             .padding(horizontal = FreshSpacing.Sm),
     ) {
+        // 派单页整屏都是灰底，不像其他页那样有白色顶栏，安全区不会露色差
         Text(
             text = "你有 1 个派单",
             style = MaterialTheme.typography.displaySmall,
