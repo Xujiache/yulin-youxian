@@ -7,7 +7,7 @@
     "postcss": true,
     "minified": true,
     "ignoreDevUnusedFiles": false,
-    "compileHotReLoad": true,
+    "compileHotReLoad": false,
     "compileWorklet": false,
     "uglifyFileName": false,
     "uploadWithSourceMap": false,
