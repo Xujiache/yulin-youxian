@@ -8,6 +8,8 @@
 - [ ] GitHub CI 的后端、后台、Android debug、小程序、打印代理和 secret scan 全绿。
 - [ ] 有 Android 签名 secrets 时，signed release gate 与 `apksigner verify` 已通过；无 secrets 时不交付 release APK。
 - [ ] `build-release.sh` 产生新版本目录，旧版本目录、旧 jar 和旧 dist 未被覆盖。
+- [ ] 需要交付骑手端时，在有 Android SDK 与签名材料的机器上加 `RIDER_APK=1`
+      （要小包再加 `RIDER_ABI=arm64`），并确认 `BUILD-METADATA` 里 `rider_apk=1`。
 - [ ] 发布目录内 `SHA256SUMS` 校验通过，传输用 tarball 的 `.sha256` 也通过。
 - [ ] 打印代理交付包的 `SHA256SUMS.txt` 已由另一台 Windows 机器验证。
 

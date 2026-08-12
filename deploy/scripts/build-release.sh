@@ -29,6 +29,18 @@ java_version_output="$(java -version 2>&1)"
 [[ -f "$REPO_ROOT/art-lnb-master/package-lock.json" ]] || die "admin package-lock.json is required"
 [[ -x "$REPO_ROOT/server/mvnw" ]] || die "server Maven wrapper is missing or not executable"
 
+# 骑手端 APK 默认不打：服务器发布机通常没有 Android SDK，更不该放签名 keystore。
+# 要连 APK 一起出就 RIDER_APK=1，前置条件缺一不可，缺了直接失败而不是悄悄跳过 ——
+# 半个包比没有包更危险。
+BUILD_RIDER_APK="${RIDER_APK:-0}"
+if [[ "$BUILD_RIDER_APK" == "1" ]]; then
+  [[ -x "$REPO_ROOT/rider-android/gradlew" ]] || die "rider Gradle wrapper is missing or not executable"
+  [[ -f "$REPO_ROOT/rider-android/gradle.properties" ]] \
+    || die "rider-android/gradle.properties is missing; copy it from gradle.properties.example"
+  [[ -n "${ANDROID_HOME:-}${ANDROID_SDK_ROOT:-}" ]] \
+    || die "ANDROID_HOME (or ANDROID_SDK_ROOT) must point at an Android SDK to build the rider APK"
+fi
+
 if [[ "${ALLOW_DIRTY_BUILD:-0}" != "1" ]]; then
   dirty_status="$(git -C "$REPO_ROOT" status --porcelain --untracked-files=normal)"
   [[ -z "$dirty_status" ]] || die "release builds require a clean Git worktree (set ALLOW_DIRTY_BUILD=1 only for local rehearsal)"
@@ -83,6 +95,29 @@ log "building admin with locked Node and npm versions"
 )
 mv "$STAGING/admin-dist" "$STAGING/release/admin/dist"
 
+if [[ "$BUILD_RIDER_APK" == "1" ]]; then
+  log "building signed rider APK"
+  (
+    cd "$REPO_ROOT/rider-android"
+    # assembleRelease 在签名材料不全时会在配置阶段直接失败，不会产出未签名包，
+    # 所以这里不需要再自己校验一遍 keystore。
+    # 不要试图用 -PbuildDir 把各模块产物挪到 staging：多模块共用一个 buildDir 会让
+    # 任务输出互相覆盖，Gradle 直接以 implicit dependency 报错。就地构建再拷出来。
+    # RIDER_ABI=arm64 只打 64 位包，体积从 ~100MB 降到 ~70MB。
+    # 现在的手机基本都是 arm64，只有极老的 32 位机型需要默认的双 ABI。
+    rider_gradle_args=()
+    [[ -n "${RIDER_ABI:-}" ]] && rider_gradle_args+=("-PRIDER_ABI=$RIDER_ABI")
+    ./gradlew --no-daemon "${rider_gradle_args[@]}" \
+      clean testDebugUnitTest lintDebug assembleRelease verifyReleaseSignature
+  )
+  shopt -s nullglob
+  rider_apks=("$REPO_ROOT"/rider-android/app/build/outputs/apk/release/*.apk)
+  shopt -u nullglob
+  (( ${#rider_apks[@]} == 1 )) || die "expected exactly one rider release APK; found ${#rider_apks[@]}"
+  mkdir -p "$STAGING/release/rider"
+  cp "${rider_apks[0]}" "$STAGING/release/rider/yulin-rider-$VERSION.apk"
+fi
+
 cp -a "$REPO_ROOT/deploy/pm2" "$STAGING/release/ops/"
 cp -a "$REPO_ROOT/deploy/nginx" "$STAGING/release/ops/"
 cp -a "$REPO_ROOT/deploy/scripts" "$STAGING/release/ops/"
@@ -100,6 +135,7 @@ node_version=$NODE_VERSION
 npm_version=$NPM_VERSION
 flyway_version=$EXPECTED_FLYWAY_VERSION
 business_tables=$EXPECTED_BUSINESS_TABLES
+rider_apk=$BUILD_RIDER_APK
 EOF
 
 MANIFEST_TMP="$STAGING/SHA256SUMS"
