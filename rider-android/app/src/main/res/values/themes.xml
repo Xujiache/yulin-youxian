@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      冷启动到 Compose 首帧之间显示的是这个窗口背景。
+      用系统默认主题的话，跟随系统深色模式时会先闪一屏深色再切到浅色。
+    -->
+    <style name="Theme.YulinRider" parent="@android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/rider_window_background</item>
+    </style>
+</resources>

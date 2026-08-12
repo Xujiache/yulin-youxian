@@ -229,7 +229,11 @@ fun RiderNavHost(
             arguments = listOf(navArgument(RiderRoutes.ARG_WAVE_ID) { type = NavType.LongType }),
         ) { entry ->
             val waveId = entry.arguments?.getLong(RiderRoutes.ARG_WAVE_ID) ?: 0L
-            PickupScreen(waveId = waveId, onDone = { navController.popBackStack() })
+            PickupScreen(
+                waveId = waveId,
+                onBack = { navController.popBackStack() },
+                onDone = { navController.popBackStack() },
+            )
         }
 
         composable(
@@ -237,7 +241,11 @@ fun RiderNavHost(
             arguments = listOf(navArgument(RiderRoutes.ARG_TASK_ID) { type = NavType.LongType }),
         ) { entry ->
             val taskId = entry.arguments?.getLong(RiderRoutes.ARG_TASK_ID) ?: 0L
-            DeliverScreen(taskId = taskId, onDone = { navController.popBackStack() })
+            DeliverScreen(
+                taskId = taskId,
+                onBack = { navController.popBackStack() },
+                onDone = { navController.popBackStack() },
+            )
         }
 
         composable(
@@ -245,7 +253,11 @@ fun RiderNavHost(
             arguments = listOf(navArgument(RiderRoutes.ARG_TASK_ID) { type = NavType.LongType }),
         ) { entry ->
             val taskId = entry.arguments?.getLong(RiderRoutes.ARG_TASK_ID) ?: 0L
-            ExceptionReportScreen(taskId = taskId, onClose = { navController.popBackStack() })
+            ExceptionReportScreen(
+                taskId = taskId,
+                onBack = { navController.popBackStack() },
+                onClose = { navController.popBackStack() },
+            )
         }
 
         composable(
@@ -288,15 +300,16 @@ fun RiderNavHost(
         }
 
         composable(RiderRoutes.EARNING) {
-            TodayStatsScreen()
+            TodayStatsScreen(onBack = { navController.popBackStack() })
         }
 
         composable(RiderRoutes.MESSAGE) {
-            MessageCenterScreen()
+            MessageCenterScreen(onBack = { navController.popBackStack() })
         }
 
         composable(RiderRoutes.PROFILE) {
             ProfileScreen(
+                onBack = { navController.popBackStack() },
                 onOpenSettings = { navController.navigate(RiderRoutes.SETTINGS) },
                 onOpenAbout = { navController.navigate(RiderRoutes.ABOUT) },
                 onOpenMessages = { navController.navigate(RiderRoutes.MESSAGE) },
@@ -306,6 +319,7 @@ fun RiderNavHost(
 
         composable(RiderRoutes.SETTINGS) {
             SettingsScreen(
+                onBack = { navController.popBackStack() },
                 onOpenKeepAliveGuide = { navController.navigate(RiderRoutes.KEEPALIVE_GUIDE) },
                 onLoggedOut = {
                     navController.navigate(RiderRoutes.LOGIN) {
@@ -316,7 +330,7 @@ fun RiderNavHost(
         }
 
         composable(RiderRoutes.ABOUT) {
-            AboutScreen()
+            AboutScreen(onBack = { navController.popBackStack() })
         }
     }
 }

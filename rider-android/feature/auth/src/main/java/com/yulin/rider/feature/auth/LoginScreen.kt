@@ -1,5 +1,7 @@
 package com.yulin.rider.feature.auth
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -7,7 +9,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
@@ -22,6 +27,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
@@ -32,17 +38,16 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.yulin.rider.core.common.RiderResult
 import com.yulin.rider.core.common.isChinaMobile
-import com.yulin.rider.core.designsystem.BigActionButton
-import com.yulin.rider.core.designsystem.FreshBanner
 import com.yulin.rider.core.designsystem.FreshIcon
 import com.yulin.rider.core.designsystem.FreshIconType
-import com.yulin.rider.core.designsystem.FreshPanel
-import com.yulin.rider.core.designsystem.FreshShell
+import com.yulin.rider.core.designsystem.FreshRadius
 import com.yulin.rider.core.designsystem.FreshSpacing
-import com.yulin.rider.core.designsystem.FreshStatusBadge
-import com.yulin.rider.core.designsystem.RiderDimens
-import com.yulin.rider.core.designsystem.RiderTheme
+import com.yulin.rider.core.designsystem.MtAction
+import com.yulin.rider.core.designsystem.MtInfoBar
+import com.yulin.rider.core.designsystem.MtPrimaryButton
+import com.yulin.rider.core.designsystem.RiderColors
 import com.yulin.rider.core.designsystem.RiderTextField
+import com.yulin.rider.core.designsystem.RiderTheme
 import com.yulin.rider.core.designsystem.StatusTone
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -140,115 +145,112 @@ internal fun LoginScreen(
     val phoneValid = phone.isChinaMobile()
     val canSubmit = phoneValid && password.length >= 6 && !state.submitting
 
-    FreshShell(modifier = modifier) { insets ->
-        Column(
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.surface)
+            .safeDrawingPadding()
+            .verticalScroll(rememberScrollState())
+            .imePadding()
+            .padding(horizontal = FreshSpacing.Lg),
+    ) {
+        Spacer(Modifier.height(FreshSpacing.Huge))
+        Box(
             modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .imePadding()
-                .padding(insets)
-                .padding(horizontal = FreshSpacing.Md),
-            horizontalAlignment = Alignment.CenterHorizontally,
+                .size(56.dp)
+                .clip(RoundedCornerShape(FreshRadius.Hero))
+                .background(RiderColors.Primary),
+            contentAlignment = Alignment.Center,
         ) {
-            Spacer(Modifier.height(FreshSpacing.Xxl))
             FreshIcon(
                 type = FreshIconType.STORE,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                size = 56.dp,
+                tint = RiderColors.OnPrimary,
+                size = 30.dp,
             )
-            Spacer(Modifier.height(FreshSpacing.Sm))
-            Text(
-                text = "禹邻优鲜",
-                style = MaterialTheme.typography.displaySmall,
-                color = MaterialTheme.colorScheme.primary,
-            )
-            Spacer(Modifier.height(FreshSpacing.Xs))
-            FreshStatusBadge(
-                text = "家庭生鲜配送运营中枢",
-                tone = StatusTone.INFO,
-                icon = FreshIconType.ROUTE,
-            )
-            Spacer(Modifier.height(FreshSpacing.Xs))
-            Text(
-                text = "强光可读 · 单手开工 · 离线可用",
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Spacer(Modifier.height(FreshSpacing.Xl))
-
-            FreshPanel(
-                title = "骑手登录",
-                eyebrow = "今日配送入口",
-                spineTone = StatusTone.SUCCESS,
-            ) {
-                RiderTextField(
-                    value = phone,
-                    onValueChange = { input ->
-                        phone = input.filter { it.isDigit() }.take(11)
-                        onInputChanged()
-                    },
-                    label = "手机号",
-                    placeholder = "请输入 11 位手机号",
-                    leadingIcon = FreshIconType.PHONE,
-                    keyboardOptions = KeyboardOptions(
-                        keyboardType = KeyboardType.Phone,
-                        imeAction = ImeAction.Next,
-                    ),
-                    isError = phone.isNotEmpty() && !phoneValid,
-                    supportingText = if (phone.isNotEmpty() && !phoneValid) "手机号应为 11 位数字" else null,
-                )
-
-                RiderTextField(
-                    value = password,
-                    onValueChange = {
-                        password = it.take(32)
-                        onInputChanged()
-                    },
-                    label = "密码",
-                    placeholder = "请输入密码",
-                    leadingIcon = FreshIconType.LOCK,
-                    keyboardOptions = KeyboardOptions(
-                        keyboardType = KeyboardType.Password,
-                        imeAction = ImeAction.Done,
-                    ),
-                    isPassword = true,
-                    passwordVisible = passwordVisible,
-                    onTogglePasswordVisibility = { passwordVisible = !passwordVisible },
-                )
-
-                if (state.error != null) {
-                    FreshBanner(
-                        text = state.error,
-                        tone = StatusTone.DANGER,
-                        icon = FreshIconType.ERROR,
-                    )
-                }
-
-                BigActionButton(
-                    text = if (state.submitting) "正在登录…" else "登录并开始接单",
-                    enabled = canSubmit,
-                    disabledReason = when {
-                        state.submitting -> "正在提交登录信息"
-                        !phoneValid -> "请输入正确的手机号"
-                        password.length < 6 -> "密码至少 6 位"
-                        else -> null
-                    },
-                    tone = StatusTone.NORMAL,
-                    icon = FreshIconType.ROUTE,
-                    onClick = { onSubmit(phone, password) },
-                )
-            }
-
-            Spacer(Modifier.height(FreshSpacing.Md))
-            Text(
-                text = "忘记密码请联系店长重置",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center,
-            )
-            Spacer(Modifier.height(FreshSpacing.Xxl))
         }
+        Spacer(Modifier.height(FreshSpacing.Md))
+        Text(
+            text = "禹邻优鲜骑手",
+            style = MaterialTheme.typography.displaySmall,
+            color = RiderColors.Ink,
+        )
+        Text(
+            text = "登录后开始接单",
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(FreshSpacing.Xl))
+
+        RiderTextField(
+            value = phone,
+            onValueChange = { input ->
+                phone = input.filter { it.isDigit() }.take(11)
+                onInputChanged()
+            },
+            label = "手机号",
+            placeholder = "请输入 11 位手机号",
+            leadingIcon = FreshIconType.PHONE,
+            keyboardOptions = KeyboardOptions(
+                keyboardType = KeyboardType.Phone,
+                imeAction = ImeAction.Next,
+            ),
+            isError = phone.isNotEmpty() && !phoneValid,
+            supportingText = if (phone.isNotEmpty() && !phoneValid) "手机号应为 11 位数字" else null,
+        )
+        Spacer(Modifier.height(FreshSpacing.Sm))
+        RiderTextField(
+            value = password,
+            onValueChange = {
+                password = it.take(32)
+                onInputChanged()
+            },
+            label = "密码",
+            placeholder = "请输入密码",
+            leadingIcon = FreshIconType.LOCK,
+            keyboardOptions = KeyboardOptions(
+                keyboardType = KeyboardType.Password,
+                imeAction = ImeAction.Done,
+            ),
+            isPassword = true,
+            passwordVisible = passwordVisible,
+            onTogglePasswordVisibility = { passwordVisible = !passwordVisible },
+        )
+
+        if (state.error != null) {
+            Spacer(Modifier.height(FreshSpacing.Sm))
+            MtInfoBar(
+                text = state.error,
+                tone = StatusTone.DANGER,
+                icon = FreshIconType.ERROR,
+                modifier = Modifier.clip(RoundedCornerShape(FreshRadius.Control)),
+            )
+        }
+
+        Spacer(Modifier.height(FreshSpacing.Lg))
+        MtPrimaryButton(
+            text = if (state.submitting) "正在登录…" else "登录",
+            action = MtAction.ACCEPT,
+            modifier = Modifier.fillMaxWidth(),
+            enabled = canSubmit,
+            disabledReason = when {
+                state.submitting -> "正在提交登录信息"
+                !phoneValid -> "请输入正确的手机号"
+                password.length < 6 -> "密码至少 6 位"
+                else -> null
+            },
+            onClick = { onSubmit(phone, password) },
+        )
+
+        Spacer(Modifier.height(FreshSpacing.Md))
+        Text(
+            text = "忘记密码请联系店长重置",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(Modifier.height(FreshSpacing.Xxl))
     }
 }
 

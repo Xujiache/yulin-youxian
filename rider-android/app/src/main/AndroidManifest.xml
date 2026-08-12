@@ -62,7 +62,7 @@
         android:fullBackupContent="false"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:networkSecurityConfig="@xml/network_security_config"
-        android:theme="@android:style/Theme.Material.Light.NoActionBar"
+        android:theme="@style/Theme.YulinRider"
         android:supportsRtl="false">
         <!-- 明文 HTTP 只在 debug 打开(src/debug 的 network_security_config 覆盖本文件),
              release 走 https://hqhjxt.vip,不允许明文 -->

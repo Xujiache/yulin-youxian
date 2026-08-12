@@ -1,47 +1,53 @@
 package com.yulin.rider.feature.profile
 
 import android.app.Application
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.yulin.rider.core.common.RiderResult
-import com.yulin.rider.core.designsystem.LoadingBox
-import com.yulin.rider.core.designsystem.FreshBanner
 import com.yulin.rider.core.designsystem.FreshIcon
 import com.yulin.rider.core.designsystem.FreshIconType
 import com.yulin.rider.core.designsystem.FreshLoading
-import com.yulin.rider.core.designsystem.FreshPageHeader
-import com.yulin.rider.core.designsystem.FreshPanel
-import com.yulin.rider.core.designsystem.FreshShell
 import com.yulin.rider.core.designsystem.FreshSpacing
-import com.yulin.rider.core.designsystem.FreshStatusBadge
+import com.yulin.rider.core.designsystem.MtCard
+import com.yulin.rider.core.designsystem.MtDivider
+import com.yulin.rider.core.designsystem.MtInfoBar
+import com.yulin.rider.core.designsystem.MtMetric
+import com.yulin.rider.core.designsystem.MtScaffold
+import com.yulin.rider.core.designsystem.MtSectionTitle
+import com.yulin.rider.core.designsystem.MtTag
+import com.yulin.rider.core.designsystem.RiderColors
 import com.yulin.rider.core.designsystem.RiderDimens
 import com.yulin.rider.core.designsystem.RiderTheme
-import com.yulin.rider.core.designsystem.SectionCard
-import com.yulin.rider.core.designsystem.StatusChip
 import com.yulin.rider.core.designsystem.StatusTone
+import com.yulin.rider.core.designsystem.tabularFigures
 import com.yulin.rider.core.model.RiderProfile
 import com.yulin.rider.core.network.RiderApis
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -108,6 +114,7 @@ class ProfileViewModel(app: Application) : AndroidViewModel(app) {
 fun ProfileScreen(
     modifier: Modifier = Modifier,
     viewModel: ProfileViewModel = viewModel(),
+    onBack: () -> Unit = {},
     onOpenSettings: () -> Unit = {},
     onOpenAbout: () -> Unit = {},
     onOpenMessages: () -> Unit = {},
@@ -117,6 +124,7 @@ fun ProfileScreen(
     ProfileContent(
         state = state,
         modifier = modifier,
+        onBack = onBack,
         onOpenSettings = onOpenSettings,
         onOpenAbout = onOpenAbout,
         onOpenMessages = onOpenMessages,
@@ -128,116 +136,123 @@ fun ProfileScreen(
 private fun ProfileContent(
     state: ProfileUiState,
     modifier: Modifier = Modifier,
+    onBack: () -> Unit = {},
     onOpenSettings: () -> Unit = {},
     onOpenAbout: () -> Unit = {},
     onOpenMessages: () -> Unit = {},
     onOpenStats: () -> Unit = {},
 ) {
-    FreshShell(
-        modifier = modifier,
-        topBar = { FreshPageHeader("我的", subtitle = "账号、消息与运营统计") },
-    ) { insets ->
+    MtScaffold(title = "个人主页", modifier = modifier, onBack = onBack) {
         if (state.loading) {
-            FreshLoading(
-                modifier = Modifier.padding(insets).fillMaxSize(),
-                label = "正在读取个人资料",
-            )
-            return@FreshShell
+            FreshLoading(modifier = Modifier.fillMaxSize(), label = "正在读取个人资料")
+            return@MtScaffold
         }
+        val profile = state.profile
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(insets)
                 .verticalScroll(rememberScrollState())
-                .padding(FreshSpacing.Md),
-            verticalArrangement = Arrangement.spacedBy(FreshSpacing.Sm),
+                .padding(
+                    start = FreshSpacing.Sm,
+                    end = FreshSpacing.Sm,
+                    top = FreshSpacing.Xs,
+                    bottom = FreshSpacing.Md,
+                ),
+            verticalArrangement = Arrangement.spacedBy(FreshSpacing.Xs),
         ) {
-            val profile = state.profile
-            FreshPanel(
-                eyebrow = profile?.riderNo ?: "骑手账号",
-                spineTone = if (profile?.workStatus == "ON_DUTY") StatusTone.SUCCESS else StatusTone.NORMAL,
-            ) {
+            MtCard {
                 Row(
+                    modifier = Modifier.fillMaxWidth().padding(FreshSpacing.Sm),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(FreshSpacing.Sm),
                 ) {
-                    FreshIcon(
-                        FreshIconType.PROFILE,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        size = com.yulin.rider.core.designsystem.FreshSpacing.Huge,
-                    )
+                    Box(
+                        modifier = Modifier
+                            .size(56.dp)
+                            .clip(CircleShape)
+                            .background(RiderColors.PrimaryContainer),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        FreshIcon(
+                            FreshIconType.PROFILE,
+                            contentDescription = null,
+                            tint = RiderColors.Ink,
+                            size = 30.dp,
+                        )
+                    }
                     Column(Modifier.weight(1f)) {
                         Text(
                             text = profile?.name ?: "未登录",
                             style = MaterialTheme.typography.headlineSmall,
+                            color = RiderColors.Ink,
                         )
                         profile?.let {
                             Text(
-                                "${it.riderNo} · ${it.phone}",
-                                style = MaterialTheme.typography.bodyMedium,
+                                text = "${it.riderNo} · ${it.phone}",
+                                style = MaterialTheme.typography.bodyMedium.tabularFigures(),
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
                     }
-                }
-                profile?.let {
-                    Row(horizontalArrangement = Arrangement.spacedBy(FreshSpacing.Xs)) {
-                        FreshStatusBadge(
+                    profile?.let {
+                        MtTag(
                             text = if (it.workStatus == "ON_DUTY") "在岗" else "休息中",
-                            tone = if (it.workStatus == "ON_DUTY") StatusTone.SUCCESS else StatusTone.NORMAL,
-                            icon = if (it.workStatus == "ON_DUTY") FreshIconType.RIDER else FreshIconType.CLOCK,
-                        )
-                        it.vehiclePlate?.let { plate -> FreshStatusBadge(plate) }
-                    }
-                    if (it.healthCertExpiringSoon) {
-                        FreshBanner(
-                            text = "健康证即将过期，请及时更换",
-                            tone = StatusTone.WARNING,
-                            icon = FreshIconType.WARNING,
+                            tone = if (it.workStatus == "ON_DUTY") {
+                                StatusTone.SUCCESS
+                            } else {
+                                StatusTone.NORMAL
+                            },
                         )
                     }
+                }
+                profile?.vehiclePlate?.let { plate ->
+                    MtDivider()
+                    Text(
+                        text = "车牌 $plate",
+                        style = MaterialTheme.typography.bodyMedium.tabularFigures(),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(FreshSpacing.Sm),
+                    )
+                }
+                if (profile?.healthCertExpiringSoon == true) {
+                    MtInfoBar(text = "健康证即将过期，请及时更换", tone = StatusTone.WARNING)
                 }
                 state.error?.let {
-                    FreshBanner(it, tone = StatusTone.WARNING, icon = FreshIconType.OFFLINE)
+                    MtInfoBar(it, tone = StatusTone.WARNING, icon = FreshIconType.OFFLINE)
                 }
             }
 
-            FreshPanel(title = "累计履约", spineTone = StatusTone.INFO) {
-                profile?.let {
-                    EntryRow(label = "累计完成", value = "${it.totalTaskCount} 单")
-                    EntryRow(
-                        label = "准时率",
-                        value = it.onTimeRate?.let { rate -> "${(rate * 100).toInt()}%" } ?: "—",
+            MtCard {
+                MtSectionTitle("累计履约")
+                MtDivider()
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(FreshSpacing.Sm),
+                    horizontalArrangement = Arrangement.spacedBy(FreshSpacing.Sm),
+                ) {
+                    MtMetric(
+                        label = "累计完成",
+                        value = profile?.totalTaskCount?.toString() ?: "—",
+                        unit = "单",
+                        modifier = Modifier.weight(1f),
                     )
-                } ?: Text(
-                    "暂无数据",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                    MtMetric(
+                        label = "准时率",
+                        value = profile?.onTimeRate?.let { "${(it * 100).toInt()}" } ?: "—",
+                        unit = "%",
+                        valueColor = RiderColors.Deliver,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
             }
 
-            FreshPanel(title = "运营工具") {
-                NavRow(
-                    text = "今日统计",
-                    icon = FreshIconType.STATS,
-                    onClick = onOpenStats,
-                )
-                NavRow(
-                    text = "消息中心",
-                    icon = FreshIconType.MESSAGE,
-                    onClick = onOpenMessages,
-                )
-                NavRow(
-                    text = "设置",
-                    icon = FreshIconType.SETTINGS,
-                    onClick = onOpenSettings,
-                )
-                NavRow(
-                    text = "关于",
-                    icon = FreshIconType.ABOUT,
-                    onClick = onOpenAbout,
-                )
+            MtCard {
+                NavRow("我的账户", FreshIconType.WALLET, onOpenStats)
+                MtDivider()
+                NavRow("消息中心", FreshIconType.MESSAGE, onOpenMessages)
+                MtDivider()
+                NavRow("设置", FreshIconType.SETTINGS, onOpenSettings)
+                MtDivider()
+                NavRow("关于", FreshIconType.ABOUT, onOpenAbout)
             }
         }
     }
@@ -246,7 +261,9 @@ private fun ProfileContent(
 @Composable
 internal fun EntryRow(label: String, value: String) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = FreshSpacing.Xs),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = FreshSpacing.Sm, vertical = FreshSpacing.Xs),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
@@ -255,7 +272,7 @@ internal fun EntryRow(label: String, value: String) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.weight(1f),
         )
-        Text(text = value, style = MaterialTheme.typography.titleMedium)
+        Text(text = value, style = MaterialTheme.typography.titleMedium.tabularFigures())
     }
 }
 
@@ -270,20 +287,28 @@ internal fun NavRow(
             .fillMaxWidth()
             .clickable(role = Role.Button, onClick = onClick)
             .semantics { role = Role.Button }
-            .padding(vertical = FreshSpacing.Sm),
+            .heightIn(min = RiderDimens.TouchTarget)
+            .padding(horizontal = FreshSpacing.Sm, vertical = FreshSpacing.Sm),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(FreshSpacing.Sm),
     ) {
-        FreshIcon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.secondary)
+        FreshIcon(
+            icon,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            size = 20.dp,
+        )
         Text(
             text = text,
-            style = MaterialTheme.typography.titleMedium,
+            style = MaterialTheme.typography.bodyLarge,
+            color = RiderColors.Ink,
             modifier = Modifier.weight(1f),
         )
         FreshIcon(
             FreshIconType.CHEVRON_RIGHT,
             contentDescription = null,
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            size = 16.dp,
         )
     }
 }

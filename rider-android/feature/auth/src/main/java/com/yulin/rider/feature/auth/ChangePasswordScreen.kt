@@ -29,16 +29,14 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.yulin.rider.core.common.RiderResult
 import com.yulin.rider.core.common.isValidRiderPassword
-import com.yulin.rider.core.designsystem.BigActionButton
-import com.yulin.rider.core.designsystem.FreshBanner
 import com.yulin.rider.core.designsystem.FreshIconType
-import com.yulin.rider.core.designsystem.FreshPanel
 import com.yulin.rider.core.designsystem.FreshSpacing
-import com.yulin.rider.core.designsystem.FreshStackScaffold
-import com.yulin.rider.core.designsystem.RiderDimens
+import com.yulin.rider.core.designsystem.MtAction
+import com.yulin.rider.core.designsystem.MtInfoBar
+import com.yulin.rider.core.designsystem.MtPrimaryButton
+import com.yulin.rider.core.designsystem.MtScaffold
 import com.yulin.rider.core.designsystem.RiderTextField
 import com.yulin.rider.core.designsystem.RiderTheme
-import com.yulin.rider.core.designsystem.SectionCard
 import com.yulin.rider.core.designsystem.StatusTone
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -85,6 +83,7 @@ fun ChangePasswordRoute(
     onDone: () -> Unit,
     modifier: Modifier = Modifier,
     forced: Boolean = true,
+    onBack: () -> Unit = {},
 ) {
     val repository = rememberAuthRepository()
     val viewModel: ChangePasswordViewModel = viewModel { ChangePasswordViewModel(repository) }
@@ -100,6 +99,7 @@ fun ChangePasswordRoute(
         onSubmit = viewModel::submit,
         onInputChanged = viewModel::clearError,
         modifier = modifier,
+        onBack = onBack,
     )
 }
 
@@ -110,6 +110,7 @@ internal fun ChangePasswordScreen(
     onSubmit: (oldPassword: String, newPassword: String) -> Unit,
     onInputChanged: () -> Unit,
     modifier: Modifier = Modifier,
+    onBack: () -> Unit = {},
 ) {
     var oldPassword by rememberSaveable { mutableStateOf("") }
     var newPassword by rememberSaveable { mutableStateOf("") }
@@ -121,36 +122,29 @@ internal fun ChangePasswordScreen(
     val canSubmit = oldPassword.isNotEmpty() && newValid && confirmMatched &&
         newPassword != oldPassword && !state.submitting
 
-    FreshStackScaffold(
+    MtScaffold(
         title = if (forced) "设置你的专属密码" else "修改密码",
         subtitle = if (forced) "首次登录安全步骤" else "账号与设备安全",
-        showBack = !forced,
+        onBack = if (forced) null else onBack,
         modifier = modifier,
-    ) { insets ->
+    ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .imePadding()
-                .padding(insets)
-                .padding(FreshSpacing.Md),
+                .imePadding(),
         ) {
-            FreshBanner(
+            MtInfoBar(
                 text = if (forced) {
                     "初始密码由店长设置，为了你的账号安全，第一次登录必须改成只有你知道的密码。"
                 } else {
                     "修改后需要用新密码重新登录其他设备。"
                 },
-                tone = StatusTone.INFO,
                 icon = FreshIconType.LOCK,
             )
-            Spacer(Modifier.height(FreshSpacing.Md))
+            Spacer(Modifier.height(FreshSpacing.Sm))
 
-            FreshPanel(
-                title = "验证并更新",
-                eyebrow = "密码安全",
-                spineTone = StatusTone.SUCCESS,
-            ) {
+            Column(Modifier.padding(horizontal = FreshSpacing.Sm)) {
                 RiderTextField(
                     value = oldPassword,
                     onValueChange = { oldPassword = it.take(32); onInputChanged() },
@@ -164,6 +158,7 @@ internal fun ChangePasswordScreen(
                     passwordVisible = visible,
                     onTogglePasswordVisibility = { visible = !visible },
                 )
+                Spacer(Modifier.height(FreshSpacing.Sm))
 
                 RiderTextField(
                     value = newPassword,
@@ -185,6 +180,7 @@ internal fun ChangePasswordScreen(
                         else -> null
                     },
                 )
+                Spacer(Modifier.height(FreshSpacing.Sm))
 
                 RiderTextField(
                     value = confirmPassword,
@@ -201,34 +197,29 @@ internal fun ChangePasswordScreen(
                     isError = confirmPassword.isNotEmpty() && !confirmMatched,
                     supportingText = if (confirmPassword.isNotEmpty() && !confirmMatched) "两次输入不一致" else null,
                 )
-            }
 
-            Spacer(Modifier.height(FreshSpacing.Sm))
-
-            FreshPanel(title = "密码要求", spineTone = StatusTone.INFO) {
+                Spacer(Modifier.height(FreshSpacing.Sm))
                 Text(
                     text = "8 到 32 位 · 同时包含字母和数字\n不要使用生日、手机号等容易被猜到的组合",
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
 
-            Spacer(Modifier.height(FreshSpacing.Md))
-
             if (state.error != null) {
-                FreshBanner(
-                    text = state.error,
-                    tone = StatusTone.DANGER,
-                )
                 Spacer(Modifier.height(FreshSpacing.Sm))
+                MtInfoBar(text = state.error, tone = StatusTone.DANGER, icon = FreshIconType.ERROR)
             }
 
-            BigActionButton(
+            Spacer(Modifier.height(FreshSpacing.Lg))
+            MtPrimaryButton(
                 text = if (state.submitting) "提交中…" else "确认修改",
+                action = MtAction.ACCEPT,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = FreshSpacing.Sm),
                 enabled = canSubmit,
                 disabledReason = "请按要求填写并确认新密码",
-                tone = StatusTone.NORMAL,
-                icon = FreshIconType.CHECK,
                 onClick = { onSubmit(oldPassword, newPassword) },
             )
 

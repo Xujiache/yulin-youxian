@@ -25,15 +25,18 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.yulin.rider.core.common.RiderResult
-import com.yulin.rider.core.designsystem.BigActionButton
-import com.yulin.rider.core.designsystem.FreshBanner
 import com.yulin.rider.core.designsystem.FreshIconType
-import com.yulin.rider.core.designsystem.FreshPanel
 import com.yulin.rider.core.designsystem.FreshSpacing
-import com.yulin.rider.core.designsystem.FreshStackScaffold
+import com.yulin.rider.core.designsystem.MtAction
+import com.yulin.rider.core.designsystem.MtBottomActionBar
+import com.yulin.rider.core.designsystem.MtCard
+import com.yulin.rider.core.designsystem.MtDivider
+import com.yulin.rider.core.designsystem.MtInfoBar
+import com.yulin.rider.core.designsystem.MtPrimaryButton
+import com.yulin.rider.core.designsystem.MtScaffold
+import com.yulin.rider.core.designsystem.MtSectionTitle
 import com.yulin.rider.core.designsystem.RiderDimens
 import com.yulin.rider.core.designsystem.RiderTheme
-import com.yulin.rider.core.designsystem.SectionCard
 import com.yulin.rider.core.designsystem.StatusTone
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -111,67 +114,63 @@ internal fun LocationConsentScreen(
     onSubmit: (agreed: Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    FreshStackScaffold(
+    MtScaffold(
         title = "位置信息授权",
         subtitle = "精确位置需要单独同意",
         modifier = modifier,
-    ) { insets ->
+        bottomBar = {
+            MtBottomActionBar(hint = state.error, hintTone = StatusTone.DANGER) {
+                MtPrimaryButton(
+                    text = if (state.submitting) "提交中…" else "同意并继续",
+                    action = MtAction.ACCEPT,
+                    modifier = Modifier.weight(1f),
+                    enabled = !state.submitting,
+                    disabledReason = "正在提交授权选择",
+                    onClick = { onSubmit(true) },
+                )
+            }
+        },
+    ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(insets)
-                .padding(FreshSpacing.Md),
+                .padding(bottom = FreshSpacing.Md),
         ) {
-            FreshBanner(
+            MtInfoBar(
                 text = "只在上班期间采集，用于派单、导航和争议回查；下班立即停止。",
-                tone = StatusTone.INFO,
                 icon = FreshIconType.LOCATION,
             )
-            Spacer(Modifier.height(FreshSpacing.Md))
-
-            FreshPanel(title = "我们收集什么", spineTone = StatusTone.INFO) {
-                ConsentLine("你的精确位置（经纬度）、定位精度、速度、方向与电量。")
-            }
-            Spacer(Modifier.height(FreshSpacing.Sm))
-
-            FreshPanel(title = "什么时候收集", spineTone = StatusTone.SUCCESS) {
-                ConsentLine("只在你点击「上班」之后、点击「下班」之前采集。下班即停止，App 退到后台也不会在下班时段采集。")
-            }
-            Spacer(Modifier.height(FreshSpacing.Sm))
-
-            FreshPanel(title = "用来做什么", spineTone = StatusTone.SUCCESS) {
-                ConsentLine("派顺路订单并计算送达时间\n让顾客看到配送距离\n导航到下一站\n发生时间或里程争议时回查轨迹")
-            }
-            Spacer(Modifier.height(FreshSpacing.Sm))
-
-            FreshPanel(title = "谁能看到", spineTone = StatusTone.WARNING) {
-                ConsentLine("店长在调度台可以看到你的实时位置；顾客只能在自己订单配送途中看到你的当前位置，看不到历史轨迹，订单完成后立即不可见。")
-            }
-            Spacer(Modifier.height(FreshSpacing.Sm))
-
-            FreshPanel(title = "怎么撤回", spineTone = StatusTone.NORMAL) {
-                ConsentLine("在「我的 - 设置」里可以随时撤回。撤回后服务端立即停止接收你的位置，同时你将无法上班接单。")
-            }
-
-            Spacer(Modifier.height(FreshSpacing.Lg))
-
-            if (state.error != null) {
-                FreshBanner(text = state.error, tone = StatusTone.DANGER)
-                Spacer(Modifier.height(FreshSpacing.Sm))
-            }
-
-            BigActionButton(
-                text = if (state.submitting) "提交中…" else "我已阅读，同意采集位置信息",
-                enabled = !state.submitting,
-                disabledReason = "正在提交授权选择",
-                tone = StatusTone.SUCCESS,
-                icon = FreshIconType.CHECK,
-                onClick = { onSubmit(true) },
-            )
-
             Spacer(Modifier.height(FreshSpacing.Xs))
 
+            Column(
+                modifier = Modifier.padding(horizontal = FreshSpacing.Sm),
+                verticalArrangement = Arrangement.spacedBy(FreshSpacing.Xs),
+            ) {
+                ConsentCard(
+                    "我们收集什么",
+                    "你的精确位置（经纬度）、定位精度、速度、方向与电量。",
+                )
+                ConsentCard(
+                    "什么时候收集",
+                    "只在你点击「上班」之后、点击「下班」之前采集。下班即停止，App 退到后台也不会在下班时段采集。",
+                )
+                ConsentCard(
+                    "用来做什么",
+                    "派顺路订单并计算送达时间\n让顾客看到配送距离\n导航到下一站\n发生时间或里程争议时回查轨迹",
+                )
+                ConsentCard(
+                    "谁能看到",
+                    "店长在调度台可以看到你的实时位置；顾客只能在自己订单配送途中看到你的当前位置，" +
+                        "看不到历史轨迹，订单完成后立即不可见。",
+                )
+                ConsentCard(
+                    "怎么撤回",
+                    "在「我的 - 设置」里可以随时撤回。撤回后服务端立即停止接收你的位置，同时你将无法上班接单。",
+                )
+            }
+
+            Spacer(Modifier.height(FreshSpacing.Sm))
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.Center,
@@ -189,19 +188,22 @@ internal fun LocationConsentScreen(
                     )
                 }
             }
-
-            Spacer(Modifier.height(FreshSpacing.Xxl))
         }
     }
 }
 
 @Composable
-private fun ConsentLine(text: String) {
-    Text(
-        text = text,
-        style = MaterialTheme.typography.bodyMedium,
-        color = MaterialTheme.colorScheme.onSurface,
-    )
+private fun ConsentCard(title: String, body: String) {
+    MtCard {
+        MtSectionTitle(title)
+        MtDivider()
+        Text(
+            text = body,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(FreshSpacing.Sm),
+        )
+    }
 }
 
 @Preview(name = "定位授权 · 默认", showBackground = true)

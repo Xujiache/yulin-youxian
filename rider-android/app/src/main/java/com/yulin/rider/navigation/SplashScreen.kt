@@ -1,8 +1,12 @@
 package com.yulin.rider.navigation
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -11,9 +15,15 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import com.yulin.rider.core.datastore.RiderSettingsStore
 import com.yulin.rider.core.datastore.RiderTokenStore
+import com.yulin.rider.core.designsystem.FreshIcon
+import com.yulin.rider.core.designsystem.FreshIconType
+import com.yulin.rider.core.designsystem.FreshRadius
+import com.yulin.rider.core.designsystem.FreshSpacing
+import com.yulin.rider.core.designsystem.RiderColors
 
 /** 启动后应当落到哪一屏。顺序即业务前置条件的顺序,不能调换。 */
 enum class StartDestination(val route: String) {
@@ -50,18 +60,36 @@ fun SplashScreen(
         onResolved(destination)
     }
 
-    Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+    Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
         Column(
             modifier = Modifier.fillMaxSize(),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(24.dp, Alignment.CenterVertically),
+            verticalArrangement = Arrangement.spacedBy(FreshSpacing.Lg, Alignment.CenterVertically),
         ) {
+            Box(
+                modifier = Modifier
+                    .size(64.dp)
+                    .clip(RoundedCornerShape(FreshRadius.Hero))
+                    .background(RiderColors.Primary),
+                contentAlignment = Alignment.Center,
+            ) {
+                FreshIcon(
+                    FreshIconType.STORE,
+                    contentDescription = null,
+                    tint = RiderColors.OnPrimary,
+                    size = 34.dp,
+                )
+            }
             Text(
                 text = "禹邻优鲜骑手",
-                style = MaterialTheme.typography.headlineMedium,
-                color = MaterialTheme.colorScheme.primary,
+                style = MaterialTheme.typography.titleLarge,
+                color = RiderColors.Ink,
             )
-            CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+            CircularProgressIndicator(
+                color = RiderColors.Primary,
+                trackColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                strokeWidth = 3.dp,
+            )
         }
     }
 }

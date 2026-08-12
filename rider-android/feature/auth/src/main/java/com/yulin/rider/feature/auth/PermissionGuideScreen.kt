@@ -46,22 +46,25 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.LifecycleOwner
 import com.yulin.rider.core.common.DeviceBrand
 import com.yulin.rider.core.common.SystemSettings
-import com.yulin.rider.core.designsystem.BigActionButton
-import com.yulin.rider.core.designsystem.CheckMarkIcon
-import com.yulin.rider.core.designsystem.FreshBanner
 import com.yulin.rider.core.designsystem.FreshIcon
 import com.yulin.rider.core.designsystem.FreshIconType
-import com.yulin.rider.core.designsystem.FreshPanel
 import com.yulin.rider.core.designsystem.FreshSecondaryButton
 import com.yulin.rider.core.designsystem.FreshSpacing
-import com.yulin.rider.core.designsystem.FreshStackScaffold
-import com.yulin.rider.core.designsystem.FreshStatusBadge
+import com.yulin.rider.core.designsystem.MtAction
+import com.yulin.rider.core.designsystem.MtBottomActionBar
+import com.yulin.rider.core.designsystem.MtCard
+import com.yulin.rider.core.designsystem.MtDivider
+import com.yulin.rider.core.designsystem.MtInfoBar
+import com.yulin.rider.core.designsystem.MtPrimaryButton
+import com.yulin.rider.core.designsystem.MtScaffold
+import com.yulin.rider.core.designsystem.MtSectionTitle
+import com.yulin.rider.core.designsystem.MtTag
 import com.yulin.rider.core.designsystem.RiderColors
 import com.yulin.rider.core.designsystem.RiderDimens
 import com.yulin.rider.core.designsystem.RiderTheme
-import com.yulin.rider.core.designsystem.SectionCard
-import com.yulin.rider.core.designsystem.StatusChip
 import com.yulin.rider.core.designsystem.StatusTone
+import com.yulin.rider.core.designsystem.toneColor
+import com.yulin.rider.core.designsystem.toneContainer
 
 /**
  * 三步权限引导(06 §3.2 第二层)。
@@ -105,24 +108,32 @@ fun PermissionGuideRoute(
     val stepOneDone = foregroundGranted && notificationGranted
     val allDone = stepOneDone && hasLocationConsent && backgroundGranted
 
-    FreshStackScaffold(
+    MtScaffold(
         title = "开工授权",
         subtitle = "完成三步，保证接单不漏、位置不断",
         modifier = modifier,
-    ) { insets ->
+        bottomBar = {
+            MtBottomActionBar {
+                MtPrimaryButton(
+                    text = if (allDone) "全部完成，开始接单" else "先这样，稍后再设置",
+                    action = if (allDone) MtAction.ACCEPT else MtAction.SECONDARY,
+                    modifier = Modifier.weight(1f),
+                    onClick = onCompleted,
+                )
+            }
+        },
+    ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(insets)
-                .padding(FreshSpacing.Md),
+                .padding(bottom = FreshSpacing.Md),
         ) {
-            FreshBanner(
+            MtInfoBar(
                 text = "当前机型：${brand.displayName}。按顺序完成，系统会自动检查结果。",
-                tone = StatusTone.INFO,
                 icon = FreshIconType.SETTINGS,
             )
-            Spacer(Modifier.height(FreshSpacing.Md))
+            Spacer(Modifier.height(FreshSpacing.Xs))
 
             PermissionStepCard(
                 index = 1,
@@ -181,20 +192,29 @@ fun PermissionGuideRoute(
                 },
             )
 
-            Spacer(Modifier.height(FreshSpacing.Md))
+            Spacer(Modifier.height(FreshSpacing.Xs))
 
-            FreshPanel(
-                title = "让 App 在锁屏后保持在线",
-                eyebrow = "推荐设置",
-                spineTone = StatusTone.WARNING,
-            ) {
+            MtCard(modifier = Modifier.padding(horizontal = FreshSpacing.Sm)) {
+                MtSectionTitle(
+                    "让 App 在锁屏后保持在线",
+                    trailing = { MtTag("推荐设置", tone = StatusTone.WARNING) },
+                )
+                MtDivider()
                 Text(
                     text = "${brand.displayName}的省电策略可能在锁屏后杀掉 App。" +
                         "开启自启动、把耗电策略改成「无限制」，位置才不会中断。",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(FreshSpacing.Sm),
                 )
-                Row(horizontalArrangement = Arrangement.spacedBy(FreshSpacing.Xs)) {
+                Row(
+                    modifier = Modifier.padding(
+                        start = FreshSpacing.Sm,
+                        end = FreshSpacing.Sm,
+                        bottom = FreshSpacing.Sm,
+                    ),
+                    horizontalArrangement = Arrangement.spacedBy(FreshSpacing.Xs),
+                ) {
                     FreshSecondaryButton(
                         text = "自启动",
                         icon = FreshIconType.REFRESH,
@@ -209,17 +229,6 @@ fun PermissionGuideRoute(
                     )
                 }
             }
-
-            Spacer(Modifier.height(FreshSpacing.Lg))
-
-            BigActionButton(
-                text = if (allDone) "全部完成，开始接单" else "先这样，稍后再设置",
-                tone = if (allDone) StatusTone.SUCCESS else StatusTone.NORMAL,
-                icon = if (allDone) FreshIconType.CHECK else FreshIconType.ROUTE,
-                onClick = onCompleted,
-            )
-
-            Spacer(Modifier.height(FreshSpacing.Xxl))
         }
     }
 }
@@ -236,33 +245,30 @@ private fun PermissionStepCard(
     detail: String,
     enabled: Boolean = true,
 ) {
-    FreshPanel(
-        spineTone = when {
-            done -> StatusTone.SUCCESS
-            !enabled -> StatusTone.NORMAL
-            else -> StatusTone.WARNING
-        },
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+    MtCard(modifier = Modifier.padding(horizontal = FreshSpacing.Sm, vertical = FreshSpacing.Xxs)) {
+        Row(
+            modifier = Modifier.padding(FreshSpacing.Sm),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(FreshSpacing.Sm),
+        ) {
             StepBadge(index = index, done = done)
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = title,
                     style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
+                    color = RiderColors.Ink,
+                )
+                Text(
+                    text = purpose,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            FreshStatusBadge(
+            MtTag(
                 text = if (done) "已完成" else "待处理",
                 tone = if (done) StatusTone.SUCCESS else StatusTone.WARNING,
             )
         }
-
-        Text(
-            text = purpose,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
         Text(
             text = detail,
             style = MaterialTheme.typography.bodySmall,
@@ -297,12 +303,13 @@ private fun PermissionStepCard(
 
 @Composable
 private fun StepBadge(index: Int, done: Boolean) {
-    val color = if (done) RiderColors.Success else MaterialTheme.colorScheme.onSurfaceVariant
+    val tone = if (done) StatusTone.SUCCESS else StatusTone.NORMAL
+    val color = tone.toneColor()
     Box(
         modifier = Modifier
-            .size(36.dp)
+            .size(32.dp)
             .clip(CircleShape)
-            .background(color.copy(alpha = 0.14f)),
+            .background(tone.toneContainer()),
         contentAlignment = Alignment.Center,
     ) {
         if (done) {
@@ -326,10 +333,10 @@ private fun StepBadge(index: Int, done: Boolean) {
 @Composable
 private fun PermissionGuidePendingPreview() {
     RiderTheme {
-        FreshStackScaffold(title = "开工授权", subtitle = "完成三步，保证接单不漏") { insets ->
+        MtScaffold(title = "开工授权", subtitle = "完成三步，保证接单不漏") {
             Column(
-                modifier = Modifier.padding(insets).padding(FreshSpacing.Md),
-                verticalArrangement = Arrangement.spacedBy(FreshSpacing.Sm),
+                modifier = Modifier.padding(vertical = FreshSpacing.Xs),
+                verticalArrangement = Arrangement.spacedBy(FreshSpacing.Xs),
             ) {
                 PermissionStepCard(
                     index = 1,
@@ -360,10 +367,10 @@ private fun PermissionGuidePendingPreview() {
 @Composable
 private fun PermissionGuideCompletePreview() {
     RiderTheme {
-        FreshStackScaffold(title = "开工授权", subtitle = "三步均已完成") { insets ->
+        MtScaffold(title = "开工授权", subtitle = "三步均已完成") {
             Column(
-                modifier = Modifier.padding(insets).padding(FreshSpacing.Md),
-                verticalArrangement = Arrangement.spacedBy(FreshSpacing.Sm),
+                modifier = Modifier.padding(vertical = FreshSpacing.Xs),
+                verticalArrangement = Arrangement.spacedBy(FreshSpacing.Xs),
             ) {
                 PermissionStepCard(
                     index = 3,
@@ -375,10 +382,12 @@ private fun PermissionGuideCompletePreview() {
                     onFallback = {},
                     detail = "已选择「始终允许」",
                 )
-                BigActionButton(
+                MtPrimaryButton(
                     text = "全部完成，开始接单",
-                    tone = StatusTone.SUCCESS,
-                    icon = FreshIconType.CHECK,
+                    action = MtAction.ACCEPT,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = FreshSpacing.Sm),
                     onClick = {},
                 )
             }

@@ -1,13 +1,17 @@
 package com.yulin.rider.feature.earning
 
 import android.app.Application
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -15,24 +19,29 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.yulin.rider.core.common.RiderResult
-import com.yulin.rider.core.designsystem.ErrorRetry
-import com.yulin.rider.core.designsystem.FreshBanner
 import com.yulin.rider.core.designsystem.FreshError
 import com.yulin.rider.core.designsystem.FreshIconType
 import com.yulin.rider.core.designsystem.FreshLoading
-import com.yulin.rider.core.designsystem.FreshPanel
+import com.yulin.rider.core.designsystem.FreshRadius
 import com.yulin.rider.core.designsystem.FreshSpacing
-import com.yulin.rider.core.designsystem.FreshStackScaffold
-import com.yulin.rider.core.designsystem.LoadingBox
-import com.yulin.rider.core.designsystem.RiderDimens
-import com.yulin.rider.core.designsystem.SectionCard
+import com.yulin.rider.core.designsystem.MtCard
+import com.yulin.rider.core.designsystem.MtDivider
+import com.yulin.rider.core.designsystem.MtInfoBar
+import com.yulin.rider.core.designsystem.MtMetric
+import com.yulin.rider.core.designsystem.MtScaffold
+import com.yulin.rider.core.designsystem.MtSectionTitle
+import com.yulin.rider.core.designsystem.RiderColors
 import com.yulin.rider.core.designsystem.RiderTheme
-import com.yulin.rider.core.designsystem.StatusTone
+import com.yulin.rider.core.designsystem.tabularFigures
 import com.yulin.rider.core.model.ShiftCurrent
 import com.yulin.rider.core.network.RiderApis
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -78,82 +87,87 @@ class TodayStatsViewModel(app: Application) : AndroidViewModel(app) {
 fun TodayStatsScreen(
     modifier: Modifier = Modifier,
     viewModel: TodayStatsViewModel = viewModel(),
+    onBack: () -> Unit = {},
 ) {
     val state by viewModel.state.collectAsState()
-    TodayStatsContent(state = state, modifier = modifier, onRetry = viewModel::load)
+    TodayStatsContent(
+        state = state,
+        modifier = modifier,
+        onBack = onBack,
+        onRetry = viewModel::load,
+    )
 }
 
 @Composable
 private fun TodayStatsContent(
     state: TodayStatsUiState,
     modifier: Modifier = Modifier,
+    onBack: () -> Unit = {},
     onRetry: () -> Unit = {},
 ) {
-    FreshStackScaffold(
-        title = "今日统计",
+    MtScaffold(
+        title = "我的账户",
         subtitle = "当前班次履约概览",
         modifier = modifier,
-    ) { insets ->
+        onBack = onBack,
+    ) {
         when {
             state.loading -> FreshLoading(
-                modifier = Modifier.padding(insets).fillMaxSize(),
+                modifier = Modifier.fillMaxSize(),
                 label = "正在汇总今日数据",
             )
+
             state.error != null -> FreshError(
                 message = state.error,
-                modifier = Modifier.padding(insets).fillMaxSize(),
+                modifier = Modifier.fillMaxSize(),
                 onRetry = onRetry,
             )
+
             else -> Column(
-                modifier = Modifier.fillMaxSize().padding(insets).padding(FreshSpacing.Md),
-                verticalArrangement = Arrangement.spacedBy(FreshSpacing.Sm),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(
+                        start = FreshSpacing.Sm,
+                        end = FreshSpacing.Sm,
+                        top = FreshSpacing.Xs,
+                        bottom = FreshSpacing.Md,
+                    ),
+                verticalArrangement = Arrangement.spacedBy(FreshSpacing.Xs),
             ) {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(FreshSpacing.Sm),
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    BigStat(
-                        label = "完成单量",
-                        value = "${state.shift.deliveredCount}",
-                        unit = "单",
-                        icon = FreshIconType.DELIVERY,
-                        tone = StatusTone.SUCCESS,
-                        modifier = Modifier.weight(1f),
-                    )
-                    BigStat(
-                        label = "配送里程",
-                        value = formatKmValue(state.shift.mileageMeters.toLong()),
-                        unit = "km",
-                        icon = FreshIconType.ROUTE,
-                        tone = StatusTone.INFO,
-                        modifier = Modifier.weight(1f),
-                    )
-                }
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(FreshSpacing.Sm),
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    BigStat(
-                        label = "在线时长",
-                        value = formatHours(state.shift.onlineSeconds.toLong()),
-                        unit = "小时",
-                        icon = FreshIconType.CLOCK,
-                        tone = StatusTone.NORMAL,
-                        modifier = Modifier.weight(1f),
-                    )
-                    BigStat(
-                        label = "准时送达",
-                        value = "${state.shift.onTimeCount}",
-                        unit = "单",
-                        icon = FreshIconType.CHECK,
-                        tone = StatusTone.SUCCESS,
-                        modifier = Modifier.weight(1f),
-                    )
+                HeroCard(state.shift)
+
+                MtCard {
+                    MtSectionTitle("本班明细")
+                    MtDivider()
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(FreshSpacing.Sm),
+                        horizontalArrangement = Arrangement.spacedBy(FreshSpacing.Sm),
+                    ) {
+                        MtMetric(
+                            label = "配送里程",
+                            value = formatKmValue(state.shift.mileageMeters.toLong()),
+                            unit = "km",
+                            modifier = Modifier.weight(1f),
+                        )
+                        MtMetric(
+                            label = "在线时长",
+                            value = formatHours(state.shift.onlineSeconds.toLong()),
+                            unit = "小时",
+                            modifier = Modifier.weight(1f),
+                        )
+                        MtMetric(
+                            label = "准时送达",
+                            value = "${state.shift.onTimeCount}",
+                            unit = "单",
+                            valueColor = RiderColors.Deliver,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
                 }
 
-                FreshBanner(
-                    text = "统计口径为当前班次。派单 ${state.shift.taskCount} 单，已完成 ${state.shift.deliveredCount} 单。",
-                    tone = StatusTone.INFO,
+                MtInfoBar(
+                    text = "自营门店配送不做结算，本页只统计工作量，不显示任何金额。",
                     icon = FreshIconType.STATS,
                 )
             }
@@ -161,34 +175,48 @@ private fun TodayStatsContent(
     }
 }
 
+/**
+ * 账户主卡。
+ *
+ * 美团这个位置是黄色渐变的余额卡；自营门店不给自己结算，没有余额可显示，
+ * 于是把「今日完成单量」放在同一位置，主卡的视觉分量留着，钱的字段一个不造。
+ */
 @Composable
-private fun BigStat(
-    label: String,
-    value: String,
-    unit: String,
-    icon: FreshIconType,
-    tone: StatusTone,
-    modifier: Modifier = Modifier,
-) {
-    FreshPanel(
-        modifier = modifier,
-        eyebrow = label,
-        spineTone = tone,
+private fun HeroCard(shift: ShiftCurrent) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(FreshRadius.Hero))
+            .background(
+                Brush.horizontalGradient(
+                    listOf(RiderColors.Primary, Color(0xFFFFD84D)),
+                ),
+            )
+            .padding(FreshSpacing.Md),
     ) {
-        com.yulin.rider.core.designsystem.FreshIcon(
-            icon,
-            contentDescription = null,
-            tint = when (tone) {
-                StatusTone.INFO -> com.yulin.rider.core.designsystem.RiderColors.Secondary
-                else -> MaterialTheme.colorScheme.primary
-            },
-        )
-        Row(verticalAlignment = Alignment.Bottom) {
-            Text(text = value, style = MaterialTheme.typography.displaySmall)
+        Column {
             Text(
-                text = " $unit",
+                text = "今日完成",
                 style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.padding(bottom = FreshSpacing.Xs),
+                color = RiderColors.OnPrimary.copy(alpha = .75f),
+            )
+            Row(verticalAlignment = Alignment.Bottom) {
+                Text(
+                    text = "${shift.deliveredCount}",
+                    style = MaterialTheme.typography.displayLarge.tabularFigures(),
+                    color = RiderColors.OnPrimary,
+                )
+                Text(
+                    text = " 单",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = RiderColors.OnPrimary,
+                    modifier = Modifier.padding(bottom = 4.dp),
+                )
+            }
+            Text(
+                text = "本班派单 ${shift.taskCount} 单",
+                style = MaterialTheme.typography.bodyMedium.tabularFigures(),
+                color = RiderColors.OnPrimary.copy(alpha = .75f),
             )
         }
     }

@@ -12,6 +12,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -25,15 +26,20 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
-import com.yulin.rider.core.designsystem.BigActionButton
-import com.yulin.rider.core.designsystem.FreshBanner
+import com.yulin.rider.core.designsystem.FreshRadius
+import com.yulin.rider.core.designsystem.MtAction
+import com.yulin.rider.core.designsystem.MtCard
+import com.yulin.rider.core.designsystem.MtDivider
+import com.yulin.rider.core.designsystem.MtInfoBar
+import com.yulin.rider.core.designsystem.MtPrimaryButton
+import com.yulin.rider.core.designsystem.MtScaffold
+import com.yulin.rider.core.designsystem.MtSectionTitle
+import com.yulin.rider.core.designsystem.MtTag
 import com.yulin.rider.core.designsystem.FreshIconType
 import com.yulin.rider.core.designsystem.FreshPanel
-import com.yulin.rider.core.designsystem.FreshSecondaryButton
 import com.yulin.rider.core.designsystem.FreshSpacing
-import com.yulin.rider.core.designsystem.FreshStackScaffold
-import com.yulin.rider.core.designsystem.FreshStatusBadge
 import com.yulin.rider.core.designsystem.StatusTone
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
@@ -108,32 +114,38 @@ fun KeepAliveGuideScreen(
     val allRequiredDone = allSteps.filter { it.required }.all { it.id in doneIds }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        FreshStackScaffold(
+        MtScaffold(
             title = "保活设置向导",
             subtitle = "${vendor.displayName} · 已完成 ${doneIds.size}/${allSteps.size}",
             onBack = onBack,
-        ) { padding ->
+        ) {
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(padding)
-                    .padding(horizontal = FreshSpacing.Md),
-                verticalArrangement = Arrangement.spacedBy(FreshSpacing.Sm),
+                    .padding(horizontal = FreshSpacing.Sm),
+                verticalArrangement = Arrangement.spacedBy(FreshSpacing.Xs),
             ) {
                 item { GuideHeader(vendor, doneIds.size, allSteps.size) }
 
                 sections.forEach { section ->
                     item(key = section.title) {
-                        FreshPanel(
-                            title = section.title,
-                            spineTone = if (section.steps.all { it.id in doneIds }) {
-                                StatusTone.SUCCESS
-                            } else {
-                                StatusTone.WARNING
-                            },
-                        ) {
+                        MtCard {
+                            MtSectionTitle(
+                                section.title,
+                                trailing = {
+                                    MtTag(
+                                        text = if (section.steps.all { it.id in doneIds }) "已完成" else "待设置",
+                                        tone = if (section.steps.all { it.id in doneIds }) {
+                                            StatusTone.SUCCESS
+                                        } else {
+                                            StatusTone.WARNING
+                                        },
+                                    )
+                                },
+                            )
+                            MtDivider()
                             section.steps.forEachIndexed { index, step ->
-                                if (index > 0) HorizontalDivider()
+                                if (index > 0) MtDivider()
                                 StepRow(
                                     step = step,
                                     done = step.id in doneIds,
@@ -200,15 +212,15 @@ private fun GuideHeader(
             text = "识别到手机品牌:${vendor.displayName}",
             style = MaterialTheme.typography.titleMedium,
         )
-        FreshBanner(
+        MtInfoBar(
             text = "锁屏省电可能终止定位与新单提醒，请逐项完成后再上班。",
             tone = StatusTone.WARNING,
             icon = FreshIconType.BATTERY,
+            modifier = Modifier.clip(RoundedCornerShape(FreshRadius.Control)),
         )
-        FreshStatusBadge(
+        MtTag(
             text = "已完成 $doneCount / $totalCount 项",
             tone = if (doneCount >= totalCount) StatusTone.SUCCESS else StatusTone.WARNING,
-            icon = if (doneCount >= totalCount) FreshIconType.CHECK else FreshIconType.BATTERY,
         )
     }
 }
@@ -242,10 +254,9 @@ private fun StepRow(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            FreshStatusBadge(
+            MtTag(
                 text = if (done) "已完成" else "待设置",
                 tone = if (done) StatusTone.SUCCESS else StatusTone.WARNING,
-                icon = if (done) FreshIconType.CHECK else FreshIconType.SETTINGS,
             )
         }
 
@@ -263,10 +274,11 @@ private fun StepRow(
             }
 
             if (step.action != KeepAliveAction.ManualOnly) {
-                FreshSecondaryButton(
+                MtPrimaryButton(
                     text = "去设置",
-                    icon = FreshIconType.SETTINGS,
+                    action = MtAction.SECONDARY,
                     modifier = Modifier.fillMaxWidth(),
+                    icon = FreshIconType.SETTINGS,
                     onClick = onOpen,
                 )
             }
@@ -306,17 +318,18 @@ private fun GuideFooter(
         verticalArrangement = Arrangement.spacedBy(FreshSpacing.Sm),
         modifier = Modifier.padding(bottom = FreshSpacing.Xl),
     ) {
-        FreshSecondaryButton(
+        MtPrimaryButton(
             text = "重新检测",
-            icon = FreshIconType.REFRESH,
+            action = MtAction.SECONDARY,
             modifier = Modifier.fillMaxWidth(),
+            icon = FreshIconType.REFRESH,
             onClick = onRedetect,
         )
 
-        BigActionButton(
+        MtPrimaryButton(
             text = if (allRequiredDone) "完成设置" else "保存进度",
+            action = MtAction.ACCEPT,
             modifier = Modifier.fillMaxWidth(),
-            tone = if (allRequiredDone) StatusTone.SUCCESS else StatusTone.NORMAL,
             onClick = onSave,
         )
 

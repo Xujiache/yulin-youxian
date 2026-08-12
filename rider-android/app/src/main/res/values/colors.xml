@@ -1,5 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- 品牌绿。自适应图标的背景层必须是纯色资源,不能直接写在 adaptive-icon 里 -->
-    <color name="ic_launcher_background">#00843D</color>
+    <!-- 品牌黄。自适应图标的背景层必须是纯色资源,不能直接写在 adaptive-icon 里 -->
+    <color name="ic_launcher_background">#FFC300</color>
+
+    <!-- 冷启动窗口底色。与 Compose 里的 surface 一致,否则起屏会先闪一下别的颜色 -->
+    <color name="rider_window_background">#FFFFFF</color>
 </resources>

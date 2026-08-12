@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -12,9 +13,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -22,32 +24,27 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.yulin.rider.core.common.RiderResult
 import com.yulin.rider.core.common.RiderTime
-import com.yulin.rider.core.designsystem.BigActionButton
-import com.yulin.rider.core.designsystem.EmptyState
-import com.yulin.rider.core.designsystem.ErrorRetry
-import com.yulin.rider.core.designsystem.FreshEmpty
 import com.yulin.rider.core.designsystem.FreshError
 import com.yulin.rider.core.designsystem.FreshIconType
 import com.yulin.rider.core.designsystem.FreshLoading
-import com.yulin.rider.core.designsystem.FreshPageHeader
-import com.yulin.rider.core.designsystem.FreshPanel
-import com.yulin.rider.core.designsystem.FreshShell
 import com.yulin.rider.core.designsystem.FreshSpacing
-import com.yulin.rider.core.designsystem.FreshStatusBadge
-import com.yulin.rider.core.designsystem.LoadingBox
+import com.yulin.rider.core.designsystem.MtAction
+import com.yulin.rider.core.designsystem.MtCard
+import com.yulin.rider.core.designsystem.MtDivider
+import com.yulin.rider.core.designsystem.MtEmptyState
+import com.yulin.rider.core.designsystem.MtPrimaryButton
+import com.yulin.rider.core.designsystem.MtScaffold
 import com.yulin.rider.core.designsystem.RiderColors
-import com.yulin.rider.core.designsystem.RiderDimens
-import com.yulin.rider.core.designsystem.StatusChip
-import com.yulin.rider.core.designsystem.StatusTone
 import com.yulin.rider.core.designsystem.RiderTheme
+import com.yulin.rider.core.designsystem.tabularFigures
 import com.yulin.rider.core.model.RiderMessage
 import com.yulin.rider.core.network.RiderApis
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -115,11 +112,13 @@ class MessageViewModel(app: Application) : AndroidViewModel(app) {
 fun MessageCenterScreen(
     modifier: Modifier = Modifier,
     viewModel: MessageViewModel = viewModel(),
+    onBack: () -> Unit = {},
 ) {
     val state by viewModel.state.collectAsState()
     MessageContent(
         state = state,
         modifier = modifier,
+        onBack = onBack,
         onRetry = viewModel::load,
         onRead = viewModel::markRead,
         onAck = viewModel::ack,
@@ -130,39 +129,40 @@ fun MessageCenterScreen(
 private fun MessageContent(
     state: MessageUiState,
     modifier: Modifier = Modifier,
+    onBack: () -> Unit = {},
     onRetry: () -> Unit = {},
     onRead: (RiderMessage) -> Unit = {},
     onAck: (RiderMessage) -> Unit = {},
 ) {
-    FreshShell(
-        modifier = modifier,
-        topBar = {
-            FreshPageHeader(
-                title = "消息中心",
-                subtitle = "门店通知与异常处理提醒",
-            )
-        },
-    ) { insets ->
+    MtScaffold(title = "消息中心", modifier = modifier, onBack = onBack) {
         when {
             state.loading -> FreshLoading(
-                modifier = Modifier.padding(insets).fillMaxSize(),
+                modifier = Modifier.fillMaxSize(),
                 label = "正在同步消息",
             )
+
             state.error != null -> FreshError(
                 message = state.error,
-                modifier = Modifier.padding(insets).fillMaxSize(),
+                modifier = Modifier.fillMaxSize(),
                 onRetry = onRetry,
             )
-            state.messages.isEmpty() -> FreshEmpty(
+
+            state.messages.isEmpty() -> MtEmptyState(
                 title = "暂无消息",
                 message = "新单与门店通知会显示在这里",
                 icon = FreshIconType.MESSAGE,
-                modifier = Modifier.padding(insets).fillMaxSize(),
+                modifier = Modifier.fillMaxSize(),
             )
+
             else -> LazyColumn(
-                modifier = Modifier.padding(insets).fillMaxSize(),
-                contentPadding = PaddingValues(FreshSpacing.Md),
-                verticalArrangement = Arrangement.spacedBy(FreshSpacing.Sm),
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(
+                    start = FreshSpacing.Sm,
+                    end = FreshSpacing.Sm,
+                    top = FreshSpacing.Xs,
+                    bottom = FreshSpacing.Md,
+                ),
+                verticalArrangement = Arrangement.spacedBy(FreshSpacing.Xs),
             ) {
                 items(state.messages, key = { it.id }) { message ->
                     MessageRow(
@@ -178,37 +178,62 @@ private fun MessageContent(
 
 @Composable
 private fun MessageRow(message: RiderMessage, onRead: () -> Unit, onAck: () -> Unit) {
-    FreshPanel(
-        modifier = Modifier.clickable(onClick = onRead),
-        eyebrow = formatTime(message.createdAt) ?: "刚刚",
-        spineTone = if (message.read) StatusTone.NORMAL else StatusTone.WARNING,
-        action = {
+    MtCard(onClick = onRead) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(
+                    start = FreshSpacing.Sm,
+                    end = FreshSpacing.Sm,
+                    top = FreshSpacing.Sm,
+                ),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(FreshSpacing.Xs),
+        ) {
+            // 未读用一个小红点，不占一整枚标签的宽度
             if (!message.read) {
-                FreshStatusBadge(
-                    text = "未读",
-                    tone = StatusTone.WARNING,
-                    icon = FreshIconType.MESSAGE,
+                Box(
+                    Modifier
+                        .size(7.dp)
+                        .clip(CircleShape)
+                        .background(RiderColors.Danger)
                 )
             }
-        },
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 text = message.title ?: "系统消息",
                 style = MaterialTheme.typography.titleMedium,
+                color = RiderColors.Ink,
                 modifier = Modifier.weight(1f),
+            )
+            Text(
+                text = formatTime(message.createdAt) ?: "刚刚",
+                style = MaterialTheme.typography.bodySmall.tabularFigures(),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
         message.content?.let {
-            Text(text = it, style = MaterialTheme.typography.bodyLarge)
+            Text(
+                text = it,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(
+                    start = FreshSpacing.Sm,
+                    end = FreshSpacing.Sm,
+                    top = FreshSpacing.Xxs,
+                    bottom = FreshSpacing.Sm,
+                ),
+            )
         }
         if (message.needAck && message.ackedAt.isNullOrBlank()) {
-            BigActionButton(
-                text = "我知道了",
-                tone = StatusTone.SUCCESS,
-                icon = FreshIconType.CHECK,
-                onClick = onAck,
-            )
+            MtDivider()
+            Box(Modifier.padding(FreshSpacing.Sm)) {
+                MtPrimaryButton(
+                    text = "我知道了",
+                    action = MtAction.ACCEPT,
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = onAck,
+                )
+            }
         }
     }
 }
