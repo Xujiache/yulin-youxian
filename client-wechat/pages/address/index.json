@@ -1,5 +1,5 @@
 {
   "usingComponents": {
-    "t-cascader": "/miniprogram_npm/tdesign-miniprogram/cascader/cascader"
+    "t-cascader": "/components/tdesign/cascader/cascader"
   }
 }

@@ -82,7 +82,7 @@ test("address page ships a directly resolvable TDesign cascader", () => {
   );
   const componentPath = pageConfig.usingComponents["t-cascader"];
 
-  assert.equal(componentPath, "/miniprogram_npm/tdesign-miniprogram/cascader/cascader");
+  assert.equal(componentPath, "/components/tdesign/cascader/cascader");
   for (const extension of ["js", "json", "wxml", "wxss"]) {
     assert.equal(
       fs.existsSync(path.join(projectRoot, `${componentPath}.${extension}`)),

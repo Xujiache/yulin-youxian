@@ -7,7 +7,7 @@
     "tdesign-miniprogram": "1.16.0"
   },
   "scripts": {
-    "build:miniprogram-npm": "node scripts/build-miniprogram-npm.js",
+    "build:tdesign": "node scripts/build-tdesign-vendor.js",
     "test": "node --test tests/*.test.js"
   }
 }
