@@ -1,4 +1,6 @@
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
 const test = require("node:test");
 
 const {
@@ -71,4 +73,21 @@ test("invalid room and out-of-range building cannot be saved", () => {
     floor: 1,
     room: "202"
   }), false);
+});
+
+test("address page ships a directly resolvable TDesign cascader", () => {
+  const projectRoot = path.resolve(__dirname, "..");
+  const pageConfig = JSON.parse(
+    fs.readFileSync(path.join(projectRoot, "pages", "address", "index.json"), "utf8")
+  );
+  const componentPath = pageConfig.usingComponents["t-cascader"];
+
+  assert.equal(componentPath, "/miniprogram_npm/tdesign-miniprogram/cascader/cascader");
+  for (const extension of ["js", "json", "wxml", "wxss"]) {
+    assert.equal(
+      fs.existsSync(path.join(projectRoot, `${componentPath}.${extension}`)),
+      true,
+      `missing TDesign cascader .${extension} artifact`
+    );
+  }
 });
