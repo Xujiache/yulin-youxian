@@ -1,1 +1,5 @@
-{}
+{
+  "usingComponents": {
+    "t-cascader": "tdesign-miniprogram/cascader/cascader"
+  }
+}

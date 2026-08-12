@@ -29,14 +29,6 @@
     "uploadFile": 30000,
     "downloadFile": 12000
   },
-  "permission": {
-    "scope.userLocation": {
-      "desc": "用于在地图上选择收货位置，方便门店准确配送"
-    }
-  },
-  "requiredPrivateInfos": [
-    "chooseLocation"
-  ],
   "usingComponents": {
     "skeleton": "/components/skeleton/index"
   },
