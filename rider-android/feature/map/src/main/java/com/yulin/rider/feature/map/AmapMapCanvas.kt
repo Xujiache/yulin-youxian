@@ -119,21 +119,25 @@ private class MapRenderer {
      * 与卡片上的按钮颜色和「取」「送」标记一致，骑手扫一眼颜色就知道自己在哪一段。
      */
     private fun drawRoute(map: AMap, state: RiderMapUiState) {
-        val line = state.routeLine.ifEmpty { state.fallbackRouteLine() }
-        if (line.size < 2) return
-
         val rider = state.riderPoint
         val store = state.store?.point
+
+        // 取货段:优先端上算出来的道路几何,没有就连直线,至少看得出方向
         if (rider != null && store != null && state.hasPendingPickup()) {
+            val pickup = state.pickupLine.takeIf { it.size >= 2 } ?: listOf(rider, store)
             map.addPolyline(
                 PolylineOptions()
-                    .add(rider.toLatLng(), store.toLatLng())
+                    .addAll(pickup.map { it.toLatLng() })
                     .width(POLYLINE_WIDTH)
                     .color(RiderColors.Pickup.toArgb())
                     .geodesic(false)
             )
         }
 
+        // 用 size < 2 判断而不是 isEmpty:只解出一个点的 polyline 同样画不成线,
+        // 之前那种情况会直接 return，整条路线一根线都不画。
+        val line = state.routeLine.takeIf { it.size >= 2 } ?: state.fallbackRouteLine()
+        if (line.size < 2) return
         map.addPolyline(
             PolylineOptions()
                 .addAll(line.map { it.toLatLng() })

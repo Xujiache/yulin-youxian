@@ -30,7 +30,10 @@ data class MapStop(
 data class RiderMapUiState(
     val store: MapStop? = null,
     val stops: List<MapStop> = emptyList(),
+    /** 门店 → 各未送站点的道路几何。服务端给不出时由端上算路补上。 */
     val routeLine: List<GeoPoint> = emptyList(),
+    /** 骑手 → 门店那一段的道路几何，取货段单独上色。 */
+    val pickupLine: List<GeoPoint> = emptyList(),
     val riderPoint: GeoPoint? = null,
     val riderBearing: Float? = null,
     val totalDistanceMeters: Long? = null,

@@ -1,9 +1,18 @@
 package com.yulin.rider.feature.map
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -24,14 +33,19 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
@@ -66,7 +80,11 @@ import com.yulin.rider.core.designsystem.StatusTone
 import com.yulin.rider.core.designsystem.tabularFigures
 import com.yulin.rider.core.location.AmapKeyState
 import com.yulin.rider.core.location.MapUnavailable
+import com.yulin.rider.core.model.GeoPoint
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 
 /**
  * 配送地图。
@@ -85,6 +103,7 @@ fun RiderMapScreen(
     val context = LocalContext.current
     val mapUnavailable = remember { AmapKeyState.unavailableReason(context) }
     var notice by remember { mutableStateOf<String?>(null) }
+    val routed = rememberRoadRoute(context, state, enabled = mapUnavailable == null)
 
     LaunchedEffect(notice) {
         if (notice != null) {
@@ -116,7 +135,7 @@ fun RiderMapScreen(
     }
 
     MapContent(
-        state = state,
+        state = routed,
         mapUnavailable = mapUnavailable,
         notice = notice,
         modifier = modifier,
@@ -125,6 +144,51 @@ fun RiderMapScreen(
         onNavigate = ::navigate,
         onStopClick = onStopClick,
     )
+}
+
+/**
+ * 补上道路几何。
+ *
+ * 服务端只给站点顺序和里程，给不出沿途道路（那要另配高德 Web Key），
+ * 地图上就只有几个孤零零的点。这里用包里已有的导航 SDK 在端上算一次，
+ * 骑手不用再开一次导航就能看出该走哪条路。
+ *
+ * 站点集合没变就不重算 —— 每 10 秒一次的定位刷新都去算路既费流量又费电。
+ */
+@Composable
+private fun rememberRoadRoute(
+    context: android.content.Context,
+    state: RiderMapUiState,
+    enabled: Boolean,
+): RiderMapUiState {
+    val store = state.store?.point
+    val pending = state.stops.filter { it.kind != MapStopKind.DONE }.mapNotNull { it.point }
+    // 只按「起点 + 站点序列」做键，骑手每次挪动都重算就没意义了
+    val key = remember(state) { listOfNotNull(store) + pending }
+    var delivery by remember { mutableStateOf<List<GeoPoint>>(emptyList()) }
+    var pickup by remember { mutableStateOf<List<GeoPoint>>(emptyList()) }
+
+    LaunchedEffect(enabled, key) {
+        delivery = emptyList()
+        if (!enabled || store == null || pending.isEmpty()) return@LaunchedEffect
+        delivery = RideRoutePlanner.calculate(
+            context = context,
+            start = store,
+            wayPoints = pending.dropLast(1),
+            end = pending.last(),
+        )
+    }
+    // 取货段的起点是骑手，位置会动，但没必要跟着每次定位刷新重算，
+    // 按百米量级取整做键，走出一段距离才重新算。
+    val riderKey = state.riderPoint?.let { "${(it.lat * 1000).toInt()},${(it.lng * 1000).toInt()}" }
+    LaunchedEffect(enabled, riderKey, store) {
+        pickup = emptyList()
+        val rider = state.riderPoint
+        if (!enabled || rider == null || store == null) return@LaunchedEffect
+        pickup = RideRoutePlanner.calculate(context, rider, emptyList(), store)
+    }
+
+    return state.copy(routeLine = state.routeLine.takeIf { it.size >= 2 } ?: delivery, pickupLine = pickup)
 }
 
 @Composable
@@ -279,8 +343,53 @@ private fun RouteSheet(
     onStopClick: (MapStop) -> Unit,
 ) {
     val remaining = state.stops.count { it.kind == MapStopKind.PENDING }
+    val density = LocalDensity.current
+    val scope = rememberCoroutineScope()
 
-    MtMapSheet(modifier = modifier.heightIn(max = SHEET_MAX_HEIGHT)) {
+    // 抽屉能上下拖:占了大半屏时挡着地图,骑手想看路线得先把它推下去。
+    // 往下拖到底只留一条抓手,再往上拖回来。
+    var sheetHeightPx by remember { mutableIntStateOf(0) }
+    // 露出的部分要落在导航栏上方,否则抓手被系统手势区盖住,骑手拽不回来
+    val bottomInset = WindowInsets.safeDrawing.getBottom(density)
+    val peekPx = with(density) { SHEET_PEEK_HEIGHT.toPx() } + bottomInset
+    val maxOffset = (sheetHeightPx - peekPx).coerceAtLeast(0f)
+    val offsetY = remember { Animatable(0f) }
+    var dragJob by remember { mutableStateOf<Job?>(null) }
+
+    // 抽屉变矮时(站点变少)偏移量要跟着收,否则会被推出屏幕外再也拉不回来
+    LaunchedEffect(maxOffset) {
+        if (offsetY.value > maxOffset) offsetY.snapTo(maxOffset)
+    }
+
+    val dragModifier = Modifier.draggable(
+        orientation = Orientation.Vertical,
+        state = rememberDraggableState { delta ->
+            // 和 SlideToConfirm 同一个坑:位移协程没落地就开始动画,
+            // Animatable 互斥会把动画取消掉,抽屉停在半路
+            dragJob = scope.launch {
+                offsetY.snapTo((offsetY.value + delta).coerceIn(0f, maxOffset))
+            }
+        },
+        onDragStopped = { velocity ->
+            dragJob?.join()
+            // 甩得够快就顺着方向吸附,否则就近吸附
+            val target = when {
+                velocity > SHEET_FLING_VELOCITY -> maxOffset
+                velocity < -SHEET_FLING_VELOCITY -> 0f
+                offsetY.value > maxOffset / 2 -> maxOffset
+                else -> 0f
+            }
+            offsetY.animateTo(target, spring(stiffness = Spring.StiffnessMediumLow))
+        },
+    )
+
+    MtMapSheet(
+        modifier = modifier
+            .heightIn(max = SHEET_MAX_HEIGHT)
+            .onSizeChanged { sheetHeightPx = it.height }
+            .offset { IntOffset(0, offsetY.value.roundToInt()) }
+            .then(dragModifier),
+    ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -517,6 +626,12 @@ private fun formatDistance(meters: Long): String =
     if (meters < 1000) "$meters 米" else String.format("%.1f 公里", meters / 1000.0)
 
 private val SHEET_MAX_HEIGHT = 420.dp
+
+/** 推到底时露出来的高度：一条抓手加一行标题，够骑手看见并拽回来。 */
+private val SHEET_PEEK_HEIGHT = 56.dp
+
+/** 超过这个速度就按甩的方向吸附，不看松手位置。单位是 px/s。 */
+private const val SHEET_FLING_VELOCITY = 800f
 private const val TOAST_MILLIS = 5_000L
 
 @Preview(name = "地图 · 文字路线", showBackground = true, heightDp = 780)
