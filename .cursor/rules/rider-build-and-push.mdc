@@ -1,0 +1,44 @@
+---
+description: 骑手端改动后的固定收尾动作：打包、推 GitHub、给出可复制的产物路径
+globs: rider-android/**
+alwaysApply: false
+---
+
+# 改完骑手端必须做的三件事
+
+顺序固定：**先验证 → 再打包 → 再推送 → 最后给路径**。任何一步失败就停下来说清楚，不要跳过。
+
+## 1. 打包
+
+```powershell
+$env:JAVA_HOME="C:\Program Files\Android\Android Studio\jbr"
+$env:ANDROID_SDK_ROOT="C:\Users\Administrator\AppData\Local\Android\Sdk"
+$env:ANDROID_HOME=$env:ANDROID_SDK_ROOT
+.\gradlew.bat testDebugUnitTest verifyReleaseSignature -PRIDER_BUILD_SEQUENCE=<当日序号>
+```
+
+- `verifyReleaseSignature` 自带 `assembleRelease` 并校验签名，不要只跑 `assembleRelease`。
+- 单元测试和打包放同一条命令，Gradle 会并行调度，比分两次快。
+- **versionCode 是 `YYMMDD` + 两位当日序号**。序号必须比设备上已装的大，否则装机被当作降级拒绝。
+  先 `adb shell dumpsys package com.yulin.rider | Select-String versionCode` 看一眼再定。
+- 签名口令读 `%USERPROFILE%\.yulin\rider-signing.properties`，高德 Key 读全局 `~/.gradle/gradle.properties`，都不要写进仓库。
+- 输出日志重定向到 `$env:TEMP` 下的文件，不要写进 `build/preview/`（会被占用导致失败）。
+
+**不要为了快牺牲准度**：不跳测试、不跳签名校验、不用 `-PRIDER_ABI=arm64` 减体积，除非用户明确要小包。
+Gradle 判定 `UP-TO-DATE` 就是真的没变，直接复用产物，不要强制 `clean` 重打。
+
+## 2. 推送 GitHub
+
+按模块分提交，不要把不相干的改动堆成一个。推之前 `git fetch`，远程有新提交就先
+`git rebase origin/<branch>` 保持线性历史。提交信息写清「为什么」，用 `git commit -F <文件>`
+传入（PowerShell 不支持 heredoc）。
+
+## 3. 给出可复制的产物路径
+
+回复末尾用独立代码块给出**绝对路径**，代码块自带复制按钮：
+
+```
+C:\AAAAAAAAAAAAA.客户（代码）\工作（客户）\心之所向\代码\rider-android\app\build\outputs\apk\release\app-release.apk
+```
+
+同时说明 versionCode、大小、SHA-256，方便核对装的是不是这一版。

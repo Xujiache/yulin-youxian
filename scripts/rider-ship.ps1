@@ -1,0 +1,108 @@
+﻿# 骑手端一键出包：跑测试 + 打 release + 校验签名 + 输出可复制的产物路径。
+#
+# 把原来五六条命令合成一步。真正拖慢节奏的不是 Gradle（改叶子模块 20 秒上下），
+# 是来回敲命令的往返。
+#
+#   pwsh scripts/rider-ship.ps1              # 自动挑当日序号
+#   pwsh scripts/rider-ship.ps1 -Sequence 7  # 指定序号
+#   pwsh scripts/rider-ship.ps1 -Arm64Only   # 只打 arm64，体积减到约 70MB 好走微信
+#   pwsh scripts/rider-ship.ps1 -SkipTests   # 只在赶时间且刚跑过测试时用
+[CmdletBinding()]
+param(
+    [int]$Sequence = 0,
+    [switch]$Arm64Only,
+    [switch]$SkipTests
+)
+
+$ErrorActionPreference = 'Stop'
+$repo = Split-Path -Parent $PSScriptRoot
+$app = Join-Path $repo 'rider-android'
+
+$env:JAVA_HOME = 'C:\Program Files\Android\Android Studio\jbr'
+$env:ANDROID_SDK_ROOT = 'C:\Users\Administrator\AppData\Local\Android\Sdk'
+$env:ANDROID_HOME = $env:ANDROID_SDK_ROOT
+$adb = Join-Path $env:ANDROID_SDK_ROOT 'platform-tools\adb.exe'
+
+$apkPath = Join-Path $app 'app\build\outputs\apk\release\app-release.apk'
+$buildTools = (Get-ChildItem (Join-Path $env:ANDROID_SDK_ROOT 'build-tools') -Directory |
+    Sort-Object Name -Descending | Select-Object -First 1).FullName
+$aapt2 = Join-Path $buildTools 'aapt2.exe'
+
+function Get-ApkVersionCode([string]$path) {
+    if (-not (Test-Path $path)) { return 0 }
+    $line = & $aapt2 dump badging $path 2>$null | Select-String "versionCode='(\d+)'"
+    if ($line) { return [int]$line.Matches[0].Groups[1].Value }
+    return 0
+}
+
+# 已发出去的最高 versionCode。记在工作区外，构建产物被覆盖或 clean 掉都不影响。
+$stateFile = Join-Path $env:USERPROFILE '.yulin\rider-last-version'
+
+# versionCode 是 YYMMDD + 两位当日序号，必须单调递增，否则装机被系统当成降级拒绝。
+#
+# 三个来源取最大，缺一不可：
+#   - 这个状态文件：唯一可靠的「已发出去的最高版本」；
+#   - 磁盘上的 release 包：状态文件丢了时的兜底，但它会被下一次构建覆盖，不能单独依赖；
+#   - 设备上已装的：往往是 debug 包（不带 -PRIDER_BUILD_SEQUENCE，恒为当日 01），
+#     只看它会算出比已发版本还小的号。
+if ($Sequence -le 0) {
+    $today = [int](Get-Date).ToUniversalTime().ToString('yyMMdd')
+    $known = @(0, (Get-ApkVersionCode $apkPath))
+    if (Test-Path $stateFile) {
+        $saved = 0
+        if ([int]::TryParse((Get-Content $stateFile -Raw).Trim(), [ref]$saved)) { $known += $saved }
+    }
+    if (Test-Path $adb) {
+        $line = & $adb shell dumpsys package com.yulin.rider 2>$null |
+            Select-String 'versionCode=(\d+)' | Select-Object -First 1
+        if ($line) { $known += [int]$line.Matches[0].Groups[1].Value }
+    }
+    $highest = ($known | Measure-Object -Maximum).Maximum
+    $Sequence = if ([math]::Floor($highest / 100) -eq $today) { ($highest % 100) + 1 } else { 1 }
+}
+if ($Sequence -lt 1 -or $Sequence -gt 99) { throw "当日序号越界：$Sequence" }
+
+$tasks = @()
+if (-not $SkipTests) { $tasks += 'testDebugUnitTest' }
+$tasks += 'verifyReleaseSignature'          # 它自带 assembleRelease 并校验签名
+$gradleArgs = $tasks + @("-PRIDER_BUILD_SEQUENCE=$Sequence", '--console=plain')
+if ($Arm64Only) { $gradleArgs += '-PRIDER_ABI=arm64' }
+
+# 日志写临时目录：build/preview 下的文件常被别的进程占着，写进去会中断构建
+$log = Join-Path $env:TEMP "rider-ship-$(Get-Date -Format 'HHmmss').log"
+Write-Host "[ship] 序号 $Sequence，任务：$($tasks -join ' ')" -ForegroundColor Cyan
+
+Push-Location $app
+try {
+    & .\gradlew.bat @gradleArgs 2>&1 | Tee-Object -FilePath $log | Out-Null
+    $code = $LASTEXITCODE
+} finally {
+    Pop-Location
+}
+
+if ($code -ne 0) {
+    Write-Host "[ship] 构建失败，关键报错：" -ForegroundColor Red
+    Get-Content $log | Where-Object { $_ -match '^e: |FAILURE|error:|FAILED' } | Select-Object -First 15
+    Write-Host "[ship] 完整日志：$log"
+    exit 1
+}
+
+$apk = Get-Item $apkPath
+$badging = & $aapt2 dump badging $apk.FullName 2>$null
+
+# 记下这一版，下次接着往上走
+$built = Get-ApkVersionCode $apk.FullName
+New-Item -ItemType Directory -Force -Path (Split-Path $stateFile) | Out-Null
+Set-Content -Path $stateFile -Value $built -NoNewline
+$version = ($badging | Select-String "^package").Line
+$abis = ($badging | Select-String 'native-code').Line
+$sha = (Get-FileHash $apk.FullName -Algorithm SHA256).Hash
+
+Write-Host ''
+Write-Host '[ship] 打包完成，签名校验通过' -ForegroundColor Green
+Write-Host ("  " + $version)
+Write-Host ("  " + $abis)
+Write-Host ("  大小     : {0:N1} MB" -f ($apk.Length / 1MB))
+Write-Host ("  SHA-256  : " + $sha)
+Write-Host ''
+Write-Host $apk.FullName
