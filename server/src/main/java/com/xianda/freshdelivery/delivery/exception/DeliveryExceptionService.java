@@ -21,6 +21,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -125,6 +126,17 @@ public class DeliveryExceptionService {
         }
         ExceptionType type = parseType(request.exceptionType());
         LocalDateTime now = LocalDateTime.now(clock);
+        // 幂等重放：骑手端网络抖动会带着同一个 clientEventId 重试，离线队列也会重放。
+        // 不去重的话调度台上会出现好几条同样的「货品破损」，照片还会因为凭证已被
+        // 前一条绑定而永久失败。
+        String clientEventId = request.clientEventId() == null ? null : request.clientEventId().trim();
+        if (clientEventId != null && !clientEventId.isBlank()) {
+            Optional<DeliveryExceptionRecord> replayed =
+                    exceptionRecordDao.findByClientEventId(clientEventId);
+            if (replayed.isPresent()) {
+                return toDto(replayed.get());
+            }
+        }
         DeliveryExceptionRecord saved = unitOfWork.commit(() -> {
             ExceptionTaskQueryDao.TaskSnapshot task = request.taskId() == null
                     ? null
@@ -166,6 +178,7 @@ public class DeliveryExceptionService {
                     now
             );
             long exceptionId = insertWithGeneratedNo(draft, now);
+            exceptionRecordDao.markClientEventId(exceptionId, clientEventId);
             if (evidenceDao.bindToException(evidenceIds, exceptionId, request.taskId(), riderId)
                     != evidenceIds.size()) {
                 throw new DeliveryException(409, "异常凭证绑定发生并发冲突，请重试");

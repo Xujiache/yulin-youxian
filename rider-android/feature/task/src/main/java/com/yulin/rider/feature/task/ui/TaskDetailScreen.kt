@@ -3,22 +3,30 @@ package com.yulin.rider.feature.task.ui
 import android.app.Application
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -47,13 +55,17 @@ import com.yulin.rider.core.designsystem.MtPrimaryButton
 import com.yulin.rider.core.designsystem.MtScaffold
 import com.yulin.rider.core.designsystem.MtSectionTitle
 import com.yulin.rider.core.designsystem.MtTag
+import com.yulin.rider.core.designsystem.RiderColors
 import com.yulin.rider.core.designsystem.RiderTheme
+import com.yulin.rider.core.designsystem.SlideToConfirm
 import com.yulin.rider.core.designsystem.StatusTone
 import com.yulin.rider.core.designsystem.tabularFigures
 import com.yulin.rider.core.model.TaskDetail
+import com.yulin.rider.core.model.TaskEvent
 import com.yulin.rider.feature.task.data.NextStep
 import com.yulin.rider.feature.task.data.TaskCardUi
 import com.yulin.rider.feature.task.data.TaskRepository
+import com.yulin.rider.feature.task.util.RiderFormats
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -81,6 +93,8 @@ class TaskDetailViewModel(app: Application, private val taskId: Long) : AndroidV
             NextStep.ACCEPT -> repository.accept(taskId)
             NextStep.DEPART -> repository.depart(taskId)
             NextStep.ARRIVE -> repository.arrive(taskId)
+            // 无波次的单在详情页也要能取货，之前 PICKUP 落到 else 分支被吞掉
+            NextStep.PICKUP -> repository.pickupTask(taskId)
             else -> Unit
         }
     }
@@ -134,7 +148,8 @@ fun TaskDetailScreen(
         onOpenException = { onOpenException(current.taskId) },
         onAdvance = { step ->
             when (step) {
-                NextStep.PICKUP -> current.waveId?.let(onOpenPickup)
+                // 没有波次就不进逐单核对页，直接取货
+                NextStep.PICKUP -> current.waveId?.let(onOpenPickup) ?: viewModel.advance(step)
                 NextStep.DELIVER -> onOpenDeliver(current.taskId)
                 else -> viewModel.advance(step)
             }
@@ -176,21 +191,26 @@ private fun TaskDetailContent(
                 },
             ) {
                 val step = task.nextStep
-                if (step == NextStep.NONE) {
+                if (!step.actionable) {
+                    val label = if (step == NextStep.EXCEPTION_PENDING) "异常处理中" else "本单已结束"
                     MtPrimaryButton(
-                        text = "本单已结束",
+                        text = label,
                         action = MtAction.SECONDARY,
                         modifier = Modifier.weight(1f),
                         enabled = false,
-                        disabledReason = "本单已结束",
+                        disabledReason = if (step == NextStep.EXCEPTION_PENDING) {
+                            "已上报异常，等调度处理后才能继续"
+                        } else {
+                            "本单已结束"
+                        },
                         onClick = {},
                     )
                 } else {
-                    MtPrimaryButton(
+                    SlideToConfirm(
                         text = step.slideText,
                         action = step.toAction(),
                         modifier = Modifier.weight(1f),
-                        onClick = { onAdvance(step) },
+                        onConfirm = { onAdvance(step) },
                     )
                 }
             }
@@ -263,30 +283,25 @@ private fun TaskDetailContent(
             }
 
             detail?.let { loaded ->
+                val timeline = remember(loaded.events) { buildTimeline(loaded.events) }
                 MtCard {
                     MtSectionTitle("履约进度", trailing = {
                         Text(
-                            "${loaded.events.size} 条",
+                            "${timeline.size} 条",
                             style = MaterialTheme.typography.bodySmall.tabularFigures(),
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     })
                     MtDivider()
-                    if (loaded.events.isEmpty()) {
+                    if (timeline.isEmpty()) {
                         EmptyLine("暂无履约事件")
                     } else {
-                        loaded.events.forEach { event ->
-                            DetailRow(eventName(event.eventType), event.createdAt)
-                            event.reason?.takeIf { it.isNotBlank() }?.let { reason ->
-                                Text(
-                                    text = reason,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.padding(
-                                        start = FreshSpacing.Sm,
-                                        end = FreshSpacing.Sm,
-                                        bottom = FreshSpacing.Xxs,
-                                    ),
+                        Column(modifier = Modifier.padding(vertical = FreshSpacing.Xs)) {
+                            timeline.forEachIndexed { index, entry ->
+                                TimelineRow(
+                                    entry = entry,
+                                    latest = index == timeline.lastIndex,
+                                    showConnector = index != timeline.lastIndex,
                                 )
                             }
                         }
@@ -393,7 +408,118 @@ private fun eventName(type: String): String = when (type) {
     "EXCEPTION" -> "异常处理"
     "ETA_UPDATE" -> "预计时间更新"
     "ORDER_BRIDGE" -> "订单状态同步"
+    "NOTE" -> "备注"
+    "VERIFY_CODE_ISSUED" -> "发送取件码"
+    "SUBSCRIBE" -> "顾客订阅通知"
+    "EARNING_SETTLED" -> "配送费结算"
     else -> type
+}
+
+/**
+ * 时间线上的一条。
+ *
+ * [repeatCount] 大于 1 表示这条被合并过：后端的订单状态同步失败会每分钟重试一次，
+ * 每次失败都落一条事件，不合并的话一屏全是同一句话，真正有用的取货送达反而被埋了。
+ */
+private data class TimelineEntry(
+    val label: String,
+    val description: String?,
+    val time: String,
+    val repeatCount: Int,
+)
+
+/** 相邻且「类型 + 描述」完全相同的事件合并成一条，时间取最后一次。 */
+private fun buildTimeline(events: List<TaskEvent>): List<TimelineEntry> {
+    val entries = mutableListOf<TimelineEntry>()
+    events.forEach { event ->
+        val label = eventName(event.eventType)
+        val description = event.reason?.trim()?.takeIf { it.isNotEmpty() }
+        val time = RiderFormats.eventTime(event.createdAt) ?: event.createdAt
+        val previous = entries.lastOrNull()
+        if (previous != null && previous.label == label && previous.description == description) {
+            entries[entries.lastIndex] = previous.copy(
+                time = time,
+                repeatCount = previous.repeatCount + 1,
+            )
+        } else {
+            entries += TimelineEntry(label, description, time, 1)
+        }
+    }
+    return entries
+}
+
+@Composable
+private fun TimelineRow(
+    entry: TimelineEntry,
+    latest: Boolean,
+    showConnector: Boolean,
+) {
+    val accent = if (latest) {
+        RiderColors.Deliver
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
+    }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = FreshSpacing.Sm),
+        horizontalArrangement = Arrangement.spacedBy(FreshSpacing.Xs),
+    ) {
+        // 圆点与竖线共用一列，让「先后顺序」不用读时间就能看出来
+        Column(
+            modifier = Modifier.width(12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Spacer(Modifier.height(6.dp))
+            Box(
+                modifier = Modifier
+                    .size(if (latest) 9.dp else 7.dp)
+                    .clip(CircleShape)
+                    .background(accent),
+            )
+            if (showConnector) {
+                Box(
+                    modifier = Modifier
+                        .width(1.dp)
+                        .weight(1f)
+                        .background(MaterialTheme.colorScheme.outlineVariant),
+                )
+            }
+        }
+
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(bottom = if (showConnector) FreshSpacing.Sm else 0.dp),
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(FreshSpacing.Xs),
+            ) {
+                Text(
+                    text = entry.label,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = if (latest) RiderColors.Ink else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                if (entry.repeatCount > 1) {
+                    MtTag(text = "×${entry.repeatCount}", tone = StatusTone.NORMAL)
+                }
+                Spacer(Modifier.weight(1f))
+                Text(
+                    text = entry.time,
+                    style = MaterialTheme.typography.bodySmall.tabularFigures(),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            entry.description?.let { description ->
+                Text(
+                    text = description,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
 }
 
 private fun evidenceName(type: String): String = when (type) {

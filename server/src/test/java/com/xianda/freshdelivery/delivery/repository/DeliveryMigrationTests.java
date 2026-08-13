@@ -1,13 +1,21 @@
 package com.xianda.freshdelivery.delivery.repository;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.io.IOException;
 import java.math.BigDecimal;
+import java.net.URISyntaxException;
+import java.net.URL;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
+import java.util.Comparator;
 import java.util.List;
+import java.util.stream.Stream;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -82,10 +90,67 @@ class DeliveryMigrationTests {
         assertEquals(0, missingMetadata);
     }
 
+    /**
+     * 原来靠「V12 必须是列表最后一条」来防止新迁移漏登记，加进 V13 之后那条断言就失效了。
+     * 这里改成直接和 db/migration 目录对账：版本号唯一、严格升序，且目录里除基线 V1 之外的
+     * 每个文件都登记在 MIGRATIONS 里——漏登记、重号、插队都会在这里失败。
+     */
+    @Test
+    void registersEveryMigrationOnceInAscendingVersionOrder() {
+        List<String> registered = DeliveryTestDatabase.MIGRATIONS;
+        int previous = 0;
+        for (String migration : registered) {
+            int version = versionOf(migration);
+            assertTrue(version > previous, "迁移未按版本号升序登记或版本号重复: " + migration);
+            previous = version;
+        }
+        assertEquals(migrationFilesAfterBaseline(), registered, "db/migration 下的迁移与 MIGRATIONS 不一致");
+    }
+
+    private static int versionOf(String migration) {
+        String digits = migration.substring(1, migration.indexOf("__"));
+        return Integer.parseInt(digits);
+    }
+
+    private static List<String> migrationFilesAfterBaseline() {
+        URL directory = DeliveryMigrationTests.class.getResource("/db/migration");
+        assertNotNull(directory, "找不到 db/migration 资源目录");
+        try (Stream<Path> files = Files.list(Path.of(directory.toURI()))) {
+            return files.map(path -> path.getFileName().toString())
+                    .filter(name -> name.endsWith(".sql"))
+                    .filter(name -> versionOf(name) > 1)
+                    .sorted(Comparator.comparingInt(DeliveryMigrationTests::versionOf))
+                    .toList();
+        } catch (IOException | URISyntaxException exception) {
+            throw new IllegalStateException("读取迁移目录失败", exception);
+        }
+    }
+
+    @Test
+    void appliesV12RiderIdempotencyColumn() {
+        assertTrue(DeliveryTestDatabase.MIGRATIONS.contains("V12__harden_rider_idempotency.sql"));
+        assertEquals(1, jdbcTemplate.queryForObject("""
+                SELECT COUNT(*) FROM information_schema.columns
+                WHERE LOWER(table_schema) = 'public'
+                  AND LOWER(table_name) = 'delivery_exception'
+                  AND LOWER(column_name) = 'client_event_id'
+                """, Integer.class));
+        // 同一个幂等键只能落一条异常单，重放必须撞唯一索引而不是新插一条
+        jdbcTemplate.update("""
+                INSERT INTO delivery_exception
+                    (exception_no, exception_type, severity, status, source, client_event_id, created_at, updated_at)
+                VALUES ('YC-T1', 'GOODS_DAMAGED', 'HIGH', 'OPEN', 'RIDER', 'dup-key', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                """);
+        assertThrows(DataIntegrityViolationException.class, () -> jdbcTemplate.update("""
+                INSERT INTO delivery_exception
+                    (exception_no, exception_type, severity, status, source, client_event_id, created_at, updated_at)
+                VALUES ('YC-T2', 'GOODS_DAMAGED', 'HIGH', 'OPEN', 'RIDER', 'dup-key', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                """));
+    }
+
     @Test
     void appliesV11IntegrityColumnsAndIndexes() {
-        assertEquals("V11__harden_delivery_integrity.sql",
-                DeliveryTestDatabase.MIGRATIONS.get(DeliveryTestDatabase.MIGRATIONS.size() - 1));
+        assertTrue(DeliveryTestDatabase.MIGRATIONS.contains("V11__harden_delivery_integrity.sql"));
         for (String column : List.of("client_event_id", "client_action")) {
             assertEquals(1, jdbcTemplate.queryForObject("""
                     SELECT COUNT(*) FROM information_schema.columns

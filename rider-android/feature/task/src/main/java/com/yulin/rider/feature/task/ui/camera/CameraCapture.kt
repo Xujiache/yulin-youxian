@@ -32,8 +32,12 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -136,10 +140,26 @@ fun CameraCapture(
         return
     }
 
+    val scope = rememberCoroutineScope()
     val controller = remember { LifecycleCameraController(context) }
+    var bindFailed by remember { mutableStateOf(false) }
     DisposableEffect(lifecycleOwner) {
-        controller.bindToLifecycle(lifecycleOwner)
-        onDispose { controller.unbind() }
+        // 绑定失败在组合期抛出会直接崩掉整个 App。模拟器缺后置摄像头、
+        // CameraX 初始化失败都会走到这里，降级成一屏说明总比闪退强。
+        runCatching { controller.bindToLifecycle(lifecycleOwner) }
+            .onFailure { bindFailed = true }
+        onDispose { runCatching { controller.unbind() } }
+    }
+
+    if (bindFailed) {
+        CameraPermissionContent(
+            state = CameraPermissionState.NO_CAMERA,
+            modifier = modifier,
+            onRequest = {},
+            onOpenSettings = {},
+            onCancel = onCancel,
+        )
+        return
     }
 
     Box(modifier = modifier.fillMaxSize()) {
@@ -193,19 +213,38 @@ fun CameraCapture(
                     object : ImageCapture.OnImageCapturedCallback() {
                         override fun onCaptureSuccess(image: ImageProxy) {
                             val rotationDegrees = image.imageInfo.rotationDegrees
-                            val bytes = image.toJpegBytes()
-                            image.close()
-                            val path = EvidenceUploader.persistCompressed(
-                                context,
-                                bytes,
-                                "evidence",
-                                rotationDegrees,
-                            )
-                            capturing = false
-                            if (path != null) {
-                                onCaptured(path)
-                            } else {
+                            // 读缓冲区可能抛异常，close 必须在 finally 里：
+                            // 漏关一次 ImageProxy 就会占住相机缓冲，第二张直接拍不出来
+                            val bytes = try {
+                                image.toJpegBytes()
+                            } catch (_: RuntimeException) {
+                                null
+                            } finally {
+                                image.close()
+                            }
+                            if (bytes == null) {
+                                capturing = false
                                 captureError = CAMERA_SAVE_FAILED_TEXT
+                                return
+                            }
+                            // 解码、旋转、压缩、落盘全是重活，放主线程上高分辨率照片能卡出 ANR
+                            scope.launch {
+                                val path = withContext(Dispatchers.IO) {
+                                    runCatching {
+                                        EvidenceUploader.persistCompressed(
+                                            context,
+                                            bytes,
+                                            "evidence",
+                                            rotationDegrees,
+                                        )
+                                    }.getOrNull()
+                                }
+                                capturing = false
+                                if (path != null) {
+                                    onCaptured(path)
+                                } else {
+                                    captureError = CAMERA_SAVE_FAILED_TEXT
+                                }
                             }
                         }
 
@@ -303,8 +342,9 @@ private val CONTROL_SCRIM = Color.Black.copy(alpha = 0.55f)
 /** 报错文字压在黑色取景画面上，用比标准错误红更亮的一档才读得清。 */
 private val ERROR_TEXT = Color(0xFFFF7875)
 
-private fun ImageProxy.toJpegBytes(): ByteArray {
-    val buffer = planes[0].buffer
+/** 取不到平面就返回 null 而不是越界崩溃 —— 少数 ROM 在切后台瞬间会给出空 planes。 */
+private fun ImageProxy.toJpegBytes(): ByteArray? {
+    val buffer = planes.firstOrNull()?.buffer ?: return null
     val bytes = ByteArray(buffer.remaining())
     buffer.get(bytes)
     return bytes

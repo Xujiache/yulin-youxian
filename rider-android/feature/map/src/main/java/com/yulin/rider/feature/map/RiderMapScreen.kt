@@ -65,6 +65,7 @@ import com.yulin.rider.core.designsystem.RiderTheme
 import com.yulin.rider.core.designsystem.StatusTone
 import com.yulin.rider.core.designsystem.tabularFigures
 import com.yulin.rider.core.location.AmapKeyState
+import com.yulin.rider.core.location.MapUnavailable
 import kotlinx.coroutines.delay
 
 /**
@@ -82,7 +83,7 @@ fun RiderMapScreen(
     onStopClick: (MapStop) -> Unit = {},
 ) {
     val context = LocalContext.current
-    val mapAvailable = remember { AmapKeyState.isMapAvailable(context) }
+    val mapUnavailable = remember { AmapKeyState.unavailableReason(context) }
     var notice by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(notice) {
@@ -116,7 +117,7 @@ fun RiderMapScreen(
 
     MapContent(
         state = state,
-        mapAvailable = mapAvailable,
+        mapUnavailable = mapUnavailable,
         notice = notice,
         modifier = modifier,
         onBack = onBack,
@@ -129,7 +130,7 @@ fun RiderMapScreen(
 @Composable
 private fun MapContent(
     state: RiderMapUiState,
-    mapAvailable: Boolean,
+    mapUnavailable: MapUnavailable?,
     notice: String?,
     modifier: Modifier = Modifier,
     onBack: () -> Unit = {},
@@ -154,10 +155,10 @@ private fun MapContent(
                 )
 
             else -> {
-                if (mapAvailable && state.hasAnyGeo) {
+                if (mapUnavailable == null && state.hasAnyGeo) {
                     AmapMapCanvas(state = state, modifier = Modifier.fillMaxSize())
                 } else {
-                    MapPlaceholder(mapAvailable)
+                    MapPlaceholder(mapUnavailable)
                 }
 
                 MapOverlay(
@@ -289,10 +290,12 @@ private fun RouteSheet(
                 color = RiderColors.Ink,
                 modifier = Modifier.weight(1f),
             )
-            state.totalDistanceMeters?.let { meters ->
+            // 后端没跑出路径规划时这两个字段是 0。显示「0 米 · 0 分钟」比不显示更糟——
+            // 骑手会以为下一站就在眼前。宁可空着，站点卡里还有各自的直线距离。
+            state.totalDistanceMeters?.takeIf { it > 0 }?.let { meters ->
                 Text(
                     text = formatDistance(meters) +
-                        (state.totalDurationSeconds?.let { " · ${it / 60} 分钟" } ?: ""),
+                        (state.totalDurationSeconds?.takeIf { it > 0 }?.let { " · ${it / 60} 分钟" } ?: ""),
                     style = MaterialTheme.typography.bodySmall.tabularFigures(),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -351,7 +354,7 @@ private fun RouteSheet(
 }
 
 @Composable
-private fun MapPlaceholder(mapAvailable: Boolean) {
+private fun MapPlaceholder(reason: MapUnavailable?) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -367,7 +370,13 @@ private fun MapPlaceholder(mapAvailable: Boolean) {
             size = 56.dp,
         )
         Text(
-            text = if (mapAvailable) "订单暂未拿到经纬度" else "地图底图暂不可用",
+            text = when (reason) {
+                null -> "订单暂未拿到经纬度"
+                MapUnavailable.KEY_MISSING -> "地图 Key 未配置"
+                MapUnavailable.CONSENT_MISSING -> "尚未同意位置信息授权"
+                MapUnavailable.NATIVE_MISSING -> "当前设备不支持地图底图"
+                MapUnavailable.SDK_MISSING -> "地图底图暂不可用"
+            },
             style = MaterialTheme.typography.titleMedium,
             color = RiderColors.Ink,
             modifier = Modifier.padding(top = FreshSpacing.Sm),
@@ -512,7 +521,7 @@ private fun MapRoutePreview() {
     RiderTheme {
         MapContent(
             state = previewMapState(),
-            mapAvailable = false,
+            mapUnavailable = MapUnavailable.KEY_MISSING,
             notice = null,
         )
     }
@@ -521,7 +530,9 @@ private fun MapRoutePreview() {
 @Preview(name = "地图 · 空态", showBackground = true, heightDp = 780)
 @Composable
 private fun MapEmptyPreview() {
-    RiderTheme { MapContent(RiderMapUiState(), mapAvailable = false, notice = null) }
+    RiderTheme {
+        MapContent(RiderMapUiState(), mapUnavailable = MapUnavailable.KEY_MISSING, notice = null)
+    }
 }
 
 @Preview(name = "地图 · 错误", showBackground = true, heightDp = 780)
@@ -530,7 +541,7 @@ private fun MapErrorPreview() {
     RiderTheme {
         MapContent(
             RiderMapUiState(error = "路线同步失败，请检查网络"),
-            mapAvailable = false,
+            mapUnavailable = MapUnavailable.KEY_MISSING,
             notice = null,
         )
     }

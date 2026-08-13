@@ -2,6 +2,7 @@ package com.yulin.rider.core.push
 
 import android.content.Context
 import android.media.AudioAttributes
+import android.media.AudioFocusRequest
 import android.media.AudioManager
 import android.media.RingtoneManager
 import android.media.ToneGenerator
@@ -32,30 +33,58 @@ class VoiceAnnouncer @Inject constructor(
     @Volatile
     var speechEnabled: Boolean = true
 
+    /** 设置页的提示音开关。关掉后只播语音,不再额外响一声。 */
+    @Volatile
+    var promptToneEnabled: Boolean = true
+
+    /**
+     * 播报语速倍率。
+     * 电动车上风噪大,默认 1.0 有骑手反映听不清；调慢一档比调大音量更有用。
+     */
+    @Volatile
+    var speechRate: Float = 1.0f
+        set(value) {
+            val clamped = value.coerceIn(MIN_RATE, MAX_RATE)
+            field = clamped
+            runCatching { tts?.setSpeechRate(clamped) }
+        }
+
     private var tts: TextToSpeech? = null
     private var readyDeferred: CompletableDeferred<Boolean>? = null
 
     // ToneGenerator 持有原生 AudioTrack,复用一个实例,避免循环播报时反复申请音频资源
     private var toneGenerator: ToneGenerator? = null
 
+    private val audioManager: AudioManager? by lazy {
+        runCatching { context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager }.getOrNull()
+    }
+    private var audioFocusRequest: AudioFocusRequest? = null
+
     /** 播放提示音。TTS 之前先响一声,骑手才会把注意力转过来。 */
     fun playPromptTone() {
+        if (!promptToneEnabled) return
         if (playNotificationRingtone()) return
         playToneGenerator()
     }
 
     /**
      * 播报一段中文。TTS 不可用时回退到提示音,保证「至少响了」。
+     *
+     * @param interrupt true 表示打断当前播报(新单循环用),false 表示排队等前一句读完。
+     *   服务端一次最多下发 5 条紧急消息,全用打断的话只有最后一条能被听到。
      * @return 是否真的用语音播出去了。
      */
-    suspend fun speak(text: String): Boolean {
+    suspend fun speak(text: String, interrupt: Boolean = true): Boolean {
         if (!speechEnabled) return false
         val engine = awaitEngine() ?: run {
             playPromptTone()
             return false
         }
+        // 抢一个瞬时焦点，导航和音乐会自动让音量，否则播报常被导航语音盖住
+        requestAudioFocus()
+        val mode = if (interrupt) TextToSpeech.QUEUE_FLUSH else TextToSpeech.QUEUE_ADD
         return try {
-            engine.speak(text, TextToSpeech.QUEUE_FLUSH, null, UTTERANCE_ID) == TextToSpeech.SUCCESS
+            engine.speak(text, mode, null, UTTERANCE_ID) == TextToSpeech.SUCCESS
         } catch (e: Exception) {
             Log.w(TAG, "TTS 播报失败,回退提示音", e)
             playPromptTone()
@@ -63,8 +92,24 @@ class VoiceAnnouncer @Inject constructor(
         }
     }
 
+    /**
+     * 设置页「试听」。
+     *
+     * 这一项存在的意义是让骑手在上班前就能确认这台手机到底出不出声 ——
+     * 缺中文引擎、被静音、被勿扰拦掉都只有真的响一次才发现得了。
+     * @return 是否成功用语音播出（false 表示只响了提示音）。
+     */
+    suspend fun preview(text: String = PREVIEW_TEXT): Boolean {
+        playPromptTone()
+        return speak(text, interrupt = true)
+    }
+
+    /** 中文引擎是否可用。设置页据此提示骑手去装语音包。 */
+    suspend fun speechAvailable(): Boolean = awaitEngine() != null
+
     fun stopSpeaking() {
         runCatching { tts?.stop() }
+        abandonAudioFocus()
     }
 
     fun shutdown() {
@@ -73,9 +118,34 @@ class VoiceAnnouncer @Inject constructor(
             tts?.shutdown()
         }
         runCatching { toneGenerator?.release() }
+        abandonAudioFocus()
         tts = null
         readyDeferred = null
         toneGenerator = null
+    }
+
+    private fun requestAudioFocus() {
+        val manager = audioManager ?: return
+        if (audioFocusRequest != null) return
+        runCatching {
+            val request = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
+                .setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                        .build()
+                )
+                .build()
+            manager.requestAudioFocus(request)
+            audioFocusRequest = request
+        }.onFailure { Log.w(TAG, "申请音频焦点失败,继续播报", it) }
+    }
+
+    private fun abandonAudioFocus() {
+        val manager = audioManager ?: return
+        val request = audioFocusRequest ?: return
+        runCatching { manager.abandonAudioFocusRequest(request) }
+        audioFocusRequest = null
     }
 
     private suspend fun awaitEngine(): TextToSpeech? {
@@ -99,6 +169,7 @@ class VoiceAnnouncer @Inject constructor(
         engine?.setOnUtteranceProgressListener(SilentProgressListener)
 
         val ok = withTimeoutOrNull(INIT_TIMEOUT_MILLIS) { deferred.await() } == true
+        if (ok) runCatching { tts?.setSpeechRate(speechRate) }
         return if (ok) tts else null
     }
 
@@ -148,5 +219,8 @@ class VoiceAnnouncer @Inject constructor(
         const val INIT_TIMEOUT_MILLIS = 3_000L
         const val TONE_VOLUME = 100
         const val TONE_DURATION_MILLIS = 1200
+        const val MIN_RATE = 0.6f
+        const val MAX_RATE = 1.8f
+        const val PREVIEW_TEXT = "您有 1 个新订单，兴庆区团结小区，1.2 公里"
     }
 }

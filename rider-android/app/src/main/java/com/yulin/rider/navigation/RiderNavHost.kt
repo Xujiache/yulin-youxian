@@ -12,6 +12,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -48,7 +49,9 @@ import com.yulin.rider.feature.task.ui.TaskHomeScreen
 import com.yulin.rider.feature.task.ui.WaveDetailScreen
 import com.yulin.rider.feature.task.ui.camera.CameraCapture
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
@@ -77,9 +80,12 @@ fun RiderNavHost(
         value = tokenStore.current()?.hasLocationConsent == true
     }
 
+    LastRouteRecorder(navController = navController, settingsStore = settingsStore)
+
     SessionEventHandler(
         sessionEvents = sessionEvents,
         navController = navController,
+        settingsStore = settingsStore,
         onSessionEnded = onSessionEnded,
     )
     NewTaskIntentHandler(
@@ -97,9 +103,15 @@ fun RiderNavHost(
             SplashScreen(
                 tokenStore = tokenStore,
                 settingsStore = settingsStore,
-                onResolved = { destination ->
+                onResolved = { destination, resumeRoute ->
                     navController.navigate(destination.route) {
                         popUpTo(RiderRoutes.SPLASH) { inclusive = true }
+                    }
+                    // 先落首页再压上次那一屏，返回键才退得回首页而不是直接退出 App。
+                    // 存的路由可能已经失效(任务被取消、版本更新改了路由)，跳不过去就算了，
+                    // 骑手停在首页总比崩在启动阶段强。
+                    if (resumeRoute != null && resumeRoute != destination.route) {
+                        runCatching { navController.navigate(resumeRoute) }
                     }
                 },
             )
@@ -323,7 +335,10 @@ fun RiderNavHost(
             SettingsScreen(
                 onBack = { navController.popBackStack() },
                 onOpenKeepAliveGuide = { navController.navigate(RiderRoutes.KEEPALIVE_GUIDE) },
+                onOpenChangePassword = { navController.navigate(RiderRoutes.CHANGE_PASSWORD) },
+                onOpenAbout = { navController.navigate(RiderRoutes.ABOUT) },
                 onLoggedOut = {
+                    scope.launch { settingsStore.setLastRoute(null) }
                     navController.navigate(RiderRoutes.LOGIN) {
                         popUpTo(navController.graph.id) { inclusive = true }
                     }
@@ -337,6 +352,56 @@ fun RiderNavHost(
     }
 }
 
+/** 路由里的 {参数名} 占位符。右花括号必须转义：Android 的 ICU 正则不接受裸的 `}`。 */
+private val ROUTE_ARG_PATTERN = Regex("\\{(\\w+)\\}")
+
+/**
+ * 不做记忆的页面。
+ *
+ * 前置流程页由启动页按会话状态自己判定，恢复它们会绕开判定；
+ * 拍照页是一次性动作，重启后把骑手直接丢进取景框只会让人莫名其妙。
+ */
+private val NON_RESUMABLE_ROUTES = RiderRoutes.PRE_BUSINESS_ROUTES + RiderRoutes.CAMERA
+
+/**
+ * 记住骑手停在哪一屏。
+ *
+ * 骑手被电话、微信、导航打断是常态，进程被后台杀掉更是家常便饭。
+ * 没有这个的话每次回来都要从首页重新点进那一单，一天几十次。
+ */
+@Composable
+private fun LastRouteRecorder(
+    navController: NavHostController,
+    settingsStore: RiderSettingsStore,
+) {
+    LaunchedEffect(navController, settingsStore) {
+        navController.currentBackStackEntryFlow
+            .map { it.resumableRoute() }
+            .distinctUntilChanged()
+            .collect { route ->
+                // 只在停到可恢复页面时覆盖，不可恢复时保持原值不动。
+                // 冷启动第一帧一定停在启动页，如果这里顺手清空，
+                // 上一次记下的页面会在启动页读到它之前就被抹掉 —— 记忆功能等于没有。
+                // 会话失效时的清理走 SessionEventHandler。
+                if (route != null) settingsStore.setLastRoute(route)
+            }
+    }
+}
+
+/** 把注册用的模式串还原成带实参的完整路由；不该记忆的页面返回 null。 */
+private fun NavBackStackEntry.resumableRoute(): String? {
+    val pattern = destination.route ?: return null
+    if (NON_RESUMABLE_ROUTES.any { pattern == it || pattern.startsWith("$it?") }) return null
+    if (!pattern.contains('{')) return pattern
+    val args = arguments ?: return null
+    var concrete = pattern
+    ROUTE_ARG_PATTERN.findAll(pattern).forEach { match ->
+        val value = args.get(match.groupValues[1])?.toString() ?: return null
+        concrete = concrete.replace(match.value, value)
+    }
+    return concrete
+}
+
 /**
  * 会话事件统一消费。1003 / 1004 / 401 可能由任意接口抛出,
  * 集中在这里跳转,业务页只管展示自己的错误文案。
@@ -345,6 +410,7 @@ fun RiderNavHost(
 private fun SessionEventHandler(
     sessionEvents: SessionEvents,
     navController: NavHostController,
+    settingsStore: RiderSettingsStore,
     onSessionEnded: () -> Unit,
 ) {
     LaunchedEffect(sessionEvents, navController) {
@@ -352,6 +418,8 @@ private fun SessionEventHandler(
             when (event) {
                 is SessionEvent.RequireLogin, is SessionEvent.AccountSuspended -> {
                     onSessionEnded()
+                    // 换人或掉线后不能再恢复上一个人的页面
+                    settingsStore.setLastRoute(null)
                     navController.navigate(RiderRoutes.LOGIN) {
                         popUpTo(navController.graph.id) { inclusive = true }
                     }

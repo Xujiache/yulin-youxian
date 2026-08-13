@@ -20,11 +20,12 @@ import com.yulin.rider.core.designsystem.MtCard
 import com.yulin.rider.core.designsystem.MtCardHeader
 import com.yulin.rider.core.designsystem.MtDivider
 import com.yulin.rider.core.designsystem.MtGhostAction
+import com.yulin.rider.core.designsystem.MtInfoBar
 import com.yulin.rider.core.designsystem.MtLeg
 import com.yulin.rider.core.designsystem.MtLegBlock
-import com.yulin.rider.core.designsystem.MtPrimaryButton
 import com.yulin.rider.core.designsystem.MtTag
 import com.yulin.rider.core.designsystem.RiderTheme
+import com.yulin.rider.core.designsystem.SlideToConfirm
 import com.yulin.rider.core.designsystem.StatusTone
 import com.yulin.rider.core.designsystem.tabularFigures
 import com.yulin.rider.feature.task.data.NextStep
@@ -94,7 +95,14 @@ fun TaskCardView(
             )
         }
 
-        if (onAdvance != null && task.nextStep != NextStep.NONE) {
+        if (task.nextStep == NextStep.EXCEPTION_PENDING) {
+            MtDivider(Modifier.padding(top = FreshSpacing.Xs))
+            MtInfoBar(
+                text = "已上报异常，等调度处理后才能继续配送",
+                tone = StatusTone.WARNING,
+                icon = FreshIconType.PROBLEM,
+            )
+        } else if (onAdvance != null && task.nextStep.actionable) {
             MtDivider(Modifier.padding(top = FreshSpacing.Xs))
             ActionRow(task = task, onAdvance = onAdvance)
         }
@@ -103,14 +111,16 @@ fun TaskCardView(
 
 @Composable
 private fun HeaderTrailing(task: TaskCardUi) {
-    val seq = task.card.seqNo
-    if (seq != null) {
-        Text(
-            text = "# $seq",
-            style = MaterialTheme.typography.titleSmall.tabularFigures(),
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-    }
+    val seq = task.card.seqNo ?: return
+    val total = task.card.totalStops
+    // 一趟只有一站时「# 1」不带任何信息，反而让骑手以为后面还有第 2 站，直接不显示。
+    // 多站时给「第 2/5 站」，光一个序号看不出这趟还剩几家。
+    if (total != null && total <= 1) return
+    Text(
+        text = if (total != null && total > 1) "第 $seq/$total 站" else "第 $seq 站",
+        style = MaterialTheme.typography.titleSmall.tabularFigures(),
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
 }
 
 @Composable
@@ -162,11 +172,11 @@ private fun ActionRow(task: TaskCardUi, onAdvance: () -> Unit) {
                 context.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:$phone")))
             }
         }
-        MtPrimaryButton(
+        SlideToConfirm(
             text = task.nextStep.slideText,
             action = task.nextStep.toAction(),
             modifier = Modifier.weight(1f),
-            onClick = onAdvance,
+            onConfirm = onAdvance,
         )
     }
 }

@@ -131,7 +131,9 @@ public class RoutePlanService {
                         .thenComparingLong(RoutingTaskRow::taskId);
         locked.sort(byExistingSeq);
         suspended.sort(byExistingSeq);
-        if (!trigger.resequences()) {
+        // 骑手手动调过序就不再重排，新任务按现有序号排到末尾
+        boolean resequence = trigger.resequences() && !keepsRiderSequence(existingStops);
+        if (!resequence) {
             pending.sort(byExistingSeq);
         }
         if (!suspended.isEmpty()) {
@@ -166,7 +168,7 @@ public class RoutePlanService {
         for (RoutingTaskRow task : pending) {
             stopsToSolve.add(toRouteStop(task, estimates.get(task.taskId()).totalSeconds()));
         }
-        RouteSolution solution = trigger.resequences()
+        RouteSolution solution = resequence
                 ? routeSolverService.solve(solveOrigin, solveDepartureAt, stopsToSolve)
                 : routeSolverService.evaluateSequence(solveOrigin, solveDepartureAt, stopsToSolve);
 
@@ -249,7 +251,7 @@ public class RoutePlanService {
         int planVersion = routePlanDao.nextPlanVersion(waveId);
         RoutePlan plan = new RoutePlan(null, waveId, wave.riderId(), planVersion, trigger.name(),
                 solution.optimizerName(), solution.matrixProvider(), planned.size(), totalDistance, totalDuration,
-                BigDecimal.valueOf(solution.objectiveValue()).setScale(4, RoundingMode.HALF_UP),
+                clampObjective(solution.objectiveValue()),
                 solution.solveMillis(), sequenceJson, polyline, true, null);
         long planId = routePlanDao.insert(plan);
 
@@ -260,11 +262,13 @@ public class RoutePlanService {
             int originalSeq = existing != null && existing.originalSeqNo() != null && existing.originalSeqNo() > 0
                     ? existing.originalSeqNo()
                     : stop.seqNo();
+            // 骑手调过序的站点要保住标志位，否则下一轮重规划就不认它了
+            boolean adjustedByRider = existing != null && Boolean.TRUE.equals(existing.adjustedByRider());
             routingWaveDao.upsertStop(new RoutingStopRow(
                     waveId, stop.task().taskId(), stop.seqNo(), originalSeq,
                     stop.task().lat(), stop.task().lng(),
                     stop.legDistanceMeters(), stop.legDurationSeconds(), stop.handoffSeconds(),
-                    stop.arriveAt(), stop.departAt(), null, null, false));
+                    stop.arriveAt(), stop.departAt(), null, null, adjustedByRider));
         }
         routingWaveDao.updateWaveSummary(waveId, totalDistance, totalDuration, planReturnAt, planId,
                 solution.optimizerName(), solution.matrixProvider());
@@ -391,6 +395,12 @@ public class RoutePlanService {
         return array.toString();
     }
 
+    /**
+     * 这个站点是否已经走过，要钉在序列最前面。
+     *
+     * 只表示「物理上已经完成」，不包含骑手调序 —— 那是「不要重排」而不是「钉在最前」，
+     * 走 {@link #keepsRiderSequence} 那条路径。
+     */
     private static boolean isLocked(RoutingTaskRow task, RoutingStopRow stop) {
         if (task.finished()) {
             return true;
@@ -398,9 +408,39 @@ public class RoutePlanService {
         return stop != null && stop.actualDepartAt() != null;
     }
 
+    /**
+     * 波次里有没有骑手手动调过的站点。
+     *
+     * 有的话这一轮就不重排，只刷新路段和 ETA，新任务按现有序号排到末尾。
+     * 之前不看这个标志，骑手按自己熟悉的楼栋顺序排好之后，
+     * 只要来一个新单触发重规划就被算法推翻 ——
+     * 骑手对路线的判断往往比算法准（哪个门难进、哪户常没人），不能随手覆盖。
+     */
+    private static boolean keepsRiderSequence(Map<Long, RoutingStopRow> stops) {
+        return stops.values().stream().anyMatch(stop -> Boolean.TRUE.equals(stop.adjustedByRider()));
+    }
+
     private static int seqOf(RoutingStopRow stop) {
         return stop == null || stop.seqNo() == null ? Integer.MAX_VALUE : stop.seqNo();
     }
+
+    /**
+     * 目标值落库前收口。
+     *
+     * 迟到惩罚是 权重 × 迟到秒数²，一单严重逾期就能顶到天文数字。V12 已经把列
+     * 放宽到 DECIMAL(24,4)，但权重是管理员可配的，再调高一档照样能溢出，
+     * 而「规划结果本身」比「目标值这个诊断数字」重要得多，不能因为它写不下就整条丢掉。
+     */
+    private static BigDecimal clampObjective(double value) {
+        if (Double.isNaN(value) || Double.isInfinite(value)) {
+            return MAX_OBJECTIVE;
+        }
+        BigDecimal scaled = BigDecimal.valueOf(value).setScale(4, RoundingMode.HALF_UP);
+        return scaled.compareTo(MAX_OBJECTIVE) > 0 ? MAX_OBJECTIVE : scaled;
+    }
+
+    /** DECIMAL(24,4) 的整数位是 20 位，留一位余量。 */
+    private static final BigDecimal MAX_OBJECTIVE = new BigDecimal("9999999999999999999.9999");
 
     private static int seqOfRow(RoutingStopRow stop) {
         return seqOf(stop);

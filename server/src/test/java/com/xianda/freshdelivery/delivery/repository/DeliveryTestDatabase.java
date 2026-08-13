@@ -19,7 +19,9 @@ public final class DeliveryTestDatabase {
             "V8__create_delivery_support.sql",
             "V9__add_amap_config.sql",
             "V10__create_marketing_lottery.sql",
-            "V11__harden_delivery_integrity.sql"
+            "V11__harden_delivery_integrity.sql",
+            "V12__harden_rider_idempotency.sql",
+            "V13__harden_marketing_lottery.sql"
     );
 
     private DeliveryTestDatabase() {

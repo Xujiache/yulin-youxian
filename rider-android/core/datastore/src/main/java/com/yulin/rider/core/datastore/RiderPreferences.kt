@@ -29,6 +29,8 @@ object RiderPreferenceKeys {
 
     val VOICE_ENABLED = booleanPreferencesKey("voice_enabled")
     val SOUND_ENABLED = booleanPreferencesKey("sound_enabled")
+    /** 播报语速倍率。风噪大时调慢比调大音量管用。 */
+    val SPEECH_RATE = floatPreferencesKey("speech_rate")
     val FONT_SCALE = floatPreferencesKey("font_scale")
     val DARK_MODE = stringPreferencesKey("dark_mode")
     val KEEP_SCREEN_ON = booleanPreferencesKey("keep_screen_on")
@@ -36,6 +38,13 @@ object RiderPreferenceKeys {
     val KEEPALIVE_GUIDE_DONE = booleanPreferencesKey("keepalive_guide_done")
     val KEEPALIVE_GUIDE_DONE_AT = longPreferencesKey("keepalive_guide_done_at")
     val PERMISSION_GUIDE_DONE = booleanPreferencesKey("permission_guide_done")
+
+    /**
+     * 上次停留的业务页路由（已填好参数的完整串）。
+     * 骑手被电话、微信打断是常态，回来还要从首页一层层点回去很费时间。
+     */
+    val LAST_ROUTE = stringPreferencesKey("last_route")
+    val LAST_ROUTE_AT = longPreferencesKey("last_route_at")
 }
 
 /** 深色模式三态。骑手白天强光、夜间骑行的取向完全不同,不能只跟随系统。 */

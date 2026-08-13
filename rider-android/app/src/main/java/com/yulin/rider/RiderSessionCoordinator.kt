@@ -31,7 +31,8 @@ class RiderSessionCoordinator @Inject constructor(
         pushController.onDutyEnded()
         ActionSyncWorker.cancelAll(context)
         try {
-            localDataCleaner.clearAccountData()
+            // 保留未同步的送达动作与照片：同一个骑手重新登录后还要继续补传
+            localDataCleaner.clearAccountData(keepUnsyncedWork = true)
         } finally {
             tokenStore.clear()
         }

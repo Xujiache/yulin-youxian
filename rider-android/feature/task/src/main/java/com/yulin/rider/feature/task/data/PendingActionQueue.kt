@@ -108,7 +108,7 @@ class PendingActionQueue private constructor(private val appContext: Context) {
                 val error = execution.exceptionOrNull()
                 if (error is CancellationException) throw error
                 if (error is BusinessException && RiderErrorCodes.isTerminalActionFailure(error.code)) {
-                    val discardedEvidenceHashes = rollbackTerminalGroup(row, action)
+                    val discardedEvidenceHashes = rollbackTerminalGroup(row, action, error.message)
                     RiderDatabases.evidenceRegistry(appContext)
                         .complete(discardedEvidenceHashes)
                     rolledBack++
@@ -169,10 +169,16 @@ class PendingActionQueue private constructor(private val appContext: Context) {
             PendingActionTypes.ACCEPT ->
                 apis.caller.dataOrNull { apis.task.accept(requireNotNull(taskId), requireNotNull(transition)) }
 
-            PendingActionTypes.PICKUP ->
-                apis.caller.dataOrNull {
-                    apis.task.pickupWave(requireNotNull(payload.waveId), requireNotNull(transition))
+            PendingActionTypes.PICKUP -> {
+                val waveId = payload.waveId
+                if (waveId != null) {
+                    apis.caller.dataOrNull { apis.task.pickupWave(waveId, requireNotNull(transition)) }
+                } else {
+                    apis.caller.dataOrNull {
+                        apis.task.pickupTask(requireNotNull(taskId), requireNotNull(transition))
+                    }
                 }
+            }
 
             PendingActionTypes.DEPART ->
                 apis.caller.dataOrNull { apis.task.depart(requireNotNull(taskId), requireNotNull(transition)) }
@@ -241,47 +247,64 @@ class PendingActionQueue private constructor(private val appContext: Context) {
         }
     }
 
+    /**
+     * 终态失败回滚。
+     *
+     * 只波及「这条动作真正改过的那几个任务」，不能按波次一刀切 ——
+     * 之前是 deleteByWave()，同波次其他单的送达动作和照片会被一起删掉，
+     * 而它们的状态快照又没被恢复，界面上还显示「已送达」，数据就这么丢了。
+     *
+     * 波次级动作（整波次取货）的影响面来自它的乐观快照，本来就是那一批任务，
+     * 所以按任务集合删既覆盖了级联依赖（没取到货就别谈送达），又不会误伤别人。
+     */
     private suspend fun rollbackTerminalGroup(
         row: PendingActionEntity,
         action: PendingAction,
+        failureMessage: String?,
     ): List<String> {
         val db = RiderDatabases.of(appContext)
-        val waveId = row.waveId
-        val taskId = row.taskId
-        val groupRows = when {
-            waveId != null -> db.pendingActionDao().findByWave(waveId)
-            taskId != null -> db.pendingActionDao().findByTask(taskId)
-            else -> db.pendingActionDao().getAll()
-        }
-        val evidenceHashes = groupRows.mapNotNull { it.toDomain() }
+        val snapshots = action.payload.optimisticStates
+        val affected = snapshots.map { it.taskId }
+            .ifEmpty { listOfNotNull(row.taskId) }
+            .distinct()
+
+        val pendingDao = db.pendingActionDao()
+        // 失败的这条 + 受影响任务名下的后续动作。没有受影响任务时只删自己。
+        val doomed = (
+            listOf(row) + if (affected.isEmpty()) emptyList() else pendingDao.findByTasks(affected)
+            ).distinctBy { it.clientEventId }
+        val evidenceHashes = doomed.mapNotNull { it.toDomain() }
             .flatMap { it.payload.evidences }
             .map { it.contentHash }
+
+        val taskNo = row.taskId?.let { db.taskCacheDao().findTask(it)?.taskNo }
+
         db.withTransaction {
-            val pendingDao = db.pendingActionDao()
-            when {
-                waveId != null -> pendingDao.deleteByWave(waveId)
-                taskId != null -> pendingDao.deleteByTask(taskId)
-                else -> pendingDao.clear()
-            }
+            pendingDao.deleteAll(doomed.map { it.clientEventId })
             val taskDao = db.taskCacheDao()
-            val snapshots = action.payload.optimisticStates
-            if (snapshots.isNotEmpty()) {
-                snapshots.forEach {
-                    taskDao.restoreStatus(
-                        taskId = it.taskId,
-                        status = it.status,
-                        statusText = it.statusText,
-                        updatedAt = System.currentTimeMillis(),
-                    )
-                }
-                val restored = snapshots.mapTo(mutableSetOf()) { it.taskId }
-                affectedTaskIds(db, row, action)
-                    .filterNot { it in restored }
-                    .forEach { taskDao.clearDirty(it) }
-            } else {
-                affectedTaskIds(db, row, action).forEach { taskDao.clearDirty(it) }
+            snapshots.forEach {
+                taskDao.restoreStatus(
+                    taskId = it.taskId,
+                    status = it.status,
+                    statusText = it.statusText,
+                    updatedAt = System.currentTimeMillis(),
+                )
             }
+            val restored = snapshots.mapTo(mutableSetOf()) { it.taskId }
+            affected.filterNot { it in restored }.forEach { taskDao.clearDirty(it) }
         }
+
+        // 静默回滚是之前最严重的问题：骑手完全不知道这单没成。记下来，首页会提示。
+        SyncFailureLog.get(appContext).record(
+            SyncFailure(
+                clientEventId = row.clientEventId,
+                taskId = row.taskId,
+                taskNo = taskNo,
+                actionLabel = PendingActionTypes.label(action.payload.actionType),
+                message = failureMessage?.takeIf { it.isNotBlank() } ?: "服务端拒绝了这次操作",
+                atMillis = System.currentTimeMillis(),
+            )
+        )
         return evidenceHashes
     }
 

@@ -11,6 +11,17 @@ object PendingActionTypes {
     const val ARRIVE = "ARRIVE"
     const val DELIVER = "DELIVER"
     const val EXCEPTION = "EXCEPTION"
+
+    /** 同步失败提示里用的中文名，骑手看不懂 DELIVER。 */
+    fun label(type: String): String = when (type) {
+        ACCEPT -> "接单"
+        PICKUP -> "取货"
+        DEPART -> "出发"
+        ARRIVE -> "到达"
+        DELIVER -> "送达"
+        EXCEPTION -> "异常上报"
+        else -> type
+    }
 }
 
 @Serializable

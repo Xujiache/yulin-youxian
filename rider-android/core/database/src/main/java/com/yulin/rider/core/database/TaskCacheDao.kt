@@ -52,6 +52,13 @@ interface TaskCacheDao {
     @Query("DELETE FROM task_cache WHERE localDirty = 0 AND taskId NOT IN (:keepTaskIds)")
     suspend fun pruneExcept(keepTaskIds: List<Long>)
 
+    /**
+     * 已经结束的任务。「今日已完成」那一路请求单独失败时用来兜底：
+     * 不能因为一次超时就把骑手一整天送完的单从本机删掉。
+     */
+    @Query("SELECT taskId FROM task_cache WHERE status IN ('DELIVERED', 'RETURNED', 'CANCELLED')")
+    suspend fun findFinishedTaskIds(): List<Long>
+
     @Query("DELETE FROM task_cache")
     suspend fun clear()
 }

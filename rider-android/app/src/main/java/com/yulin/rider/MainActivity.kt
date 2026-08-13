@@ -181,11 +181,14 @@ class MainActivity : ComponentActivity() {
             override val appVersionCode: Long = BuildConfig.VERSION_CODE.toLong()
             // 备案号尚未下发,关于页会显示「备案办理中」
             override val icpFilingNumber: String? = null
+            override val deviceId: String = deviceStore.deviceId
             override suspend fun logout(): RiderResult<Unit> {
                 val result = authRepository.logout()
                 sessionCoordinator.endSession()
                 return result
             }
+
+            override suspend fun previewVoice(): Boolean = pushController.previewVoice()
         })
 
         ShiftFeature.install(object : ShiftFeatureDependencies {
@@ -246,9 +249,13 @@ class MainActivity : ComponentActivity() {
                 }
                 launch {
                     settingsStore.settingsFlow
-                        .map { it.voiceEnabled }
+                        .map { Triple(it.voiceEnabled, it.soundEnabled, it.speechRate) }
                         .distinctUntilChanged()
-                        .collect { pushController.voiceEnabled = it }
+                        .collect { (voice, sound, rate) ->
+                            pushController.voiceEnabled = voice
+                            pushController.promptToneEnabled = sound
+                            pushController.speechRate = rate
+                        }
                 }
                 launch { resumeDutyIfNeeded() }
             }

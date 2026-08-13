@@ -139,7 +139,10 @@ private fun WaveDetailContent(
                         )
                         MtMetric(
                             label = "全程",
-                            value = RiderFormats.distance(wave.wave.planDistanceMeters),
+                            // 0 是「还没规划」，交给 distance() 渲染成「—」而不是「0 m」
+                            value = RiderFormats.distance(
+                                wave.wave.planDistanceMeters?.takeIf { it > 0 },
+                            ),
                             modifier = Modifier.weight(1f),
                         )
                     }

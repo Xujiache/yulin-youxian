@@ -41,6 +41,10 @@ interface RiderTaskApi {
     @POST("api/rider/waves/{waveId}/pickup")
     suspend fun pickupWave(@Path("waveId") waveId: Long, @Body body: TaskTransitionRequest): ApiResponse<List<TaskCard>>
 
+    /** 单任务取货。没有编入波次的单（管理端不建波次指派时会产生）走这条。 */
+    @POST("api/rider/tasks/{taskId}/pickup")
+    suspend fun pickupTask(@Path("taskId") taskId: Long, @Body body: TaskTransitionRequest): ApiResponse<TaskCard>
+
     @POST("api/rider/tasks/{taskId}/depart")
     suspend fun depart(@Path("taskId") taskId: Long, @Body body: TaskTransitionRequest): ApiResponse<TaskCard>
 

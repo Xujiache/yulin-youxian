@@ -363,6 +363,21 @@ public class DeliveryTaskService {
                 null, Map.of(), null);
     }
 
+    /**
+     * 单任务取货。
+     *
+     * 原来只有整波次取货一个接口，而任务是允许不带波次的（管理端批量指派时
+     * createWave=false 就会产生这种单），这类单接了以后永远停在「已接单」，
+     * 骑手点取货没有任何反应。
+     */
+    public TaskCardDto pickup(long riderId, long taskId, TaskActionRequest request) {
+        return riderTransition(riderId, taskId, DeliveryTaskStatus.PICKED_UP, "PICKUP",
+                request == null ? null : request.clientEventId(),
+                request == null ? null : request.clientEventAt(),
+                request == null ? null : request.location(),
+                null, Map.of(), null);
+    }
+
     public TaskCardDto deliver(long riderId, long taskId, DeliverRequest request) {
         Map<String, Object> detail = new LinkedHashMap<>();
         detail.put("receiveMethod", request == null ? null : request.receiveMethod());
@@ -872,7 +887,8 @@ public class DeliveryTaskService {
         TaskOperator operator = TaskOperator.admin(operatorName);
         String resolution = resolutionType == null ? "" : resolutionType.trim().toUpperCase();
         DeliveryTaskStatus target = switch (resolution) {
-            case "CONTINUE", "IGNORE" -> DeliveryTaskStatus.DELIVERING;
+            // 恢复到进入异常之前的那一步，而不是一律推到「配送中」
+            case "CONTINUE", "IGNORE" -> resumeStatusOf(taskId);
             case "RETURN" -> DeliveryTaskStatus.RETURNED;
             case "CANCEL" -> DeliveryTaskStatus.CANCELLED;
             default -> null;
@@ -902,6 +918,42 @@ public class DeliveryTaskService {
         });
         orderStatusBridge.syncPendingForTask(taskId);
         afterTransitionCommit(updated, target);
+    }
+
+    /**
+     * 异常解除后该回到哪一步。
+     *
+     * 取最后一次「转入 EXCEPTION」事件记录的来源状态。取不到或来源已经不是中间态时
+     * 退回 DELIVERING —— 这是原来的行为，作为兜底仍然安全。
+     */
+    private DeliveryTaskStatus resumeStatusOf(long taskId) {
+        DeliveryTaskStatus fallback = DeliveryTaskStatus.DELIVERING;
+        List<DeliveryTaskEvent> events = eventDao.findByTaskId(taskId);
+        for (int i = events.size() - 1; i >= 0; i--) {
+            DeliveryTaskEvent event = events.get(i);
+            if (!DeliveryTaskStatus.EXCEPTION.name().equals(event.toStatus())) {
+                continue;
+            }
+            // enterException 还会补记一条 EXCEPTION -> EXCEPTION 的说明事件，
+            // 它不是真正的转入，读它只会拿到 EXCEPTION 自己。
+            if (DeliveryTaskStatus.EXCEPTION.name().equals(event.fromStatus())) {
+                continue;
+            }
+            DeliveryTaskStatus from = parseStatus(event.fromStatus());
+            return from != null && from.isResumable() ? from : fallback;
+        }
+        return fallback;
+    }
+
+    private static DeliveryTaskStatus parseStatus(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        try {
+            return DeliveryTaskStatus.valueOf(value.trim());
+        } catch (IllegalArgumentException ignored) {
+            return null;
+        }
     }
 
     public DeliveryTask requireTask(long taskId) {

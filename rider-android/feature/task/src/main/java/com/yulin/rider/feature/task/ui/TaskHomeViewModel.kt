@@ -4,6 +4,8 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.yulin.rider.core.common.RiderResult
+import com.yulin.rider.feature.task.data.SyncFailure
+import com.yulin.rider.feature.task.data.SyncFailureLog
 import com.yulin.rider.feature.task.data.TaskBoard
 import com.yulin.rider.feature.task.data.TaskRepository
 import com.yulin.rider.feature.task.data.TaskSection
@@ -21,11 +23,14 @@ data class TaskHomeUiState(
     val notice: String? = null,
     val pendingSyncCount: Int = 0,
     val hasSyncFailure: Boolean = false,
+    /** 被服务端最终拒绝、已经回滚掉的动作。必须让骑手看见，否则单子会悄悄退回去。 */
+    val syncFailures: List<SyncFailure> = emptyList(),
 )
 
 class TaskHomeViewModel(app: Application) : AndroidViewModel(app) {
 
     private val repository = TaskRepository.get(app)
+    private val failureLog = SyncFailureLog.get(app)
     private val _state = MutableStateFlow(TaskHomeUiState(loading = true))
     val state: StateFlow<TaskHomeUiState> = _state.asStateFlow()
 
@@ -55,8 +60,15 @@ class TaskHomeViewModel(app: Application) : AndroidViewModel(app) {
                 )
             }
         }
+        viewModelScope.launch {
+            failureLog.failures.collect { failures ->
+                _state.value = _state.value.copy(syncFailures = failures)
+            }
+        }
         refresh()
     }
+
+    fun dismissFailure(clientEventId: String) = failureLog.dismiss(clientEventId)
 
     fun selectSection(section: TaskSection) {
         sectionPickedByRider = true
@@ -87,6 +99,8 @@ class TaskHomeViewModel(app: Application) : AndroidViewModel(app) {
     fun depart(taskId: Long) = viewModelScope.launch { repository.depart(taskId) }
 
     fun arrive(taskId: Long) = viewModelScope.launch { repository.arrive(taskId) }
+
+    fun pickupTask(taskId: Long) = viewModelScope.launch { repository.pickupTask(taskId) }
 
     private fun firstNonEmpty(board: TaskBoard): TaskSection =
         TaskSection.entries.firstOrNull { board.count(it) > 0 } ?: TaskSection.IN_PROGRESS

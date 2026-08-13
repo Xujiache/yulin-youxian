@@ -82,6 +82,11 @@ public class RiderTaskController extends DeliveryTaskControllerSupport {
         return ApiResponse.ok(taskService.transfer(CurrentRiderContext.riderId(), taskId, request));
     }
 
+    @PostMapping("/tasks/{taskId}/pickup")
+    public ApiResponse<TaskCardDto> pickupTask(@PathVariable Long taskId, @RequestBody(required = false) TaskActionRequest request) {
+        return ApiResponse.ok(taskService.pickup(CurrentRiderContext.riderId(), taskId, request));
+    }
+
     @PostMapping("/waves/{waveId}/pickup")
     public ApiResponse<List<TaskCardDto>> pickup(@PathVariable Long waveId, @RequestBody(required = false) PickupRequest request) {
         return ApiResponse.ok(taskService.pickupWave(CurrentRiderContext.riderId(), waveId, request));

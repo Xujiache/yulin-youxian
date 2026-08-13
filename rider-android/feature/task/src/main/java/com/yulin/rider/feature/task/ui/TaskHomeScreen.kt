@@ -92,6 +92,7 @@ fun TaskHomeScreen(
         dutyBar = shiftHeader,
         onRefresh = viewModel::refresh,
         onRetrySync = viewModel::retrySync,
+        onDismissFailure = viewModel::dismissFailure,
         onSelectSection = viewModel::selectSection,
         onOpenTask = onOpenTask,
         onOpenWave = onOpenWave,
@@ -100,9 +101,10 @@ fun TaskHomeScreen(
                 NextStep.ACCEPT -> viewModel.accept(task.taskId)
                 NextStep.DEPART -> viewModel.depart(task.taskId)
                 NextStep.ARRIVE -> viewModel.arrive(task.taskId)
-                NextStep.PICKUP -> task.waveId?.let(onOpenPickup) ?: onOpenTask(task.taskId)
+                // 有波次进逐单核对页，没波次的单直接取货 —— 之前会被丢回详情页然后无事发生
+                NextStep.PICKUP -> task.waveId?.let(onOpenPickup) ?: viewModel.pickupTask(task.taskId)
                 NextStep.DELIVER -> onOpenDeliver(task.taskId)
-                NextStep.NONE -> Unit
+                NextStep.EXCEPTION_PENDING, NextStep.NONE -> Unit
             }
         },
     )
@@ -120,6 +122,7 @@ internal fun TaskHomeContent(
     dutyBar: @Composable (onRefresh: () -> Unit) -> Unit = {},
     onRefresh: () -> Unit = {},
     onRetrySync: () -> Unit = {},
+    onDismissFailure: (String) -> Unit = {},
     onSelectSection: (TaskSection) -> Unit = {},
     onOpenTask: (Long) -> Unit = {},
     onOpenWave: (Long) -> Unit = {},
@@ -184,6 +187,21 @@ internal fun TaskHomeContent(
 
         state.notice?.let {
             MtInfoBar(text = it, tone = StatusTone.WARNING, icon = FreshIconType.OFFLINE)
+        }
+        // 被服务端拒绝并已回滚的动作。这条必须排在最前面：
+        // 它意味着骑手以为做完的事情其实没做成，比「离线中」严重得多。
+        state.syncFailures.forEach { failure ->
+            MtInfoBar(
+                text = buildString {
+                    failure.taskNo?.let { append(it).append(" ") }
+                    append(failure.actionLabel)
+                    append("未成功：")
+                    append(failure.message)
+                },
+                tone = StatusTone.DANGER,
+                icon = FreshIconType.ERROR,
+                onDismiss = { onDismissFailure(failure.clientEventId) },
+            )
         }
         when {
             state.hasSyncFailure -> MtInfoBar(
@@ -333,11 +351,15 @@ private fun WaveHeader(wave: WaveUi, onClick: () -> Unit) {
                     color = RiderColors.Ink,
                 )
                 Text(
+                    // 路径规划没跑出来时后端给的是 0，不是「零距离」。这时候整条摘要都别编，
+                    // 直说没规划，免得骑手按「计划 0 m」去估时间。
                     text = buildList {
-                        add("计划 ${RiderFormats.distance(group.planDistanceMeters)}")
-                        group.planDurationSeconds?.let { add(RiderFormats.duration(it)) }
+                        group.planDistanceMeters?.takeIf { it > 0 }
+                            ?.let { add("计划 ${RiderFormats.distance(it)}") }
+                        group.planDurationSeconds?.takeIf { it > 0 }
+                            ?.let { add(RiderFormats.duration(it)) }
                         RiderFormats.hourMinute(group.planReturnAt)?.let { add("预计 $it 回店") }
-                    }.joinToString(" · "),
+                    }.joinToString(" · ").ifEmpty { "路线待规划" },
                     style = MaterialTheme.typography.bodySmall.tabularFigures(),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

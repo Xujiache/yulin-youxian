@@ -80,6 +80,14 @@ class ExceptionReportViewModel(app: Application, private val taskId: Long) : And
         _state.value = _state.value.copy(selected = kind, error = null)
     }
 
+    /**
+     * 选错了重新挑。已拍的照片和已写的说明留着 ——
+     * 现场还是那个现场,换个类型不代表要重拍一遍。
+     */
+    fun clearSelection() {
+        _state.value = _state.value.copy(selected = null, error = null)
+    }
+
     fun updateDescription(text: String) {
         _state.value = _state.value.copy(description = text)
     }

@@ -3,10 +3,12 @@ package com.yulin.rider.core.datastore
 import android.content.Context
 import androidx.datastore.preferences.core.edit
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
@@ -74,6 +76,10 @@ class RiderTokenStore @Inject constructor(
             }.also { cached = it }
         })
     }
+        // 解密走 Android Keystore，每次会话读取都要解 access + refresh 两个令牌。
+        // 不搬到 IO 线程的话，启动页、MainActivity、导航图三处并发读取全压在主线程上，
+        // Keystore 一慢（模拟器上尤其明显）整个启动就停在加载页不动了。
+        .flowOn(Dispatchers.IO)
 
     suspend fun current(): RiderSession? = sessionFlow.first()
 

@@ -100,9 +100,13 @@ class TaskRepository private constructor(private val appContext: Context) {
         return apis.caller.runCatchingApi {
             // status=null 只返回待接单 + 进行中(后端 riderTasks 的 default 分支),已完成要单独取一次
             val active = apis.caller.data { apis.task.getTasks(null) }
-            val done = runCatching {
+            val doneResult = runCatching {
                 apis.caller.data { apis.task.getTasks(TaskSection.TODAY_DONE.apiValue) }
-            }.getOrDefault(TaskList())
+            }
+            val done = doneResult.getOrDefault(TaskList())
+            // 已完成这一路单独失败时（超时最常见）不能按「服务端说没有」处理，
+            // 否则下面的 pruneExcept 会把本机所有已完成单删掉，骑手以为白干了一天。
+            val doneReliable = doneResult.isSuccess
 
             // 路线整份缓存下来:「本单里程」和地图 polyline 都从它出,断网时仍在
             val routeJsons = mutableMapOf<Long, String>()
@@ -144,7 +148,12 @@ class TaskRepository private constructor(private val appContext: Context) {
             val dirty = rows.mapNotNull { row ->
                 taskDao.findTask(row.taskId)?.takeIf { it.localDirty }?.taskId
             }.toSet()
-            taskDao.pruneExcept(rows.map { it.taskId })
+            if (doneReliable) {
+                taskDao.pruneExcept(rows.map { it.taskId })
+            } else {
+                // 只清理服务端确认还在进行中的那部分，已完成的先留着，下一轮再对齐
+                taskDao.pruneExcept(rows.map { it.taskId } + taskDao.findFinishedTaskIds())
+            }
             taskDao.upsert(rows.filterNot { it.taskId in dirty })
             waveDao.upsert(waveRows.distinctBy { it.waveId })
         }
@@ -175,11 +184,22 @@ class TaskRepository private constructor(private val appContext: Context) {
 
     suspend fun arrive(taskId: Long) = transition(PendingActionTypes.ARRIVE, taskId = taskId)
 
+    /** 单任务取货。没有波次的单走这条，否则会一直卡在「已接单」。 */
+    suspend fun pickupTask(taskId: Long) = transition(PendingActionTypes.PICKUP, taskId = taskId)
+
     suspend fun pickupWave(waveId: Long, checkedTaskIds: List<Long>, actualPackageCount: Int) {
+        // 乐观更新只能覆盖服务端真正会改的那几单：勾选的、且当前是「已接单」的。
+        // 原来是整波次一把梭，结果没接单的、已经送达的都会被本地改成「已取货」，
+        // 而服务端根本没动它们，界面就和真实状态脱节了。
+        val inWave = taskDao.findByWave(waveId)
+        val target = inWave
+            .filter { checkedTaskIds.isEmpty() || it.taskId in checkedTaskIds }
+            .filter { it.status == TaskStatus.ACCEPTED }
+            .map { it.taskId }
         transition(
             actionType = PendingActionTypes.PICKUP,
             waveId = waveId,
-            optimisticTaskIds = taskDao.findByWave(waveId).map { it.taskId },
+            optimisticTaskIds = target,
             extra = { it.copy(checkedTaskIds = checkedTaskIds, actualPackageCount = actualPackageCount) },
         )
     }

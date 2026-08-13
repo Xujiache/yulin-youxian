@@ -161,7 +161,9 @@ public class OrderStatusBridge {
                     taskStatus.name(),
                     "FAILED",
                     TaskOperator.system(),
-                    sourceEventId == null ? "订单状态同步失败，需重试" : String.valueOf(sourceEventId),
+                    // reason 会原样显示在骑手端的履约进度里，只能放人话。
+                    // sourceEventId 是内部关联用的，detail_json 里已经有了，不要再塞进这里。
+                    "订单状态同步失败，系统会自动重试",
                     null,
                     null,
                     null,

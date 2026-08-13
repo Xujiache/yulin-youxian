@@ -28,8 +28,10 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.viewmodel.CreationExtras
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewModelScope
@@ -43,11 +45,11 @@ import com.yulin.rider.core.designsystem.MtBottomActionBar
 import com.yulin.rider.core.designsystem.MtCard
 import com.yulin.rider.core.designsystem.MtDivider
 import com.yulin.rider.core.designsystem.MtMetric
-import com.yulin.rider.core.designsystem.MtPrimaryButton
 import com.yulin.rider.core.designsystem.MtScaffold
 import com.yulin.rider.core.designsystem.MtTag
 import com.yulin.rider.core.designsystem.RiderColors
 import com.yulin.rider.core.designsystem.RiderTheme
+import com.yulin.rider.core.designsystem.SlideToConfirm
 import com.yulin.rider.core.designsystem.StatusTone
 import com.yulin.rider.core.designsystem.tabularFigures
 import com.yulin.rider.feature.task.data.TaskCardUi
@@ -59,11 +61,20 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
-class PickupViewModel(app: Application, private val waveId: Long) : AndroidViewModel(app) {
+class PickupViewModel(
+    app: Application,
+    private val waveId: Long,
+    private val savedStateHandle: SavedStateHandle,
+) : AndroidViewModel(app) {
     private val repository = TaskRepository.get(app)
     private val _wave = MutableStateFlow<WaveUi?>(null)
     val wave: StateFlow<WaveUi?> = _wave
-    private val _checked = MutableStateFlow<Set<Long>>(emptySet())
+
+    // 逐单核对的勾选要扛住进程重建。骑手在门店一件件核对到第八单时被系统杀掉，
+    // 回来发现全部清零、得从头再核一遍，是最招人烦的一种数据丢失。
+    private val _checked = MutableStateFlow(
+        savedStateHandle.get<LongArray>(KEY_CHECKED)?.toSet() ?: emptySet()
+    )
     val checked: StateFlow<Set<Long>> = _checked
 
     init {
@@ -71,18 +82,30 @@ class PickupViewModel(app: Application, private val waveId: Long) : AndroidViewM
         viewModelScope.launch { repository.refresh() }
     }
 
+    private fun updateChecked(next: Set<Long>) {
+        _checked.value = next
+        savedStateHandle[KEY_CHECKED] = next.toLongArray()
+    }
+
     fun toggle(taskId: Long) {
-        _checked.value = if (taskId in _checked.value) _checked.value - taskId else _checked.value + taskId
+        updateChecked(
+            if (taskId in _checked.value) _checked.value - taskId else _checked.value + taskId
+        )
     }
 
     fun checkAll(taskIds: List<Long>) {
-        _checked.value = if (_checked.value.containsAll(taskIds)) emptySet() else taskIds.toSet()
+        updateChecked(if (_checked.value.containsAll(taskIds)) emptySet() else taskIds.toSet())
     }
 
     fun confirmPickup(onDone: () -> Unit) = viewModelScope.launch {
         val packages = _wave.value?.stops?.sumOf { it.card.packageCount.coerceAtLeast(1) } ?: 0
         repository.pickupWave(waveId, _checked.value.toList(), packages)
+        savedStateHandle.remove<LongArray>(KEY_CHECKED)
         onDone()
+    }
+
+    private companion object {
+        const val KEY_CHECKED = "pickup_checked_task_ids"
     }
 }
 
@@ -147,13 +170,13 @@ private fun PickupContent(
             MtBottomActionBar(
                 hint = if (allChecked) null else "还有 ${stops.size - checkedCount} 单未核对",
             ) {
-                MtPrimaryButton(
-                    text = if (allChecked) "我已取货" else "请先逐单核对",
+                SlideToConfirm(
+                    text = if (allChecked) "滑动确认已取货" else "请先逐单核对",
                     action = MtAction.PICKUP,
                     modifier = Modifier.weight(1f),
                     enabled = allChecked,
                     disabledReason = "需要核对本趟全部订单",
-                    onClick = onConfirm,
+                    onConfirm = onConfirm,
                 )
             }
         },
@@ -306,7 +329,7 @@ private fun pickupFactory(waveId: Long) = object : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>, extras: CreationExtras): T {
         val app = extras[ViewModelProvider.AndroidViewModelFactory.APPLICATION_KEY] as Application
-        return PickupViewModel(app, waveId) as T
+        return PickupViewModel(app, waveId, extras.createSavedStateHandle()) as T
     }
 }
 

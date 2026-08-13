@@ -18,14 +18,32 @@ class RiderLocalDataCleaner @Inject constructor(
     private val database: RiderDatabase,
 ) {
 
-    suspend fun clearAccountData() {
+    /**
+     * @param keepUnsyncedWork 保留尚未同步的动作与凭证照片。
+     *
+     * 令牌过期、主动登出都属于「会话结束」，不等于换人。骑手可能刚在地下车库
+     * 离线送完三单，此时把队列和照片删掉，重新登录同一个账号也补不回来 ——
+     * 这些是已经发生的配送事实，不能因为登录态掉了就丢。
+     *
+     * 真正的账号切换由 AuthRepository.clearIfAccountChanged() 在登录成功后判定，
+     * 那时才会带 false 调用，做一次彻底清理。
+     */
+    suspend fun clearAccountData(keepUnsyncedWork: Boolean = false) {
+        val hasUnsynced = keepUnsyncedWork && database.pendingActionDao().getAll().isNotEmpty()
         database.withTransaction {
-            database.pendingActionDao().clear()
-            database.taskCacheDao().clear()
-            database.waveCacheDao().clear()
+            if (!hasUnsynced) {
+                database.pendingActionDao().clear()
+                database.evidenceUploadDao().clear()
+            }
+            // 任务与波次缓存是服务端数据的副本，重新登录会拉到新的，留着反而可能显示旧单。
+            // 但队列里的动作靠 taskId 引用任务，未同步时保留缓存，横幅才能说清是哪一单。
+            if (!hasUnsynced) {
+                database.taskCacheDao().clear()
+                database.waveCacheDao().clear()
+            }
             database.locationBufferDao().clear()
-            database.evidenceUploadDao().clear()
         }
+        if (hasUnsynced) return
         withContext(Dispatchers.IO) {
             EVIDENCE_DIRECTORIES.forEach { name ->
                 runCatching { File(context.filesDir, name).deleteRecursively() }

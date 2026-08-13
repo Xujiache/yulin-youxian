@@ -63,8 +63,20 @@ interface PendingActionDao {
     )
     suspend fun claimHeadOfEachGroup(limit: Int): List<PendingActionEntity>
 
+    /**
+     * 按任务集合取动作。终态失败回滚只能波及「同一批被乐观改过的任务」，
+     * 不能像 [findByWave] 那样把整波次其他单的动作也算进去。
+     */
+    @Query(
+        "SELECT * FROM pending_action WHERE taskId IN (:taskIds) ORDER BY createdAt ASC, rowid ASC"
+    )
+    suspend fun findByTasks(taskIds: List<Long>): List<PendingActionEntity>
+
     @Query("DELETE FROM pending_action WHERE clientEventId = :clientEventId")
     suspend fun delete(clientEventId: String)
+
+    @Query("DELETE FROM pending_action WHERE clientEventId IN (:clientEventIds)")
+    suspend fun deleteAll(clientEventIds: List<String>)
 
     @Query("DELETE FROM pending_action WHERE taskId = :taskId")
     suspend fun deleteByTask(taskId: Long)

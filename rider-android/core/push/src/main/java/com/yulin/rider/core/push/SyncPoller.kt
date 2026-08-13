@@ -3,6 +3,7 @@ package com.yulin.rider.core.push
 import android.util.Log
 import com.yulin.rider.core.model.RiderMessage
 import com.yulin.rider.core.model.SyncResponse
+import com.yulin.rider.core.model.TaskCard
 import com.yulin.rider.core.network.api.RiderSyncApi
 import com.yulin.rider.core.network.api.RiderTaskApi
 import kotlinx.coroutines.CancellationException
@@ -117,13 +118,17 @@ class SyncPoller @Inject constructor(
         if ((pendingGrew || versionChanged || restoreUnacknowledged) &&
             data.pendingAcceptCount > 0
         ) {
-            val taskId = firstPendingTaskId()
-            if (taskId != null) {
+            val pending = firstPendingTask()
+            if (pending != null) {
                 alertManager.raise(
                     NewTaskAlert(
-                        taskId = taskId,
+                        taskId = pending.taskId,
                         taskVersion = data.taskVersion,
                         taskCount = data.pendingAcceptCount,
+                        // 带上小区和距离才有决策价值：只说「您有 1 个新订单」
+                        // 骑手还是得掏手机看，语音就白播了
+                        areaLabel = pending.areaLabel,
+                        distanceMeters = pending.distanceFromRiderMeters,
                         source = AlertSource.POLLING,
                     )
                 )
@@ -140,14 +145,13 @@ class SyncPoller @Inject constructor(
         data.urgentMessages.filter { it.needVoice }.forEach { announce(it) }
     }
 
-    private suspend fun firstPendingTaskId(): Long? {
+    private suspend fun firstPendingTask(): TaskCard? {
         val response = taskApi.getTasks(null)
         if (response.code != 0) return null
         val tasks = response.data ?: return null
         return (tasks.waves.asSequence().flatMap { it.stops.asSequence() } +
             tasks.standaloneTasks.asSequence())
             .firstOrNull { it.status == "ASSIGNED" || it.status == "PENDING_ACCEPT" }
-            ?.taskId
     }
 
     private suspend fun announce(message: RiderMessage) {
@@ -158,7 +162,8 @@ class SyncPoller @Inject constructor(
         if (text.isBlank()) return
         notifier.notifyUrgent(message.title ?: "紧急提醒", message.content.orEmpty())
         voice.playPromptTone()
-        voice.speak(text)
+        // 一次 sync 最多带 5 条紧急消息，必须排队播；用打断的话只有最后一条能听全
+        voice.speak(text, interrupt = false)
     }
 
     private companion object {

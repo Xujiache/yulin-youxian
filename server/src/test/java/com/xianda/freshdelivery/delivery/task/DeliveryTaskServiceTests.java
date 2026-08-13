@@ -560,6 +560,35 @@ class DeliveryTaskServiceTests {
     }
 
     @Test
+    void continueRestoresTheStatusTheTaskHadBeforeTheException() {
+        // 到达后才上报的异常，解除时要回到「已到达」。
+        // 一律推成「配送中」等于把已经到达的事实抹掉，骑手还得再滑一次到达。
+        long taskId = deliveringTask(1001L, "XD001");
+        harness.taskService.arrive(RIDER_ID, taskId, new TaskActionRequest("evt-arrive-x", null, null));
+        assertEquals("ARRIVED", harness.taskStatus(taskId));
+
+        harness.taskService.enterException(taskId, 88L);
+        harness.taskService.resolveException(taskId, "CONTINUE", "顾客已联系上", "调度员A");
+
+        assertEquals("ARRIVED", harness.taskStatus(taskId));
+    }
+
+    @Test
+    void continueRestoresAcceptedWhenExceptionWasRaisedBeforePickup() {
+        // 接单后、取货前上报的异常，解除后要回到「已接单」，
+        // 不能跳过取货直接变成配送中，否则取货时间和交接耗时全是空的。
+        long taskId = pendingTask(1001L, "XD001");
+        harness.taskService.assignTask(taskId, RIDER_ID, null, "AUTO", 0.9, null);
+        harness.taskService.accept(RIDER_ID, taskId, new TaskActionRequest("evt-acc-x", null, null));
+        assertEquals("ACCEPTED", harness.taskStatus(taskId));
+
+        harness.taskService.enterException(taskId, 89L);
+        harness.taskService.resolveException(taskId, "CONTINUE", "货已补齐", "调度员A");
+
+        assertEquals("ACCEPTED", harness.taskStatus(taskId));
+    }
+
+    @Test
     void autoMarkArrivedIsIdempotent() {
         long taskId = deliveringTask(1001L, "XD001");
 

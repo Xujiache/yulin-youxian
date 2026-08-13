@@ -47,7 +47,26 @@ class PushController @Inject constructor(
         get() = voice.speechEnabled
         set(value) {
             voice.speechEnabled = value
+            // 关掉时立刻掐断正在读的那句，否则骑手关了开关还要再听十几秒
+            if (!value) voice.stopSpeaking()
         }
+
+    /** 提示音开关,对应设置页的「提示音」。与语音播报独立。 */
+    var promptToneEnabled: Boolean
+        get() = voice.promptToneEnabled
+        set(value) {
+            voice.promptToneEnabled = value
+        }
+
+    /** 播报语速倍率,对应设置页的「播报语速」。 */
+    var speechRate: Float
+        get() = voice.speechRate
+        set(value) {
+            voice.speechRate = value
+        }
+
+    /** 设置页「试听」。返回 false 表示这台手机没有可用中文引擎,只响了提示音。 */
+    suspend fun previewVoice(): Boolean = voice.preview()
 
     /** App 启动时调用一次。无 AppKey 时静默跳过极光,不影响轮询通道。 */
     fun initOnAppStart(debug: Boolean) {

@@ -26,7 +26,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.semantics.Role
@@ -34,7 +33,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -93,6 +92,7 @@ fun ExceptionReportScreen(
         modifier = modifier,
         onBack = onBack,
         onSelect = viewModel::select,
+        onReselect = viewModel::clearSelection,
         onTakePhoto = { cameraOpen = true },
         onRemovePhoto = viewModel::removePhoto,
         onDescriptionChange = viewModel::updateDescription,
@@ -106,6 +106,7 @@ private fun ExceptionReportContent(
     modifier: Modifier = Modifier,
     onBack: () -> Unit = {},
     onSelect: (ExceptionKind) -> Unit = {},
+    onReselect: () -> Unit = {},
     onTakePhoto: () -> Unit = {},
     onRemovePhoto: (String) -> Unit = {},
     onDescriptionChange: (String) -> Unit = {},
@@ -153,17 +154,10 @@ private fun ExceptionReportContent(
                 ),
             verticalArrangement = Arrangement.spacedBy(FreshSpacing.Xs),
         ) {
-            MtCard {
-                MtSectionTitle("发生了什么？")
-                MtDivider()
-                ExceptionKind.entries.forEachIndexed { index, kind ->
-                    if (index > 0) MtDivider()
-                    KindRow(
-                        kind = kind,
-                        selected = kind == selected,
-                        onClick = { onSelect(kind) },
-                    )
-                }
+            if (selected == null) {
+                KindPicker(onSelect = onSelect)
+            } else {
+                SelectedKindCard(kind = selected, onReselect = onReselect)
             }
 
             if (selected != null) {
@@ -225,47 +219,158 @@ private fun ExceptionReportContent(
     }
 }
 
-/** 问题类型逐行排列。13 类用两列网格会把文案挤成两行，竖排一行一条更好扫。 */
+/**
+ * 分组折叠的类型选择器。
+ *
+ * 13 类平铺要占满整屏,骑手得滚动着找。两列网格试过不行 ——
+ * 「缺斤少两争议」这种六字标签在放大字号下会挤成两行,反而更难扫。
+ * 所以按「谁的问题」分三组,一次只展开一组,收起时只有四行。
+ *
+ * 「顾客与地址」默认展开:生鲜最后一公里里,联系不上和门禁进不去占了绝大多数,
+ * 让最常见的情况保持一次点击,别为了省长度把所有人都变成两次点击。
+ */
+@Composable
+private fun KindPicker(onSelect: (ExceptionKind) -> Unit) {
+    var expanded by remember { mutableStateOf<ExceptionGroup?>(ExceptionGroup.CUSTOMER) }
+
+    MtCard {
+        MtSectionTitle("发生了什么？")
+        ExceptionGroup.entries.forEach { group ->
+            MtDivider()
+            // 「其他」只有一项,套个折叠纯属多让骑手点一下
+            if (group.kinds.size == 1) {
+                KindRow(kind = group.kinds.first(), onClick = { onSelect(group.kinds.first()) })
+                return@forEach
+            }
+            val open = expanded == group
+            GroupRow(group = group, expanded = open) {
+                expanded = if (open) null else group
+            }
+            if (open) {
+                group.kinds.forEach { kind ->
+                    KindRow(kind = kind, indented = true, onClick = { onSelect(kind) })
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun GroupRow(
+    group: ExceptionGroup,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(role = Role.Button, onClick = onToggle)
+            .semantics {
+                contentDescription = if (expanded) {
+                    "${group.label}，已展开，点按收起"
+                } else {
+                    "${group.label}，包含${group.summary}，点按展开"
+                }
+            }
+            .padding(horizontal = FreshSpacing.Sm, vertical = FreshSpacing.Sm),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(FreshSpacing.Sm),
+    ) {
+        FreshIcon(group.icon, contentDescription = null, tint = RiderColors.Ink, size = 20.dp)
+        Column(Modifier.weight(1f)) {
+            Text(
+                text = group.label,
+                style = MaterialTheme.typography.titleSmall,
+                color = RiderColors.Ink,
+            )
+            // 收起时也要看得出里面装了什么，否则只能靠猜着点开
+            if (!expanded) {
+                Text(
+                    text = group.summary,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+        FreshIcon(
+            if (expanded) FreshIconType.CHEVRON_DOWN else FreshIconType.CHEVRON_RIGHT,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            size = 18.dp,
+        )
+    }
+}
+
+/** 组内的一条问题。竖排一行一条,比两列网格好扫。 */
 @Composable
 private fun KindRow(
     kind: ExceptionKind,
-    selected: Boolean,
     onClick: () -> Unit,
+    indented: Boolean = false,
 ) {
-    val accent = if (selected) StatusTone.DANGER.toneColor() else RiderColors.Ink
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(role = Role.RadioButton, onClick = onClick)
             .semantics {
                 role = Role.RadioButton
-                this.selected = selected
+                selected = false
                 contentDescription = kind.label
             }
-            .background(if (selected) StatusTone.DANGER.toneContainer() else Color.Transparent)
-            .padding(horizontal = FreshSpacing.Sm, vertical = FreshSpacing.Sm),
+            .padding(
+                start = if (indented) FreshSpacing.Xl else FreshSpacing.Sm,
+                end = FreshSpacing.Sm,
+                top = FreshSpacing.Sm,
+                bottom = FreshSpacing.Sm,
+            ),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(FreshSpacing.Sm),
     ) {
-        FreshIcon(
-            kind.icon,
-            contentDescription = null,
-            tint = accent,
-            size = 20.dp,
-        )
+        FreshIcon(kind.icon, contentDescription = null, tint = RiderColors.Ink, size = 20.dp)
         Text(
             text = kind.label,
             style = MaterialTheme.typography.bodyLarge,
-            color = accent,
+            color = RiderColors.Ink,
             modifier = Modifier.weight(1f),
         )
-        if (selected) {
-            FreshIcon(
-                FreshIconType.CHECK,
-                contentDescription = null,
-                tint = accent,
-                size = 18.dp,
-            )
+    }
+}
+
+/**
+ * 选定之后整个列表收成一行。
+ *
+ * 选完类型就不需要再看另外 12 个了,把它们留在屏幕上只会把拍照和补充说明顶到屏幕外。
+ */
+@Composable
+private fun SelectedKindCard(kind: ExceptionKind, onReselect: () -> Unit) {
+    val accent = StatusTone.DANGER.toneColor()
+    MtCard {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(role = Role.Button, onClick = onReselect)
+                .background(StatusTone.DANGER.toneContainer())
+                .semantics { contentDescription = "已选择${kind.label}，点按重新选择" }
+                .padding(horizontal = FreshSpacing.Sm, vertical = FreshSpacing.Sm),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(FreshSpacing.Sm),
+        ) {
+            FreshIcon(kind.icon, contentDescription = null, tint = accent, size = 20.dp)
+            Column(Modifier.weight(1f)) {
+                Text(
+                    text = kind.label,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = accent,
+                )
+                Text(
+                    text = kind.group.label,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = accent.copy(alpha = 0.75f),
+                )
+            }
+            MtTag("重选", tone = StatusTone.DANGER)
         }
     }
 }
@@ -418,6 +523,12 @@ private fun ExceptionResultView(
 }
 
 @Preview(name = "异常 · 选择类型", showBackground = true)
+@Composable
+private fun ExceptionPickerPreview() {
+    RiderTheme { ExceptionReportContent(ExceptionReportUiState()) }
+}
+
+@Preview(name = "异常 · 已选中", showBackground = true)
 @Composable
 private fun ExceptionReportPreview() {
     RiderTheme {

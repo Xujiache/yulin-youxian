@@ -27,7 +27,10 @@ class DeliveryTaskStateMachineTests {
             DeliveryTaskStatus.DELIVERING, Set.of(DeliveryTaskStatus.ARRIVED, DeliveryTaskStatus.DELIVERED,
                     DeliveryTaskStatus.EXCEPTION),
             DeliveryTaskStatus.ARRIVED, Set.of(DeliveryTaskStatus.DELIVERED, DeliveryTaskStatus.EXCEPTION),
-            DeliveryTaskStatus.EXCEPTION, Set.of(DeliveryTaskStatus.DELIVERING, DeliveryTaskStatus.RETURNED,
+            // 异常解除后要能回到进入异常之前的那一步：接单前上报的异常不该被推成配送中，
+            // 否则接单、取货两个环节被跳过，取货时间和交接耗时全部为空。
+            DeliveryTaskStatus.EXCEPTION, Set.of(DeliveryTaskStatus.ACCEPTED, DeliveryTaskStatus.PICKED_UP,
+                    DeliveryTaskStatus.DELIVERING, DeliveryTaskStatus.ARRIVED, DeliveryTaskStatus.RETURNED,
                     DeliveryTaskStatus.CANCELLED),
             DeliveryTaskStatus.DELIVERED, Set.of(),
             DeliveryTaskStatus.RETURNED, Set.of(),

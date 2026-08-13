@@ -34,6 +34,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
@@ -72,6 +73,7 @@ import com.yulin.rider.core.model.GeoPoint
 import com.yulin.rider.core.network.ApiCaller
 import com.yulin.rider.core.network.api.RiderExceptionApi
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.MultipartBody
@@ -234,10 +236,25 @@ internal fun ExceptionCamera(
         return
     }
 
+    val scope = rememberCoroutineScope()
     val controller = remember { LifecycleCameraController(context) }
+    var bindFailed by remember { mutableStateOf(false) }
     DisposableEffect(lifecycleOwner) {
-        controller.bindToLifecycle(lifecycleOwner)
-        onDispose { controller.unbind() }
+        // 同送达拍照页：绑定失败在组合期抛出会直接崩掉 App，降级成说明屏
+        runCatching { controller.bindToLifecycle(lifecycleOwner) }
+            .onFailure { bindFailed = true }
+        onDispose { runCatching { controller.unbind() } }
+    }
+
+    if (bindFailed) {
+        ExceptionCameraPermissionContent(
+            state = CameraPermissionState.NO_CAMERA,
+            modifier = modifier,
+            onRequest = {},
+            onOpenSettings = {},
+            onCancel = onCancel,
+        )
+        return
     }
 
     Box(modifier = modifier.fillMaxSize()) {
@@ -290,18 +307,34 @@ internal fun ExceptionCamera(
                     object : ImageCapture.OnImageCapturedCallback() {
                         override fun onCaptureSuccess(image: ImageProxy) {
                             val rotationDegrees = image.imageInfo.rotationDegrees
-                            val bytes = image.toJpegBytes()
-                            image.close()
-                            val path = ExceptionEvidenceUploader.persistCompressed(
-                                context,
-                                bytes,
-                                rotationDegrees,
-                            )
-                            capturing = false
-                            if (path != null) {
-                                onCaptured(path)
-                            } else {
+                            val bytes = try {
+                                image.toJpegBytes()
+                            } catch (_: RuntimeException) {
+                                null
+                            } finally {
+                                image.close()
+                            }
+                            if (bytes == null) {
+                                capturing = false
                                 captureError = CAMERA_SAVE_FAILED_TEXT
+                                return
+                            }
+                            scope.launch {
+                                val path = withContext(Dispatchers.IO) {
+                                    runCatching {
+                                        ExceptionEvidenceUploader.persistCompressed(
+                                            context,
+                                            bytes,
+                                            rotationDegrees,
+                                        )
+                                    }.getOrNull()
+                                }
+                                capturing = false
+                                if (path != null) {
+                                    onCaptured(path)
+                                } else {
+                                    captureError = CAMERA_SAVE_FAILED_TEXT
+                                }
                             }
                         }
 
@@ -398,8 +431,9 @@ private val CONTROL_SCRIM = Color.Black.copy(alpha = 0.55f)
 /** 报错文字压在黑色取景画面上，用比标准错误红更亮的一档才读得清。 */
 private val CAPTURE_ERROR_TEXT = Color(0xFFFF7875)
 
-private fun ImageProxy.toJpegBytes(): ByteArray {
-    val buffer = planes[0].buffer
+/** 取不到平面就返回 null 而不是越界崩溃 —— 少数 ROM 在切后台瞬间会给出空 planes。 */
+private fun ImageProxy.toJpegBytes(): ByteArray? {
+    val buffer = planes.firstOrNull()?.buffer ?: return null
     val bytes = ByteArray(buffer.remaining())
     buffer.get(bytes)
     return bytes

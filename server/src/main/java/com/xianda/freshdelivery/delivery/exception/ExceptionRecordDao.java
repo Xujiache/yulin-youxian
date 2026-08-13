@@ -106,6 +106,25 @@ public class ExceptionRecordDao {
                 ROW_MAPPER, id).stream().findFirst();
     }
 
+    /** 幂等重放查找。骑手端带同一个 clientEventId 重试时不能再插一条。 */
+    public Optional<DeliveryExceptionRecord> findByClientEventId(String clientEventId) {
+        if (clientEventId == null || clientEventId.isBlank()) {
+            return Optional.empty();
+        }
+        return jdbcTemplate.query(
+                "SELECT " + COLUMNS + " FROM delivery_exception WHERE client_event_id = ?",
+                ROW_MAPPER, clientEventId.trim()).stream().findFirst();
+    }
+
+    public void markClientEventId(long exceptionId, String clientEventId) {
+        if (clientEventId == null || clientEventId.isBlank()) {
+            return;
+        }
+        jdbcTemplate.update(
+                "UPDATE delivery_exception SET client_event_id = ? WHERE id = ?",
+                clientEventId.trim(), exceptionId);
+    }
+
     public List<DeliveryExceptionRecord> findByRider(long riderId, String status, int limit, int offset) {
         List<Object> args = new ArrayList<>();
         StringBuilder sql = new StringBuilder("SELECT " + COLUMNS + " FROM delivery_exception WHERE rider_id = ?");

@@ -54,8 +54,20 @@ enum class NextStep(val actionType: String, val slideText: String) {
     DEPART(PendingActionTypes.DEPART, "滑动确认出发"),
     ARRIVE(PendingActionTypes.ARRIVE, "滑动确认已到达"),
     DELIVER(PendingActionTypes.DELIVER, "滑动确认已送达"),
+
+    /**
+     * 已上报异常，等调度处理。骑手这一侧没有可做的动作。
+     *
+     * 之前异常态被映射成 DELIVER，卡片上明晃晃写着「滑动确认已送达」，
+     * 但服务端的状态机规定 EXCEPTION 只能转 DELIVERING / RETURNED / CANCELLED，
+     * 一滑必然被拒（1011），再被离线队列静默回滚。
+     */
+    EXCEPTION_PENDING("", "异常处理中"),
     NONE("", "已完成"),
     ;
+
+    /** 骑手能主动推进的步骤。其余只是状态展示。 */
+    val actionable: Boolean get() = actionType.isNotEmpty()
 
     companion object {
         fun of(status: String): NextStep = when (status) {
@@ -63,7 +75,8 @@ enum class NextStep(val actionType: String, val slideText: String) {
             TaskStatus.ACCEPTED -> PICKUP
             TaskStatus.PICKED_UP -> DEPART
             TaskStatus.DELIVERING -> ARRIVE
-            TaskStatus.ARRIVED, TaskStatus.EXCEPTION -> DELIVER
+            TaskStatus.ARRIVED -> DELIVER
+            TaskStatus.EXCEPTION -> EXCEPTION_PENDING
             else -> NONE
         }
     }

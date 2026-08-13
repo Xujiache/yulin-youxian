@@ -60,6 +60,7 @@ import com.yulin.rider.core.designsystem.RiderColors
 import com.yulin.rider.core.designsystem.RiderDimens
 import com.yulin.rider.core.designsystem.RiderTextField
 import com.yulin.rider.core.designsystem.RiderTheme
+import com.yulin.rider.core.designsystem.SlideToConfirm
 import com.yulin.rider.core.designsystem.StatusTone
 import com.yulin.rider.core.designsystem.tabularFigures
 import com.yulin.rider.feature.task.data.ReceiveMethod
@@ -70,6 +71,18 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+
+/**
+ * 顾客备注里出现否定词就不预选收货方式，交给骑手自己判断。
+ * 「不要放门口」被当成「放门口」是要担责的。
+ */
+internal fun shouldPreferDoorDelivery(instruction: String?): Boolean {
+    val text = instruction?.trim().orEmpty()
+    if (!text.contains("门口")) return false
+    return DOOR_NEGATIONS.none { text.contains(it) }
+}
+
+private val DOOR_NEGATIONS = listOf("不要", "不能", "别放", "别搁", "勿放", "不放", "禁止")
 
 class DeliverViewModel(
     app: Application,
@@ -168,10 +181,13 @@ fun DeliverScreen(
         delay(800)
         viewModel.setInfoSettled(true)
     }
-    LaunchedEffect(current.card.deliveryInstruction, method) {
-        if (method == ReceiveMethod.FACE_TO_FACE &&
-            current.card.deliveryInstruction?.contains("门口") == true
-        ) {
+    // 按备注预选收货方式，但只在进入这一单时预选一次。
+    //
+    // 原来 key 里带了 method，骑手手动改回「当面签收」会立刻被改回「放门口」，
+    // 想选都选不了。而且只匹配「门口」两个字，「不要放门口」「到门口打电话」
+    // 这类否定句会被当成要放门口 —— 送错方式是要担责的，宁可不猜。
+    LaunchedEffect(current.taskId) {
+        if (shouldPreferDoorDelivery(current.card.deliveryInstruction)) {
             viewModel.setMethod(ReceiveMethod.DOOR)
         }
     }
@@ -237,13 +253,13 @@ private fun DeliverContent(
                 hint = disabledReason,
                 hintTone = if (photos.isEmpty()) StatusTone.DANGER else StatusTone.WARNING,
             ) {
-                MtPrimaryButton(
-                    text = "我已送达",
+                SlideToConfirm(
+                    text = "滑动确认已送达",
                     action = MtAction.DELIVER,
                     modifier = Modifier.weight(1f),
                     enabled = canConfirm,
                     disabledReason = disabledReason,
-                    onClick = onConfirm,
+                    onConfirm = onConfirm,
                 )
             }
         },

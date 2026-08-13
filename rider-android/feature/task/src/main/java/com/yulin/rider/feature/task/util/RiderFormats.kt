@@ -31,6 +31,23 @@ object RiderFormats {
             .getOrNull()
     }
 
+    /**
+     * 履约时间线用。当天的事件只给时分,跨天的补上月日 ——
+     * 一条任务的事件绝大多数发生在同一天,每行都带年月日只会把时间挤成一片噪声。
+     */
+    fun eventTime(serverLocalTime: String?): String? {
+        if (serverLocalTime.isNullOrBlank()) return null
+        return runCatching {
+            val moment = LocalDateTime.parse(serverLocalTime.take(19))
+            val pattern = if (moment.toLocalDate() == LocalDateTime.now(SERVER_ZONE).toLocalDate()) {
+                "HH:mm"
+            } else {
+                "MM-dd HH:mm"
+            }
+            moment.format(DateTimeFormatter.ofPattern(pattern))
+        }.getOrNull()
+    }
+
     /** 距离:1 km 以内用米,颠簸中扫一眼就能读的粒度。 */
     fun distance(meters: Long?): String {
         if (meters == null || meters < 0) return "—"

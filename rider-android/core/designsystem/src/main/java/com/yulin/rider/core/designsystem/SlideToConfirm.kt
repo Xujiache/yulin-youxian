@@ -62,18 +62,25 @@ private val TrackPadding = 6.dp
 /**
  * 全 App 状态流转的唯一入口(06 §3.5)。
  *
+ * 取货、送达这类动作不可撤销,用点击太容易误触 —— 骑手一手拎货一手操作,
+ * 口袋里、手套上、车上颠簸都会点到。所以这里要求一次真实的横向滑动。
+ *
+ * 外观与 [MtPrimaryButton] 对齐:同样的实底 + 同样的高度,只是左端多一个白色滑块,
+ * 骑手不需要重新学习「哪个是主行动」。[action] 决定配色,与地图路线颜色一一对应。
+ *
  * 手感约定:
  * - 水平拖动 ≥ 控件宽度 60% 才算数,松手未达阈值以弹簧动画弹回原位;
+ * - 轨道整条都能拖,不必精准按住滑块 —— 戴手套时按不准圆点;
  * - 达阈值瞬间立刻震动 + 出声并回调 [onConfirm],滑块动画在其后播放,不让骑手等动画;
  * - 触发后自动禁用防重复提交。[text] 变化视为「换了一个动作」,滑块重新武装。
  */
 @Composable
 fun SlideToConfirm(
     text: String,
+    action: MtAction,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     disabledReason: String? = null,
-    tone: StatusTone = StatusTone.SUCCESS,
     onConfirm: () -> Unit,
 ) {
     val density = LocalDensity.current
@@ -96,8 +103,8 @@ fun SlideToConfirm(
     val thresholdPx = (trackWidthPx * CONFIRM_FRACTION).coerceAtMost(maxOffsetPx)
 
     val active = enabled && !confirmed
-    val disabledColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
-    val accent = if (active) tone.solidColor() else disabledColor
+    val trackColor = if (active) action.fillColor() else MaterialTheme.colorScheme.surfaceContainerHighest
+    val labelColor = if (active) action.contentColor() else RiderNeutral.InkDisabled
     val progress = if (maxOffsetPx > 0f) (offsetX.value / maxOffsetPx).coerceIn(0f, 1f) else 0f
 
     LaunchedEffect(enabled) {
@@ -109,9 +116,56 @@ fun SlideToConfirm(
             .fillMaxWidth()
             .height(trackHeight)
             .onSizeChanged { trackWidthPx = it.width }
-            .clip(RoundedCornerShape(trackHeight / 2))
-            .background(accent.copy(alpha = if (active) 0.12f else 0.08f))
-            .border(1.dp, accent.copy(alpha = 0.45f), RoundedCornerShape(trackHeight / 2))
+            .clip(RoundedCornerShape(FreshRadius.Control))
+            .background(trackColor)
+            .then(
+                if (action == MtAction.SECONDARY) {
+                    Modifier.border(
+                        FreshBorder.Hairline,
+                        MaterialTheme.colorScheme.outline,
+                        RoundedCornerShape(FreshRadius.Control),
+                    )
+                } else {
+                    Modifier
+                }
+            )
+            .draggable(
+                enabled = active,
+                orientation = Orientation.Horizontal,
+                state = rememberDraggableState { delta ->
+                    scope.launch {
+                        offsetX.snapTo((offsetX.value + delta).coerceIn(0f, maxOffsetPx))
+                    }
+                },
+                onDragStopped = {
+                    if (thresholdPx > 0f && offsetX.value >= thresholdPx) {
+                        confirmed = true
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        RiderSound.playConfirm(soundEnabled)
+                        onConfirm()
+                        if (reducedMotion) {
+                            offsetX.snapTo(maxOffsetPx)
+                        } else {
+                            offsetX.animateTo(
+                                targetValue = maxOffsetPx,
+                                animationSpec = spring(stiffness = Spring.StiffnessMedium),
+                            )
+                        }
+                    } else {
+                        if (reducedMotion) {
+                            offsetX.snapTo(0f)
+                        } else {
+                            offsetX.animateTo(
+                                targetValue = 0f,
+                                animationSpec = spring(
+                                    dampingRatio = Spring.DampingRatioMediumBouncy,
+                                    stiffness = Spring.StiffnessLow,
+                                ),
+                            )
+                        }
+                    }
+                },
+            )
             .semantics {
                 contentDescription = if (active) {
                     "$text，向右滑动确认"
@@ -127,20 +181,20 @@ fun SlideToConfirm(
             },
         contentAlignment = Alignment.CenterStart,
     ) {
-        // 已划过的行程作为进度条,给骑手「还差多少」的直观反馈
+        // 已划过的行程压深一层,给骑手「还差多少」的直观反馈
         Box(
             modifier = Modifier
                 .padding(TrackPadding)
                 .height(thumbSize)
                 .width(with(density) { (thumbPx + offsetX.value).toDp() })
                 .clip(RoundedCornerShape(thumbSize / 2))
-                .background(accent.copy(alpha = 0.28f)),
+                .background(Color.Black.copy(alpha = if (active) 0.12f else 0f)),
         )
 
         Text(
             text = if (confirmed) "已确认" else text,
             style = MaterialTheme.typography.titleMedium,
-            color = accent,
+            color = labelColor,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             textAlign = TextAlign.Center,
@@ -152,7 +206,7 @@ fun SlideToConfirm(
 
         SlideHint(
             visible = active,
-            accent = accent,
+            accent = labelColor,
             progress = progress,
             modifier = Modifier
                 .align(Alignment.CenterEnd)
@@ -165,52 +219,15 @@ fun SlideToConfirm(
                 .graphicsLayer { translationX = offsetX.value }
                 .size(thumbSize)
                 .clip(RoundedCornerShape(thumbSize / 2))
-                .background(accent)
-                .draggable(
-                    enabled = active,
-                    orientation = Orientation.Horizontal,
-                    state = rememberDraggableState { delta ->
-                        scope.launch {
-                            offsetX.snapTo((offsetX.value + delta).coerceIn(0f, maxOffsetPx))
-                        }
-                    },
-                    onDragStopped = {
-                        if (thresholdPx > 0f && offsetX.value >= thresholdPx) {
-                            confirmed = true
-                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                            RiderSound.playConfirm(soundEnabled)
-                            onConfirm()
-                            if (reducedMotion) {
-                                offsetX.snapTo(maxOffsetPx)
-                            } else {
-                                offsetX.animateTo(
-                                    targetValue = maxOffsetPx,
-                                    animationSpec = spring(stiffness = Spring.StiffnessMedium),
-                                )
-                            }
-                        } else {
-                            if (reducedMotion) {
-                                offsetX.snapTo(0f)
-                            } else {
-                                offsetX.animateTo(
-                                    targetValue = 0f,
-                                    animationSpec = spring(
-                                        dampingRatio = Spring.DampingRatioMediumBouncy,
-                                        stiffness = Spring.StiffnessLow,
-                                    ),
-                                )
-                            }
-                        }
-                    },
-                ),
+                .background(if (active) RiderColors.Surface else MaterialTheme.colorScheme.surface),
             contentAlignment = Alignment.Center,
         ) {
             if (confirmed) {
-                CheckMarkIcon(color = Color.White, modifier = Modifier.size(thumbSize * 0.44f))
+                CheckMarkIcon(color = trackColor, modifier = Modifier.size(thumbSize * 0.44f))
             } else {
                 Chevrons(
-                    color = Color.White,
-                    alpha = if (active) 1f else 0.6f,
+                    color = if (active) trackColor else RiderNeutral.InkDisabled,
+                    alpha = 1f,
                     modifier = Modifier.size(width = thumbSize * 0.46f, height = thumbSize * 0.34f),
                 )
             }
@@ -326,7 +343,7 @@ internal fun riderControlHeight(base: Dp): Dp {
 private fun SlideToConfirmPreview() {
     RiderTheme {
         Box(Modifier.padding(FreshSpacing.Md)) {
-            SlideToConfirm(text = "滑动确认已取货", onConfirm = {})
+            SlideToConfirm(text = "滑动确认已取货", action = MtAction.PICKUP, onConfirm = {})
         }
     }
 }
@@ -338,6 +355,7 @@ private fun SlideToConfirmDisabledPreview() {
         Box(Modifier.padding(FreshSpacing.Md)) {
             SlideToConfirm(
                 text = "滑动确认已送达",
+                action = MtAction.DELIVER,
                 enabled = false,
                 disabledReason = "请先拍摄送达凭证",
                 onConfirm = {},

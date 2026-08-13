@@ -43,7 +43,14 @@ public class RouteEstimator {
                     handoffOf(task)));
         }
         if (stops.isEmpty()) {
-            return new RouteEvaluation(0, 0, Map.of(), null, List.of(), 0d, List.of(), List.copyOf(unlocated));
+            // 全是缺坐标的任务。返回 0 里程 0 时长会让打分把它当成「零成本、绝不超时、
+            // 冷链无风险」的完美订单，地址最不完整的单反而最先派出去 —— 方向是反的。
+            // 按一个保守的假设里程记账：宁可低估这个骑手的顺路度，也不能凭空送分。
+            int assumedMeters = unlocated.size() * UNLOCATED_ASSUMED_METERS;
+            return new RouteEvaluation(
+                    assumedMeters,
+                    assumedSeconds(assumedMeters),
+                    Map.of(), null, List.of(), 0d, List.of(), List.copyOf(unlocated));
         }
 
         RoutePlanningPort.RoutePlanEstimate estimate = routePlanningPort.estimateRoute(origin, stops);
@@ -86,15 +93,31 @@ public class RouteEstimator {
             }
         }
 
+        // 混合场景同样要给缺坐标的单记账，否则「一个有坐标 + 三个没坐标」会被算成
+        // 只跑一个点的成本
+        int assumedExtraMeters = unlocated.size() * UNLOCATED_ASSUMED_METERS;
         return new RouteEvaluation(
-                Math.max(0, estimate.totalDistanceMeters()),
-                Math.max(0, estimate.totalDurationSeconds()),
+                Math.max(0, estimate.totalDistanceMeters()) + assumedExtraMeters,
+                Math.max(0, estimate.totalDurationSeconds()) + assumedSeconds(assumedExtraMeters),
                 Map.copyOf(arrivals),
                 minSlack,
                 List.copyOf(overtime),
                 maxColdRatio,
                 List.copyOf(coldRisk),
                 List.copyOf(unlocated));
+    }
+
+    /**
+     * 缺坐标任务的假设里程。取服务半径量级 —— 地址解析不出来时，
+     * 真实距离未知，按「不近」处理比按「零距离」处理安全。
+     */
+    private static final int UNLOCATED_ASSUMED_METERS = 3000;
+
+    /** 电动车约 11 km/h，与 Haversine 兜底用的速度保持同一量级。 */
+    private static final double UNLOCATED_SPEED_METERS_PER_SECOND = 3.0;
+
+    private static int assumedSeconds(int meters) {
+        return (int) Math.round(meters / UNLOCATED_SPEED_METERS_PER_SECOND);
     }
 
     public int handoffOf(DispatchTaskRow task) {

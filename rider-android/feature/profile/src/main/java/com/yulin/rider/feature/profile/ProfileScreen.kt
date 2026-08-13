@@ -70,6 +70,25 @@ interface ProfileFeatureDependencies {
     /** A8 设置页退出按钮的 app 层接线；负责服务端撤销、后台停机和本地数据清理。 */
     suspend fun logout(): RiderResult<Unit> =
         RiderResult.Failure(-2, "退出登录能力尚未装配")
+
+    /**
+     * 设置页「试听」。返回 false 表示这台手机没有可用的中文语音引擎，只响了提示音。
+     *
+     * 语音是骑车时唯一能用的通道，但缺中文引擎、被静音、被勿扰拦掉这些问题
+     * 只有真的响一次才发现得了，所以必须给骑手一个上班前自检的入口。
+     */
+    suspend fun previewVoice(): Boolean = false
+
+    /** 设备信息，关于页展示给客服排查用。 */
+    val deviceModel: String get() = "${android.os.Build.BRAND} ${android.os.Build.MODEL}".trim()
+
+    val androidVersion: String get() = "Android ${android.os.Build.VERSION.RELEASE}"
+
+    /** 本机设备号，与服务端 rider_device 对应，报障时要用。 */
+    val deviceId: String? get() = null
+
+    /** 客服/店长电话，关于页可一键拨号。 */
+    val supportPhone: String? get() = null
 }
 
 object ProfileFeature {
@@ -246,13 +265,13 @@ private fun ProfileContent(
             }
 
             MtCard {
-                NavRow("我的账户", FreshIconType.WALLET, onOpenStats)
+                NavRow("我的账户", FreshIconType.WALLET, onClick = onOpenStats)
                 MtDivider()
-                NavRow("消息中心", FreshIconType.MESSAGE, onOpenMessages)
+                NavRow("消息中心", FreshIconType.MESSAGE, onClick = onOpenMessages)
                 MtDivider()
-                NavRow("设置", FreshIconType.SETTINGS, onOpenSettings)
+                NavRow("设置", FreshIconType.SETTINGS, onClick = onOpenSettings)
                 MtDivider()
-                NavRow("关于", FreshIconType.ABOUT, onOpenAbout)
+                NavRow("关于", FreshIconType.ABOUT, onClick = onOpenAbout)
             }
         }
     }
@@ -280,6 +299,8 @@ internal fun EntryRow(label: String, value: String) {
 internal fun NavRow(
     text: String,
     icon: FreshIconType = FreshIconType.CHEVRON_RIGHT,
+    hint: String? = null,
+    trailingText: String? = null,
     onClick: () -> Unit,
 ) {
     Row(
@@ -298,12 +319,27 @@ internal fun NavRow(
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
             size = 20.dp,
         )
-        Text(
-            text = text,
-            style = MaterialTheme.typography.bodyLarge,
-            color = RiderColors.Ink,
-            modifier = Modifier.weight(1f),
-        )
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = text,
+                style = MaterialTheme.typography.bodyLarge,
+                color = RiderColors.Ink,
+            )
+            hint?.let {
+                Text(
+                    text = it,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        trailingText?.let {
+            Text(
+                text = it,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
         FreshIcon(
             FreshIconType.CHEVRON_RIGHT,
             contentDescription = null,
