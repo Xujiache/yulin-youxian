@@ -614,8 +614,11 @@ public class DeliveryTaskService {
             if (wave.taskCount() != null && wave.taskCount() > 0
                     && wave.taskCount().equals(wave.completedCount())
                     && !"COMPLETED".equals(wave.status())
+                    && !"RETURNING".equals(wave.status())
                     && !"CANCELLED".equals(wave.status())) {
-                waveDao.markCompleted(waveId, now);
+                // 送完不等于收工:骑手还在最后一个顾客门口,得回店才能装下一波。
+                // 直接置 COMPLETED 会让调度台以为他已经空出来了。
+                waveDao.markReturning(waveId, now);
             }
         });
     }
@@ -641,9 +644,107 @@ public class DeliveryTaskService {
         return (int) Math.max(Duration.between(promisedAt, deliveredAt).getSeconds(), 0);
     }
 
+    /**
+     * 整波次接单。
+     *
+     * 时段批次制下一波车就是一个时段的全部单，骑手没有挑单的余地 ——
+     * 让他在店里一单一单点「接单」纯属白费时间，尤其是十几单的时候。
+     *
+     * 已经接过的单跳过而不是报错：网络重试和重复点击都会走到这里。
+     */
+    public List<TaskCardDto> acceptWave(long riderId, long waveId, TaskActionRequest request) {
+        TaskOperator operator = TaskOperator.rider(riderId, supportDao.riderName(riderId));
+        String clientEventId = request == null ? null : request.clientEventId();
+        LocalDateTime clientEventAt = TaskTimes.parse(request == null ? null : request.clientEventAt());
+        GeoPointDto location = request == null ? null : request.location();
+        Map<String, Object> detail = new LinkedHashMap<>();
+        detail.put("waveId", waveId);
+
+        WavePickupOutcome outcome = unitOfWork.commit(() -> {
+            DeliveryWave wave = waveDao.findByIdForUpdate(waveId).orElseThrow(
+                    () -> new DeliveryException(DeliveryErrorCode.TASK_NOT_FOUND, "波次不存在：" + waveId)
+            );
+            if (wave.riderId() == null || wave.riderId() != riderId) {
+                throw new DeliveryException(DeliveryErrorCode.TASK_NOT_OWNED_BY_RIDER, "波次不属于当前骑手");
+            }
+            List<DeliveryTask> accepted = new ArrayList<>();
+            boolean replayedAny = false;
+            for (DeliveryTask task : taskDao.findByWaveIdForUpdate(waveId)) {
+                boolean replayedTask = clientEventId != null && !clientEventId.isBlank()
+                        && eventDao.findByIdempotencyScope(
+                                clientEventId, task.id(), riderId, "ACCEPT_WAVE").isPresent();
+                if (replayedTask) {
+                    replayedAny = true;
+                    continue;
+                }
+                stateMachine.ensureOwnedBy(task, riderId);
+                if (!DeliveryTaskStatus.ASSIGNED.name().equals(task.status())) {
+                    continue;
+                }
+                accepted.add(applyTransition(
+                        task, DeliveryTaskStatus.ACCEPTED, operator, "整波次接单",
+                        location, clientEventId, clientEventAt, detail, "ACCEPT_WAVE"
+                ));
+            }
+            return new WavePickupOutcome(accepted, replayedAny && accepted.isEmpty());
+        });
+        if (outcome.picked().isEmpty() && !outcome.replayed()) {
+            throw new DeliveryException(
+                    DeliveryErrorCode.TASK_STATUS_NOT_ALLOWED,
+                    "波次内没有待接单的任务"
+            );
+        }
+        outcome.picked().forEach(task -> afterTransitionCommit(task, DeliveryTaskStatus.ACCEPTED));
+        return currentWaveCards(waveId);
+    }
+
     public List<TaskCardDto> pickupWave(long riderId, long waveId, PickupRequest request) {
         String clientEventId = request == null ? null : request.clientEventId();
         return doPickupWave(riderId, waveId, request, clientEventId);
+    }
+
+    /**
+     * 骑手确认回到门店，波次收尾。
+     *
+     * 波次原来在最后一单送达时直接完成，但那一刻骑手还在最后一个顾客门口。
+     * 调度台要据此判断能不能发下一个时段，所以中间加一个「待回店」。
+     */
+    public List<TaskCardDto> returnToStore(long riderId, long waveId, TaskActionRequest request) {
+        GeoPointDto location = request == null ? null : request.location();
+        unitOfWork.run(() -> {
+            DeliveryWave wave = waveDao.findByIdForUpdate(waveId).orElseThrow(
+                    () -> new DeliveryException(DeliveryErrorCode.TASK_NOT_FOUND, "波次不存在：" + waveId)
+            );
+            if (wave.riderId() == null || wave.riderId() != riderId) {
+                throw new DeliveryException(DeliveryErrorCode.TASK_NOT_OWNED_BY_RIDER, "波次不属于当前骑手");
+            }
+            if (DeliveryWaveService.STATUS_COMPLETED.equals(wave.status())) {
+                return;
+            }
+            List<DeliveryTask> unfinished = taskDao.findByWaveId(waveId).stream()
+                    .filter(task -> !isTerminal(task.status()))
+                    .toList();
+            if (!unfinished.isEmpty()) {
+                throw new DeliveryException(DeliveryErrorCode.TASK_STATUS_NOT_ALLOWED,
+                        "还有 " + unfinished.size() + " 单没有结束，不能确认回店");
+            }
+            LocalDateTime now = TaskTimes.now();
+            waveDao.markReturned(waveId, now);
+            Map<String, Object> detail = new LinkedHashMap<>();
+            detail.put("waveId", waveId);
+            if (location != null) {
+                detail.put("lat", location.lat());
+                detail.put("lng", location.lng());
+            }
+            taskDao.findByWaveId(waveId).stream().findFirst().ifPresent(task -> eventRecorder.recordNote(
+                    task, TaskOperator.rider(riderId, supportDao.riderName(riderId)), "骑手已回店", detail));
+        });
+        return currentWaveCards(waveId);
+    }
+
+    private static boolean isTerminal(String status) {
+        DeliveryTaskStatus parsed = parseStatus(status);
+        return parsed != null && parsed.isTerminal();
     }
 
     private List<TaskCardDto> doPickupWave(long riderId, long waveId, PickupRequest request, String clientEventId) {

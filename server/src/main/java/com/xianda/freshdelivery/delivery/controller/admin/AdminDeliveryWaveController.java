@@ -37,10 +37,11 @@ public class AdminDeliveryWaveController extends DeliveryTaskControllerSupport {
             @RequestParam(required = false) String date,
             @RequestParam(required = false) String status,
             @RequestParam(required = false) Long riderId,
+            @RequestParam(required = false) String slotLabel,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int pageSize
     ) {
-        return ApiResponse.ok(waveService.listWaves(parseDate(date), status, riderId, page, pageSize));
+        return ApiResponse.ok(waveService.listWaves(parseDate(date), status, riderId, slotLabel, page, pageSize));
     }
 
     @GetMapping("/{waveId}")

@@ -109,7 +109,7 @@ public class WxTrackingService {
         if (task == null) {
             return new WxTrackingDto(false, null, null, List.of(), null, null, storeDto(), null,
                     null, null, new WxTrackingDto.PollingDto(POLLING_INTERVAL_SECONDS, false),
-                    subscribeTemplateIds, null, null);
+                    subscribeTemplateIds, null, null, List.of());
         }
         DeliveryTaskStatus status = statusOf(task.status());
         boolean terminal = status != null && status.isTerminal();
@@ -132,8 +132,22 @@ public class WxTrackingService {
                 new WxTrackingDto.PollingDto(POLLING_INTERVAL_SECONDS, true),
                 subscribeTemplateIds,
                 rating(task),
-                notice(task, status)
+                notice(task, status),
+                deliveryPhotos(task, status)
         );
+    }
+
+    /**
+     * 送达凭证照片。
+     *
+     * 只在真正送达后返回：还没送到就把照片给顾客毫无意义，而且骑手可能只是提前拍了张门牌。
+     * 退回和取消也不给 —— 那两种情况货没到顾客手上，给张照片只会引起误会。
+     */
+    private List<String> deliveryPhotos(TrackingTaskDao.WxTaskRow task, DeliveryTaskStatus status) {
+        if (status != DeliveryTaskStatus.DELIVERED) {
+            return List.of();
+        }
+        return taskDao.deliveredEvidenceUrls(task.id());
     }
 
     /** 已评价时带回星级与标签，小程序据此显示评价结果而不是「去评价」 */

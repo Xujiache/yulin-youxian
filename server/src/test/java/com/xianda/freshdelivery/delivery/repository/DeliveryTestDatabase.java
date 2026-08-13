@@ -22,7 +22,8 @@ public final class DeliveryTestDatabase {
             "V11__harden_delivery_integrity.sql",
             "V12__harden_rider_idempotency.sql",
             "V13__harden_marketing_lottery.sql",
-            "V14__record_route_plan_failure.sql"
+            "V14__record_route_plan_failure.sql",
+            "V15__slot_based_dispatch.sql"
     );
 
     private DeliveryTestDatabase() {

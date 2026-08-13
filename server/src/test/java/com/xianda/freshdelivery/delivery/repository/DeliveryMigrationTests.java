@@ -54,7 +54,7 @@ class DeliveryMigrationTests {
     @Test
     void seedsEveryDeliveryConfigEntry() {
         Integer total = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM delivery_config", Integer.class);
-        assertEquals(77, total);
+        assertEquals(78, total);
         assertEquals(2, jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM delivery_config WHERE category = 'AMAP'", Integer.class));
         assertEquals("", jdbcTemplate.queryForObject(

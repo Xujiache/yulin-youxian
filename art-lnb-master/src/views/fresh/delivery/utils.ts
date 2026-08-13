@@ -279,6 +279,8 @@ const WAVE_STATUS_TEXT: Record<string, string> = {
   ASSIGNED: '已指派',
   PICKING: '取货中',
   DELIVERING: '配送中',
+  // 单送完了但骑手还没回店。这一步没走完不能给他发下一个时段
+  RETURNING: '待回店',
   COMPLETED: '已完成',
   CANCELLED: '已取消'
 }
@@ -288,6 +290,7 @@ const WAVE_STATUS_TAG: Record<string, TagType> = {
   ASSIGNED: 'primary',
   PICKING: 'warning',
   DELIVERING: 'primary',
+  RETURNING: 'warning',
   COMPLETED: 'success',
   CANCELLED: 'info'
 }

@@ -1056,6 +1056,34 @@
   border-radius: 18rpx;
 }
 
+/* 送达凭证：放门口的单靠它确认东西在哪 */
+.delivery-photos {
+  margin-top: 22rpx;
+  padding: 20rpx 22rpx;
+  background: #f7f9f8;
+  border-radius: 18rpx;
+}
+
+.delivery-photos-title {
+  display: block;
+  margin-bottom: 16rpx;
+  color: #5b6b62;
+  font-size: 26rpx;
+}
+
+.delivery-photos-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16rpx;
+}
+
+.delivery-photo {
+  width: 200rpx;
+  height: 200rpx;
+  border-radius: 14rpx;
+  background: #e8ece9;
+}
+
 .progress-stops {
   flex: 1;
   min-width: 0;

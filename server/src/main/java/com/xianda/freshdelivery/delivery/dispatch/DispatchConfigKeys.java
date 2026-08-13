@@ -2,6 +2,8 @@ package com.xianda.freshdelivery.delivery.dispatch;
 
 public final class DispatchConfigKeys {
     public static final String ENABLED = "dispatch.enabled";
+    /** ADVISORY / AUTO。见 {@link DispatchMode}。 */
+    public static final String MODE = "dispatch.mode";
     public static final String HOLD_WINDOW_SECONDS = "dispatch.hold_window_seconds";
     public static final String LOOP_INTERVAL_SECONDS = "dispatch.loop_interval_seconds";
     public static final String MAX_TASKS_PER_WAVE = "dispatch.max_tasks_per_wave";

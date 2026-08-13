@@ -187,6 +187,28 @@ class TaskRepository private constructor(private val appContext: Context) {
     /** 单任务取货。没有波次的单走这条，否则会一直卡在「已接单」。 */
     suspend fun pickupTask(taskId: Long) = transition(PendingActionTypes.PICKUP, taskId = taskId)
 
+    /**
+     * 整波次接单。
+     *
+     * 时段批次制下一波就是一个时段的全部单，骑手没有挑单余地，
+     * 在店里一单一单点纯属浪费时间，尤其十几单的时候。
+     */
+    suspend fun acceptWave(waveId: Long) {
+        val target = taskDao.findByWave(waveId)
+            .filter { it.status == TaskStatus.ASSIGNED }
+            .map { it.taskId }
+        transition(
+            actionType = PendingActionTypes.ACCEPT_WAVE,
+            waveId = waveId,
+            optimisticTaskIds = target,
+        )
+    }
+
+    /** 骑手确认回店。这一波收尾，调度台才能发下一个时段。 */
+    suspend fun returnWave(waveId: Long) {
+        transition(actionType = PendingActionTypes.RETURN_WAVE, waveId = waveId)
+    }
+
     suspend fun pickupWave(waveId: Long, checkedTaskIds: List<Long>, actualPackageCount: Int) {
         // 乐观更新只能覆盖服务端真正会改的那几单：勾选的、且当前是「已接单」的。
         // 原来是整波次一把梭，结果没接单的、已经送达的都会被本地改成「已取货」，

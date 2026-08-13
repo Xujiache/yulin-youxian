@@ -9,6 +9,8 @@ public record WaveDetailDto(
         String riderName,
         String status,
         String deliveryDate,
+        /** 配送时段。时段批次发车时写入，老波次为空。 */
+        String slotLabel,
         Integer taskCount,
         Integer completedCount,
         Double totalWeightKg,
@@ -23,6 +25,8 @@ public record WaveDetailDto(
         String assignedAt,
         String startedAt,
         String completedAt,
+        /** 骑手确认回店的时间。为空且状态为 RETURNING 表示送完了但还没回到店里。 */
+        String returnedAt,
         List<WaveStopDto> stops,
         WaveRouteDto route,
         List<TrackPointDto> track

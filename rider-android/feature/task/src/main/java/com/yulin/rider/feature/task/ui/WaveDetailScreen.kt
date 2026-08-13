@@ -37,9 +37,12 @@ import com.yulin.rider.core.designsystem.FreshIcon
 import com.yulin.rider.core.designsystem.FreshIconType
 import com.yulin.rider.core.designsystem.FreshSpacing
 import com.yulin.rider.core.designsystem.FreshStackScaffold
+import com.yulin.rider.core.designsystem.MtAction
+import com.yulin.rider.core.designsystem.MtBottomActionBar
 import com.yulin.rider.core.designsystem.MtCard
 import com.yulin.rider.core.designsystem.MtDivider
 import com.yulin.rider.core.designsystem.MtMetric
+import com.yulin.rider.core.designsystem.MtPrimaryButton
 import com.yulin.rider.core.designsystem.MtScaffold
 import com.yulin.rider.core.designsystem.MtTag
 import com.yulin.rider.core.designsystem.RiderColors
@@ -56,7 +59,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
-class WaveDetailViewModel(app: Application, waveId: Long) : AndroidViewModel(app) {
+class WaveDetailViewModel(app: Application, private val waveId: Long) : AndroidViewModel(app) {
     private val repository = TaskRepository.get(app)
     private val _wave = MutableStateFlow<WaveUi?>(null)
     val wave: StateFlow<WaveUi?> = _wave
@@ -65,6 +68,10 @@ class WaveDetailViewModel(app: Application, waveId: Long) : AndroidViewModel(app
         viewModelScope.launch { repository.observeWave(waveId).collect { _wave.value = it } }
         viewModelScope.launch { repository.refresh() }
     }
+
+    fun acceptWave() = viewModelScope.launch { repository.acceptWave(waveId) }
+
+    fun returnWave() = viewModelScope.launch { repository.returnWave(waveId) }
 }
 
 @Composable
@@ -90,7 +97,14 @@ fun WaveDetailScreen(
         }
         return
     }
-    WaveDetailContent(current, modifier, onBack, onOpenTask)
+    WaveDetailContent(
+        wave = current,
+        modifier = modifier,
+        onBack = onBack,
+        onOpenTask = onOpenTask,
+        onAcceptWave = viewModel::acceptWave,
+        onReturnWave = viewModel::returnWave,
+    )
 }
 
 @Composable
@@ -99,13 +113,39 @@ private fun WaveDetailContent(
     modifier: Modifier = Modifier,
     onBack: () -> Unit = {},
     onOpenTask: (Long) -> Unit = {},
+    onAcceptWave: () -> Unit = {},
+    onReturnWave: () -> Unit = {},
 ) {
     val completed = wave.wave.completedCount >= wave.wave.taskCount
+    // 时段批次制：整波单一次性发下来，一单一单点接单在店门口太慢
+    val pendingAccept = wave.stops.count { it.card.status == TaskStatus.ASSIGNED }
+    val allDone = wave.stops.isNotEmpty() && wave.stops.all { TaskStatus.isFinished(it.card.status) }
     MtScaffold(
         title = "本趟路线",
         subtitle = wave.wave.waveNo,
         modifier = modifier,
         onBack = onBack,
+        bottomBar = {
+            when {
+                pendingAccept > 0 -> MtBottomActionBar {
+                    MtPrimaryButton(
+                        text = "一键接单（$pendingAccept 单）",
+                        action = MtAction.ACCEPT,
+                        modifier = Modifier.weight(1f),
+                        onClick = onAcceptWave,
+                    )
+                }
+
+                allDone -> MtBottomActionBar(hint = "这趟送完了，回到门店后点一下，调度台才会发下一个时段") {
+                    MtPrimaryButton(
+                        text = "我已回店",
+                        action = MtAction.ACCEPT,
+                        modifier = Modifier.weight(1f),
+                        onClick = onReturnWave,
+                    )
+                }
+            }
+        },
     ) {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),

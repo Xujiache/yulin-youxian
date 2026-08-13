@@ -301,9 +301,34 @@
         show-icon
         :title="`当前负载 ${taskPickerRider.currentTaskCount}/${taskPickerRider.maxConcurrentTask}，剩余可接 ${Math.max(taskPickerRider.maxConcurrentTask - taskPickerRider.currentTaskCount, 0)} 单`"
       />
-      <ElTable :data="pendingTasks" height="360" @selection-change="onTaskPickerSelect">
+      <div class="task-picker__slot">
+        <span class="task-picker__slot-label">配送时段</span>
+        <ElSelect
+          v-model="taskPickerSlot"
+          clearable
+          placeholder="全部时段（不发车，仅批量指派）"
+          class="task-picker__slot-select"
+          @change="onTaskPickerSlotChange"
+        >
+          <ElOption
+            v-for="option in pendingSlotOptions"
+            :key="option.value"
+            :label="option.label"
+            :value="option.value"
+          />
+        </ElSelect>
+      </div>
+      <ElTable
+        ref="taskPickerTableRef"
+        :data="taskPickerTasks"
+        height="320"
+        @selection-change="onTaskPickerSelect"
+      >
         <ElTableColumn type="selection" width="46" />
         <ElTableColumn label="任务号" prop="taskNo" width="170" />
+        <ElTableColumn label="时段" width="130">
+          <template #default="{ row }">{{ row.slotLabel || '—' }}</template>
+        </ElTableColumn>
         <ElTableColumn label="地址" min-width="220">
           <template #default="{ row }">
             {{ [row.areaLabel, row.buildingLabel, row.addressDetail].filter(Boolean).join(' ') }}
@@ -326,7 +351,11 @@
           :loading="assigning"
           @click="confirmTaskPicker"
         >
-          派 {{ taskPickerSelection.length }} 单并建波次
+          {{
+            taskPickerSlot
+              ? `发车（${taskPickerSelection.length} 单）`
+              : `派 ${taskPickerSelection.length} 单并建波次`
+          }}
         </ElButton>
       </template>
     </ElDialog>
@@ -340,6 +369,7 @@
     assignTask,
     batchAssignTasks,
     cancelTask,
+    dispatchSlot,
     forceRiderOffDuty,
     getDeliveryBoard,
     getDeliveryConfigs,
@@ -433,6 +463,36 @@
   const taskPickerVisible = ref(false)
   const taskPickerRider = ref<RiderBoardCard | null>(null)
   const taskPickerSelection = ref<AdminTaskCard[]>([])
+  // 选了时段就走「发车」：一个时段的单一次性给一个骑手，服务端会校验时段一致
+  const taskPickerSlot = ref('')
+  const taskPickerTableRef = ref()
+
+  const pendingSlotOptions = computed(() => {
+    const counts = new Map<string, number>()
+    pendingTasks.value.forEach((task) => {
+      const slot = (task.slotLabel || '').trim()
+      if (slot) counts.set(slot, (counts.get(slot) || 0) + 1)
+    })
+    return [...counts.entries()]
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([value, count]) => ({ value, label: `${value}（${count} 单）` }))
+  })
+
+  const taskPickerTasks = computed(() =>
+    taskPickerSlot.value
+      ? pendingTasks.value.filter((task) => (task.slotLabel || '').trim() === taskPickerSlot.value)
+      : pendingTasks.value
+  )
+
+  /** 选定时段后默认全选：店主的意图就是把这个时段整批发出去，不必再逐条勾。 */
+  const onTaskPickerSlotChange = async () => {
+    await nextTick()
+    const table = taskPickerTableRef.value
+    if (!table) return
+    table.clearSelection()
+    if (!taskPickerSlot.value) return
+    taskPickerTasks.value.forEach((task: AdminTaskCard) => table.toggleRowSelection(task, true))
+  }
 
   // ==================== 实时通道 ====================
 
@@ -983,6 +1043,7 @@
     if (isFatiguePaused(rider, now.value)) return
     taskPickerRider.value = rider
     taskPickerSelection.value = []
+    taskPickerSlot.value = ''
     taskPickerVisible.value = true
   }
 
@@ -997,24 +1058,34 @@
       (sum, task) => sum + Number(task.totalWeightKg || 0),
       0
     )
+    const slot = taskPickerSlot.value
+    const taskIds = taskPickerSelection.value.map((task) => task.taskId)
     try {
       await ElMessageBox.confirm(
-        `把 ${taskPickerSelection.value.length} 个任务（合计 ${totalWeight.toFixed(1)} kg）派给 ${rider.name} 并创建波次？`,
-        '批量派单',
-        { type: 'warning', confirmButtonText: '确认派单', cancelButtonText: '取消' }
+        slot
+          ? `把「${slot}」这一波 ${taskIds.length} 单（合计 ${totalWeight.toFixed(1)} kg）发给 ${rider.name}？发车后骑手可一键接单并到店取货。`
+          : `把 ${taskIds.length} 个任务（合计 ${totalWeight.toFixed(1)} kg）派给 ${rider.name} 并创建波次？`,
+        slot ? '按时段发车' : '批量派单',
+        {
+          type: 'warning',
+          confirmButtonText: slot ? '确认发车' : '确认派单',
+          cancelButtonText: '取消'
+        }
       )
       assigning.value = true
-      await batchAssignTasks({
-        taskIds: taskPickerSelection.value.map((task) => task.taskId),
-        riderId: rider.riderId,
-        createWave: true
-      })
-      ElMessage.success('批量派单成功')
+      if (slot) {
+        // 发车是整批成功或整批不动，服务端还会顺带触发路径规划
+        await dispatchSlot({ riderId: rider.riderId, slotLabel: slot, taskIds })
+        ElMessage.success(`「${slot}」已发车`)
+      } else {
+        await batchAssignTasks({ taskIds, riderId: rider.riderId })
+        ElMessage.success('批量派单成功')
+      }
       taskPickerVisible.value = false
       await loadBoard(true)
     } catch (error) {
       if (error !== 'cancel' && error !== 'close') {
-        ElMessage.error(error instanceof Error ? error.message : '批量派单失败')
+        ElMessage.error(error instanceof Error ? error.message : slot ? '发车失败' : '批量派单失败')
       }
     } finally {
       assigning.value = false
@@ -1394,6 +1465,23 @@
 
   .task-picker__tip {
     margin-bottom: 12px;
+  }
+
+  .task-picker__slot {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+
+  .task-picker__slot-label {
+    color: var(--art-text-gray-600);
+    font-size: 13px;
+    white-space: nowrap;
+  }
+
+  .task-picker__slot-select {
+    width: 320px;
   }
 
   @media (max-width: 1400px) {

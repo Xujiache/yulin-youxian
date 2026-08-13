@@ -87,6 +87,20 @@ public class RiderTaskController extends DeliveryTaskControllerSupport {
         return ApiResponse.ok(taskService.pickup(CurrentRiderContext.riderId(), taskId, request));
     }
 
+    /** 整波次接单。时段批次制下骑手没有挑单余地，一单一单点纯属浪费时间。 */
+    @PostMapping("/waves/{waveId}/accept")
+    public ApiResponse<List<TaskCardDto>> acceptWave(@PathVariable Long waveId,
+                                                     @RequestBody(required = false) TaskActionRequest request) {
+        return ApiResponse.ok(taskService.acceptWave(CurrentRiderContext.riderId(), waveId, request));
+    }
+
+    /** 骑手确认回到门店，这一波收尾，调度台可以发下一个时段。 */
+    @PostMapping("/waves/{waveId}/return")
+    public ApiResponse<List<TaskCardDto>> returnToStore(@PathVariable Long waveId,
+                                                        @RequestBody(required = false) TaskActionRequest request) {
+        return ApiResponse.ok(taskService.returnToStore(CurrentRiderContext.riderId(), waveId, request));
+    }
+
     @PostMapping("/waves/{waveId}/pickup")
     public ApiResponse<List<TaskCardDto>> pickup(@PathVariable Long waveId, @RequestBody(required = false) PickupRequest request) {
         return ApiResponse.ok(taskService.pickupWave(CurrentRiderContext.riderId(), waveId, request));

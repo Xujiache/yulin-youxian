@@ -28,6 +28,8 @@ public class DeliveryWaveService {
     public static final String STATUS_ASSIGNED = "ASSIGNED";
     public static final String STATUS_PICKING = "PICKING";
     public static final String STATUS_DELIVERING = "DELIVERING";
+    /** 单都送完了但骑手还没回店。调度台据此判断能不能发下一个时段。 */
+    public static final String STATUS_RETURNING = "RETURNING";
     public static final String STATUS_COMPLETED = "COMPLETED";
     public static final String STATUS_CANCELLED = "CANCELLED";
     private static final int MAX_REPLAY_POINTS = 1000;
@@ -238,12 +240,13 @@ public class DeliveryWaveService {
         });
     }
 
-    public PageResult<WaveDetailDto> listWaves(LocalDate deliveryDate, String status, Long riderId, int page, int pageSize) {
+    public PageResult<WaveDetailDto> listWaves(LocalDate deliveryDate, String status, Long riderId,
+                                               String slotLabel, int page, int pageSize) {
         int safePage = Math.max(page, 1);
         int safeSize = Math.min(Math.max(pageSize, 1), 200);
-        long total = waveDao.count(deliveryDate, status, riderId);
+        long total = waveDao.count(deliveryDate, status, riderId, slotLabel);
         List<WaveDetailDto> items = waveDao
-                .search(deliveryDate, status, riderId, (safePage - 1) * safeSize, safeSize)
+                .search(deliveryDate, status, riderId, slotLabel, (safePage - 1) * safeSize, safeSize)
                 .stream()
                 .map(wave -> toDetail(wave, false))
                 .toList();
@@ -324,6 +327,7 @@ public class DeliveryWaveService {
                 supportDao.riderName(wave.riderId()),
                 wave.status(),
                 TaskTimes.format(wave.deliveryDate()),
+                wave.slotLabel(),
                 wave.taskCount(),
                 wave.completedCount(),
                 wave.totalWeightKg() == null ? null : wave.totalWeightKg().doubleValue(),
@@ -338,6 +342,7 @@ public class DeliveryWaveService {
                 TaskTimes.format(wave.assignedAt()),
                 TaskTimes.format(wave.startedAt()),
                 TaskTimes.format(wave.completedAt()),
+                TaskTimes.format(wave.returnedAt()),
                 withTrack ? stopDtos(wave.id()) : List.of(),
                 withTrack ? waveRoute(wave.id()) : null,
                 track

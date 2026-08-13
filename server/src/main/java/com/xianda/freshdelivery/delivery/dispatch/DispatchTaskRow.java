@@ -26,6 +26,8 @@ public record DispatchTaskRow(
         double totalWeightKg,
         String coldChainLevel,
         LocalDate deliveryDate,
+        /** 配送时段文案，按时段发车时用它成组。 */
+        String slotLabel,
         LocalDateTime windowStartAt,
         LocalDateTime windowEndAt,
         LocalDateTime promisedAt,
@@ -37,6 +39,26 @@ public record DispatchTaskRow(
         int priority,
         Integer handoffSeconds
 ) {
+    /**
+     * 不带时段的构造。
+     *
+     * 时段是后加的字段，只有按时段发车才用得上；其余调用点（尤其是测试里手搓的行）
+     * 不必为此全部改一遍参数。
+     */
+    public DispatchTaskRow(
+            long taskId, String taskNo, Long waveId, Long riderId, String status, String addressDetail,
+            Double lat, Double lng, String areaLabel, String buildingLabel, String groupKey,
+            Integer floorNo, String roomNo, int itemCount, double totalWeightKg, String coldChainLevel,
+            LocalDate deliveryDate, LocalDateTime windowStartAt, LocalDateTime windowEndAt,
+            LocalDateTime promisedAt, LocalDateTime etaAt, int extraTimeSeconds,
+            LocalDateTime pickedReadyAt, LocalDateTime holdUntilAt, int reassignCount, int priority,
+            Integer handoffSeconds) {
+        this(taskId, taskNo, waveId, riderId, status, addressDetail, lat, lng, areaLabel, buildingLabel,
+                groupKey, floorNo, roomNo, itemCount, totalWeightKg, coldChainLevel, deliveryDate, null,
+                windowStartAt, windowEndAt, promisedAt, etaAt, extraTimeSeconds, pickedReadyAt,
+                holdUntilAt, reassignCount, priority, handoffSeconds);
+    }
+
     public GeoPoint location() {
         return lat == null || lng == null ? null : new GeoPoint(lat, lng);
     }

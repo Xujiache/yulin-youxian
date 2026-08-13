@@ -1,5 +1,7 @@
 package com.xianda.freshdelivery.delivery.dispatch;
 
+import com.xianda.freshdelivery.delivery.common.DeliveryErrorCode;
+import com.xianda.freshdelivery.delivery.common.DeliveryException;
 import com.xianda.freshdelivery.delivery.common.DeliveryProperties;
 import com.xianda.freshdelivery.delivery.common.DeliverySwitch;
 import java.util.concurrent.locks.ReentrantLock;
@@ -32,15 +34,26 @@ public class DispatchScheduler {
     @Scheduled(fixedDelayString = "${delivery.dispatch.loop-interval-ms:5000}", initialDelay = 15000)
     public void tick() {
         // 总闸优先于 dispatch.enabled:后者只停自动派单,前者停整个配送域
-        if (!deliverySwitch.enabled() || !loopEnabled() || !settings.dispatchEnabled()) {
+        if (!deliverySwitch.enabled() || !loopEnabled() || !settings.autoDispatchAllowed()) {
             return;
         }
         runGuarded(false);
     }
 
-    /** 手动触发(后台「立即调度」)同样受总闸约束,关闸后要给出明确错误而不是静默跳过。 */
+    /**
+     * 手动触发(后台「立即调度」)同样受总闸约束,关闸后要给出明确错误而不是静默跳过。
+     *
+     * 推荐模式下也要拒绝:这个按钮会真的把单派出去,而推荐模式的约定就是「不替店主做主」。
+     * 原来它绕过所有开关,点一下就能把店主还没分完的单全派走。
+     */
     public DispatchRoundResult runNow() {
         deliverySwitch.ensureEnabled();
+        if (!settings.dispatchMode().isAuto()) {
+            throw new DeliveryException(
+                    DeliveryErrorCode.DISPATCH_ADVISORY_ONLY,
+                    "当前是推荐模式，系统不会自动派单。请在调度台选择骑手后发车，或把派单模式改为全自动。"
+            );
+        }
         return runGuarded(true);
     }
 

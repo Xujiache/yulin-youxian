@@ -16,7 +16,9 @@ public record WxTrackingDto(
         PollingDto polling,
         List<String> subscribeTemplateIds,
         RatingDto rating,
-        String notice
+        String notice,
+        /** 送达凭证照片。只在送达后返回，未送达时为空列表。 */
+        List<String> deliveryPhotos
 ) {
     public record TimelineNodeDto(
             String code,

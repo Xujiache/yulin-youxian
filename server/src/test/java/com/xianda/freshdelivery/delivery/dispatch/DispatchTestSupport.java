@@ -18,6 +18,9 @@ final class DispatchTestSupport {
     static DispatchFakes.MapConfigSource defaultConfig() {
         return new DispatchFakes.MapConfigSource()
                 .put(DispatchConfigKeys.ENABLED, true)
+                // 这些用例验的是派单算法本身，所以显式开全自动。
+                // 生产默认是 ADVISORY（只推荐不执行），那条语义由 DispatchModeTests 守。
+                .put(DispatchConfigKeys.MODE, "AUTO")
                 .put(DispatchConfigKeys.HOLD_WINDOW_SECONDS, 120)
                 .put(DispatchConfigKeys.MAX_TASKS_PER_WAVE, 8)
                 .put(DispatchConfigKeys.MAX_WAVE_DISTANCE_METERS, 8000)

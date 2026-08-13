@@ -41,7 +41,22 @@ public interface DispatchDao {
 
     Optional<DispatchWaveRow> findAppendableWave(long riderId);
 
+    /**
+     * 找该骑手同一天同一时段、还没发出去的波次。
+     *
+     * 时段批次制下同一个时段应该只有一个波次：店主分两次发同一时段的单时要并进去，
+     * 而不是给骑手开两趟车。与 {@link #findAppendableWave(long)} 的区别是它不看时段，
+     * 会把不同时段的单并到一起。
+     */
+    default Optional<DispatchWaveRow> findAppendableSlotWave(long riderId, LocalDate deliveryDate, String slotLabel) {
+        return Optional.empty();
+    }
+
     long createWave(Long riderId, LocalDate deliveryDate, LocalDateTime now);
+
+    default long createSlotWave(Long riderId, LocalDate deliveryDate, String slotLabel, LocalDateTime now) {
+        return createWave(riderId, deliveryDate, now);
+    }
 
     default boolean bindReassignedTaskToWave(long taskId, long riderId, long waveId, LocalDateTime now) {
         return false;

@@ -227,6 +227,21 @@ public class TrackingTaskDao {
         return resultSet.wasNull() ? null : value;
     }
 
+    /**
+     * 送达凭证照片。
+     *
+     * 骑手放门口的单，顾客最关心的就是「到底放哪了」。照片一直存着，
+     * 但只有骑手端和管理端看得到，顾客那边一张也没有。
+     * 只返回 DELIVERED 类型：异常凭证（破损、拒收现场）不该直接推给顾客。
+     */
+    public List<String> deliveredEvidenceUrls(long taskId) {
+        return jdbcTemplate.queryForList("""
+                SELECT file_url FROM delivery_evidence
+                WHERE task_id = ? AND evidence_type = 'DELIVERED' AND file_url IS NOT NULL
+                ORDER BY id
+                """, String.class, taskId);
+    }
+
     public record WxTaskRow(
             Long id,
             String taskNo,

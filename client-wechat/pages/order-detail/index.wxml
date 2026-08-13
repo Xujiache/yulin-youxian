@@ -97,6 +97,22 @@
       <text class="progress-distance">{{delivery.distanceText}}</text>
     </view>
 
+    <!-- 送达凭证：放门口的单，顾客最关心「到底放哪了」。服务端只在真正送达后才返回 -->
+    <view wx:if="{{delivery.deliveryPhotos.length}}" class="delivery-photos">
+      <text class="delivery-photos-title">送达凭证</text>
+      <view class="delivery-photos-grid">
+        <image
+          wx:for="{{delivery.deliveryPhotos}}"
+          wx:key="*this"
+          class="delivery-photo"
+          src="{{item}}"
+          mode="aspectFill"
+          data-url="{{item}}"
+          catchtap="handlePreviewDeliveryPhoto"
+        />
+      </view>
+    </view>
+
     <view wx:if="{{delivery.hasRider}}" class="rider-card">
       <image class="rider-avatar" src="{{delivery.rider.avatarUrl}}" mode="aspectFill" />
       <view class="rider-info">

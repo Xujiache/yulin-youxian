@@ -13,6 +13,10 @@ object TaskStatus {
     const val CANCELLED = "CANCELLED"
     const val EXCEPTION = "EXCEPTION"
 
+    /** 终态：不会再流转了。判断整波是否送完时用它。 */
+    fun isFinished(status: String): Boolean =
+        status == DELIVERED || status == RETURNED || status == CANCELLED
+
     fun text(status: String): String = when (status) {
         PENDING -> "待派单"
         ASSIGNED -> "待接单"
@@ -84,7 +88,9 @@ enum class NextStep(val actionType: String, val slideText: String) {
 
 /** 流转成功后的乐观状态,用于断网时立即更新本地 UI。 */
 fun optimisticStatusAfter(actionType: String, current: String): String = when (actionType) {
-    PendingActionTypes.ACCEPT -> TaskStatus.ACCEPTED
+    PendingActionTypes.ACCEPT, PendingActionTypes.ACCEPT_WAVE -> TaskStatus.ACCEPTED
+    // 回店只改波次状态，任务已经是终态，不动
+    PendingActionTypes.RETURN_WAVE -> current
     PendingActionTypes.PICKUP -> TaskStatus.PICKED_UP
     PendingActionTypes.DEPART -> TaskStatus.DELIVERING
     PendingActionTypes.ARRIVE -> TaskStatus.ARRIVED

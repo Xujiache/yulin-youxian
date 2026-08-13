@@ -271,16 +271,50 @@ export function assignTask(taskId: number, data: AssignTaskPayload) {
   })
 }
 
-/** POST /tasks/batch-assign 请求 */
+/**
+ * POST /tasks/batch-assign 请求。
+ *
+ * 批量指派一定会建或并波次。原来有个 createWave 开关，但服务端从来没读过它，
+ * 传 false 也照样建波次，已经去掉。
+ */
 export interface BatchAssignPayload {
   taskIds: number[]
   riderId: number
-  createWave?: boolean
 }
 
 export function batchAssignTasks(data: BatchAssignPayload) {
   return request.post<void>({
     url: '/api/admin/delivery/tasks/batch-assign',
+    data
+  })
+}
+
+/** POST /waves/dispatch-slot 请求 */
+export interface SlotDispatchPayload {
+  riderId: number
+  /** 期望时段。服务端会与任务实际时段核对，对不上直接拒绝 */
+  slotLabel?: string
+  taskIds: number[]
+}
+
+export interface SlotDispatchResult {
+  waveId: number
+  waveCreated: boolean
+  riderId: number
+  deliveryDate: string
+  slotLabel: string | null
+  taskIds: number[]
+}
+
+/**
+ * 按时段发车：把一个时段备好的单一次性发给一个骑手。
+ *
+ * 与 batchAssignTasks 的区别是它不走打分和聚类 —— 店主已经决定好给谁，
+ * 系统只负责原样落库并触发路径规划。整批成功或整批不动。
+ */
+export function dispatchSlot(data: SlotDispatchPayload) {
+  return request.post<SlotDispatchResult>({
+    url: '/api/admin/delivery/waves/dispatch-slot',
     data
   })
 }
@@ -427,6 +461,8 @@ export interface WaveSummary {
   riderName: string | null
   status: string
   deliveryDate: string
+  /** 配送时段。按时段发车的波次才有，老波次为空 */
+  slotLabel: string | null
   taskCount: number
   completedCount: number
   totalWeightKg: number
@@ -441,6 +477,8 @@ export interface WaveSummary {
   assignedAt: string | null
   startedAt: string | null
   completedAt: string | null
+  /** 骑手确认回店的时间。状态为 RETURNING 且此项为空表示送完了还没回店 */
+  returnedAt: string | null
 }
 
 /** 波次站点（含规划信息，04 §1.3 route.stops） */
@@ -521,6 +559,7 @@ export interface WaveListParams {
   date?: string
   status?: string
   riderId?: number
+  slotLabel?: string
   page?: number
   pageSize?: number
 }

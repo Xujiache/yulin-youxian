@@ -1060,6 +1060,15 @@ Page({
     this.fitMapView(true);
   },
 
+  handlePreviewDeliveryPhoto(event) {
+    const urls = (this.data.delivery && this.data.delivery.deliveryPhotos) || [];
+    if (!urls.length) {
+      return;
+    }
+    const current = event.currentTarget.dataset.url;
+    wx.previewImage({ current: current || urls[0], urls });
+  },
+
   handleCallRider() {
     const rider = this.data.delivery.rider;
     const phoneNumber = rider && rider.callNumber;

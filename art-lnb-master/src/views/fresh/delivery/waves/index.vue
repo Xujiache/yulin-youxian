@@ -47,6 +47,14 @@
               :value="rider.id"
             />
           </ElSelect>
+          <ElInput
+            v-model="slotLabel"
+            clearable
+            placeholder="按配送时段筛选"
+            class="filter-item"
+            @change="reload"
+            @clear="reload"
+          />
           <ElButton @click="resetFilters">重置筛选</ElButton>
         </div>
         <div class="fresh-toolbar__right">
@@ -68,6 +76,9 @@
               {{ waveStatusText(row.status) }}
             </ElTag>
           </template>
+        </ElTableColumn>
+        <ElTableColumn label="配送时段" width="150">
+          <template #default="{ row }">{{ row.slotLabel || '—' }}</template>
         </ElTableColumn>
         <ElTableColumn label="骑手" width="120">
           <template #default="{ row }">{{ row.riderName || '未指派' }}</template>
@@ -168,6 +179,7 @@
   const date = ref('')
   const status = ref('')
   const riderId = ref<number | undefined>()
+  const slotLabel = ref('')
   const loading = ref(false)
   const waves = ref<WaveSummary[]>([])
   const riders = ref<AdminRider[]>([])
@@ -185,6 +197,7 @@
         date: date.value || undefined,
         status: status.value || undefined,
         riderId: riderId.value,
+        slotLabel: slotLabel.value.trim() || undefined,
         page: page.value,
         pageSize: pageSize.value
       })
@@ -210,6 +223,7 @@
     date.value = ''
     status.value = ''
     riderId.value = undefined
+    slotLabel.value = ''
     await reload()
   }
 

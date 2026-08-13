@@ -37,6 +37,14 @@ interface RiderTaskApi {
     @POST("api/rider/tasks/{taskId}/reject")
     suspend fun reject(@Path("taskId") taskId: Long, @Body body: TaskTransitionRequest): ApiResponse<TaskCard>
 
+    /** 整波次接单:ASSIGNED → ACCEPTED。时段批次制下一波就是一个时段的全部单,没有挑单余地。 */
+    @POST("api/rider/waves/{waveId}/accept")
+    suspend fun acceptWave(@Path("waveId") waveId: Long, @Body body: TaskTransitionRequest): ApiResponse<List<TaskCard>>
+
+    /** 骑手确认回到门店,这一波收尾,调度台可以发下一个时段。 */
+    @POST("api/rider/waves/{waveId}/return")
+    suspend fun returnWave(@Path("waveId") waveId: Long, @Body body: TaskTransitionRequest): ApiResponse<List<TaskCard>>
+
     /** 整波次取货:ACCEPTED → PICKED_UP。 */
     @POST("api/rider/waves/{waveId}/pickup")
     suspend fun pickupWave(@Path("waveId") waveId: Long, @Body body: TaskTransitionRequest): ApiResponse<List<TaskCard>>

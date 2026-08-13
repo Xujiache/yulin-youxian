@@ -11,6 +11,7 @@ import com.xianda.freshdelivery.delivery.common.DeliveryErrorCode;
 import com.xianda.freshdelivery.delivery.common.DeliveryException;
 import com.xianda.freshdelivery.delivery.common.DeliveryTaskStatus;
 import com.xianda.freshdelivery.delivery.domain.DeliveryTask;
+import com.xianda.freshdelivery.delivery.domain.DeliveryWave;
 import com.xianda.freshdelivery.delivery.dto.BatchPickReadyRequest;
 import com.xianda.freshdelivery.delivery.dto.DeliverRequest;
 import com.xianda.freshdelivery.delivery.dto.PickReadyRequest;
@@ -248,7 +249,63 @@ class DeliveryTaskServiceTests {
         assertEquals("已完成", harness.orderBridgePort.status(1001L));
         assertNotNull(harness.taskService.requireTask(taskId).deliveredAt());
         assertTrue(harness.waveEtaPort.waveIds().contains(waveId));
-        assertEquals("COMPLETED", harness.waveDao.findById(waveId).orElseThrow().status());
+        // 送完不等于收工：骑手还在最后一个顾客门口，调度台不能据此认为他空出来了
+        assertEquals("RETURNING", harness.waveDao.findById(waveId).orElseThrow().status());
+
+        harness.taskService.returnToStore(RIDER_ID, waveId, new TaskActionRequest("evt-rt", null, null));
+        DeliveryWave finished = harness.waveDao.findById(waveId).orElseThrow();
+        assertEquals("COMPLETED", finished.status());
+        assertNotNull(finished.returnedAt(), "回店时间要落库，调度台据此发下一个时段");
+    }
+
+    @Test
+    void 还有单没送完时不能确认回店() {
+        long taskId = pendingTask(1001L, "XD001");
+        long waveId = harness.waveService.createWave(
+                new WaveCreateRequest(RIDER_ID, List.of(taskId)), TaskOperator.admin("A")
+        );
+        harness.waveDao.updateRider(waveId, RIDER_ID, TaskTimes.now());
+        harness.taskService.assignTask(taskId, RIDER_ID, waveId, "MANUAL", null, null);
+
+        DeliveryException exception = assertThrows(
+                DeliveryException.class,
+                () -> harness.taskService.returnToStore(
+                        RIDER_ID, waveId, new TaskActionRequest("evt-rt", null, null))
+        );
+        assertEquals(DeliveryErrorCode.TASK_STATUS_NOT_ALLOWED, exception.code());
+    }
+
+    @Test
+    void 整波次接单把全部已派单转成已接单() {
+        long first = pendingTask(1001L, "XD001");
+        long second = pendingTask(1002L, "XD002");
+        long waveId = harness.waveService.createWave(
+                new WaveCreateRequest(RIDER_ID, List.of(first, second)), TaskOperator.admin("A")
+        );
+        harness.waveDao.updateRider(waveId, RIDER_ID, TaskTimes.now());
+        harness.taskService.assignTask(first, RIDER_ID, waveId, "MANUAL", null, null);
+        harness.taskService.assignTask(second, RIDER_ID, waveId, "MANUAL", null, null);
+
+        harness.taskService.acceptWave(RIDER_ID, waveId, new TaskActionRequest("evt-aw", null, null));
+
+        assertEquals("ACCEPTED", harness.taskStatus(first));
+        assertEquals("ACCEPTED", harness.taskStatus(second));
+    }
+
+    @Test
+    void 整波次接单可以重复调用() {
+        long taskId = pendingTask(1001L, "XD001");
+        long waveId = harness.waveService.createWave(
+                new WaveCreateRequest(RIDER_ID, List.of(taskId)), TaskOperator.admin("A")
+        );
+        harness.waveDao.updateRider(waveId, RIDER_ID, TaskTimes.now());
+        harness.taskService.assignTask(taskId, RIDER_ID, waveId, "MANUAL", null, null);
+
+        // 网络重试和重复点击都会走到这里，第二次不能报错
+        harness.taskService.acceptWave(RIDER_ID, waveId, new TaskActionRequest("evt-aw", null, null));
+        harness.taskService.acceptWave(RIDER_ID, waveId, new TaskActionRequest("evt-aw", null, null));
+
+        assertEquals("ACCEPTED", harness.taskStatus(taskId));
     }
 
     @Test

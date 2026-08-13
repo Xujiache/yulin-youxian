@@ -6,6 +6,12 @@ import kotlinx.serialization.Serializable
 
 object PendingActionTypes {
     const val ACCEPT = "ACCEPT"
+
+    /** 整波次接单。时段批次制下一波就是一个时段的全部单。 */
+    const val ACCEPT_WAVE = "ACCEPT_WAVE"
+
+    /** 骑手确认回店，这一波收尾。 */
+    const val RETURN_WAVE = "RETURN_WAVE"
     const val PICKUP = "PICKUP"
     const val DEPART = "DEPART"
     const val ARRIVE = "ARRIVE"
@@ -15,6 +21,8 @@ object PendingActionTypes {
     /** 同步失败提示里用的中文名，骑手看不懂 DELIVER。 */
     fun label(type: String): String = when (type) {
         ACCEPT -> "接单"
+        ACCEPT_WAVE -> "整波接单"
+        RETURN_WAVE -> "回店"
         PICKUP -> "取货"
         DEPART -> "出发"
         ARRIVE -> "到达"

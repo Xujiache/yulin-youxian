@@ -10,6 +10,8 @@ public record DeliveryWave(
         Long riderId,
         String status,
         LocalDate deliveryDate,
+        /** 配送时段，与 delivery_task.slot_label 一致。时段批次发车时写入。 */
+        String slotLabel,
         Integer taskCount,
         Integer completedCount,
         BigDecimal totalWeightKg,
@@ -25,6 +27,8 @@ public record DeliveryWave(
         LocalDateTime assignedAt,
         LocalDateTime startedAt,
         LocalDateTime completedAt,
+        /** 骑手确认回到门店的时间。为空表示还没回店，调度台据此判断能不能发下一个时段。 */
+        LocalDateTime returnedAt,
         LocalDateTime createdAt,
         LocalDateTime updatedAt
 ) {}

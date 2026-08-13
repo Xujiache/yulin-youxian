@@ -29,6 +29,21 @@ public class DispatchSettings {
         return bool(DispatchConfigKeys.ENABLED, true);
     }
 
+    /**
+     * 派单模式，默认只推荐不执行。
+     *
+     * 和 {@link #dispatchEnabled()} 是两件事：ENABLED 是配送域自动化的总开关（关了连推荐都不算），
+     * MODE 决定算出来的结果是自动落地还是等店主点。
+     */
+    public DispatchMode dispatchMode() {
+        return DispatchMode.of(configSource.getString(DispatchConfigKeys.MODE));
+    }
+
+    /** 自动派单要同时满足「总开关开」和「模式是全自动」。 */
+    public boolean autoDispatchAllowed() {
+        return dispatchEnabled() && dispatchMode().isAuto();
+    }
+
     public int holdWindowSeconds() {
         return Math.max(0, integer(DispatchConfigKeys.HOLD_WINDOW_SECONDS, 120));
     }
@@ -70,8 +85,14 @@ public class DispatchSettings {
         return Math.max(0, integer(DispatchConfigKeys.PROBATION_MAX_DISTANCE_METERS, 2000));
     }
 
+    /**
+     * 自动改派同样要求全自动模式。
+     *
+     * 推荐模式下店主是自己挑的骑手，系统不能因为算出「有更优解」就把单换掉 ——
+     * 原来这里只看开关不看模式，人工分好的单会被悄悄改派。
+     */
     public boolean autoReassignEnabled() {
-        return bool(DispatchConfigKeys.AUTO_REASSIGN_ENABLED, true);
+        return dispatchMode().isAuto() && bool(DispatchConfigKeys.AUTO_REASSIGN_ENABLED, true);
     }
 
     public int reassignMaxCount() {

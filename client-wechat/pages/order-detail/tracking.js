@@ -1,6 +1,7 @@
 // 配送追踪响应的归一化（契约见 docs/rider/04-API契约.md §三）
 // 后端任何一层字段缺失都不能让页面崩，所以这里统一做兜底，页面只消费归一化后的结构。
 const { formatEtaText, formatRemaining, formatDistance } = require("../../utils/delivery-format");
+const { normalizeAssetUrl } = require("../../api/normalize");
 
 const TIMELINE_TEMPLATE = [
   { code: "ASSIGNED", label: "已安排骑手" },
@@ -38,6 +39,7 @@ const EMPTY_DELIVERY = {
   remainingText: "",
   distanceText: "",
   stopsAheadText: "",
+  deliveryPhotos: [],
   noticeText: "",
   phoneWarningText: "",
   waitingText: "",
@@ -240,6 +242,16 @@ function normalizeRating(raw) {
   };
 }
 
+/** 送达照片。相对路径要补成绝对地址，否则 image 组件加载不出来。 */
+function normalizePhotos(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value
+    .filter((url) => typeof url === "string" && url.trim())
+    .map((url) => normalizeAssetUrl(url.trim()));
+}
+
 function stopsAheadText(value) {
   const stops = toFiniteNumber(value);
   if (stops === null || stops < 0) {
@@ -292,6 +304,8 @@ function normalizeTracking(raw, fallbackDestination) {
         : "",
     distanceText: hasRiderPoint ? formatDistance(raw.distanceMeters) : "",
     stopsAheadText: hasRiderPoint ? stopsAheadText(raw.stopsAhead) : "",
+    // 放门口的单，顾客最关心的就是「到底放哪了」。服务端只在真正送达后才给。
+    deliveryPhotos: normalizePhotos(raw.deliveryPhotos),
     noticeText: normalizedNotice,
     phoneWarningText: rider && rider.phoneDegraded
       ? degradedNotice || "骑手隐私号暂不可用，联系骑手将直接拨号，请勿保存号码。"

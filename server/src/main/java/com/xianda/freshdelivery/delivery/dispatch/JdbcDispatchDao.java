@@ -28,7 +28,8 @@ public class JdbcDispatchDao implements DispatchDao {
 
     private static final String TASK_COLUMNS = "id, task_no, wave_id, rider_id, status, address_detail,"
             + " address_lat, address_lng, area_label, building_label, group_key, floor_no, room_no,"
-            + " item_count, total_weight_kg, cold_chain_level, delivery_date, window_start_at, window_end_at,"
+            + " item_count, total_weight_kg, cold_chain_level, delivery_date, slot_label,"
+            + " window_start_at, window_end_at,"
             + " promised_at, eta_at, extra_time_seconds, picked_ready_at, hold_until_at, reassign_count,"
             + " priority, handoff_seconds";
 
@@ -146,12 +147,30 @@ public class JdbcDispatchDao implements DispatchDao {
     }
 
     @Override
+    public Optional<DispatchWaveRow> findAppendableSlotWave(long riderId, LocalDate deliveryDate, String slotLabel) {
+        if (deliveryDate == null || slotLabel == null || slotLabel.isBlank()) {
+            return Optional.empty();
+        }
+        return jdbcTemplate.query("SELECT id, wave_no, rider_id, status, delivery_date, task_count"
+                        + " FROM delivery_wave WHERE rider_id = ? AND status IN ('PLANNING', 'ASSIGNED')"
+                        + " AND delivery_date = ? AND slot_label = ?"
+                        + " ORDER BY id DESC LIMIT 1 FOR UPDATE",
+                waveMapper(), riderId, java.sql.Date.valueOf(deliveryDate), slotLabel.trim())
+                .stream().findFirst();
+    }
+
+    @Override
     public long createWave(Long riderId, LocalDate deliveryDate, LocalDateTime now) {
+        return createSlotWave(riderId, deliveryDate, null, now);
+    }
+
+    @Override
+    public long createSlotWave(Long riderId, LocalDate deliveryDate, String slotLabel, LocalDateTime now) {
         LocalDate date = deliveryDate == null ? now.toLocalDate() : deliveryDate;
         String status = riderId == null ? "PLANNING" : "ASSIGNED";
         for (int attempt = 0; attempt < 5; attempt++) {
             try {
-                return insertWave(nextWaveNo(date), riderId, status, date, now);
+                return insertWave(nextWaveNo(date), riderId, status, date, slotLabel, now);
             } catch (DuplicateKeyException ignored) {
                 continue;
             }
@@ -159,12 +178,14 @@ public class JdbcDispatchDao implements DispatchDao {
         throw new DeliveryException(DeliveryErrorCode.TASK_ALREADY_EXISTS, "波次号生成冲突，请重试");
     }
 
-    private long insertWave(String waveNo, Long riderId, String status, LocalDate deliveryDate, LocalDateTime now) {
+    private long insertWave(String waveNo, Long riderId, String status, LocalDate deliveryDate,
+                            String slotLabel, LocalDateTime now) {
         KeyHolder keyHolder = new GeneratedKeyHolder();
         jdbcTemplate.update(connection -> {
             PreparedStatement statement = connection.prepareStatement(
-                    "INSERT INTO delivery_wave (wave_no, rider_id, status, delivery_date, assigned_at, created_at)"
-                            + " VALUES (?, ?, ?, ?, ?, ?)", new String[]{"id"});
+                    "INSERT INTO delivery_wave"
+                            + " (wave_no, rider_id, status, delivery_date, slot_label, assigned_at, created_at)"
+                            + " VALUES (?, ?, ?, ?, ?, ?, ?)", new String[]{"id"});
             statement.setString(1, waveNo);
             if (riderId == null) {
                 statement.setNull(2, java.sql.Types.BIGINT);
@@ -173,8 +194,13 @@ public class JdbcDispatchDao implements DispatchDao {
             }
             statement.setString(3, status);
             statement.setDate(4, java.sql.Date.valueOf(deliveryDate));
-            statement.setTimestamp(5, riderId == null ? null : Timestamp.valueOf(now));
-            statement.setTimestamp(6, Timestamp.valueOf(now));
+            if (slotLabel == null || slotLabel.isBlank()) {
+                statement.setNull(5, java.sql.Types.VARCHAR);
+            } else {
+                statement.setString(5, slotLabel.trim());
+            }
+            statement.setTimestamp(6, riderId == null ? null : Timestamp.valueOf(now));
+            statement.setTimestamp(7, Timestamp.valueOf(now));
             return statement;
         }, keyHolder);
         Long key = JdbcValues.generatedIdOrNull(keyHolder);
@@ -296,6 +322,7 @@ public class JdbcDispatchDao implements DispatchDao {
                 rs.getDouble("total_weight_kg"),
                 rs.getString("cold_chain_level"),
                 localDate(rs, "delivery_date"),
+                rs.getString("slot_label"),
                 dateTime(rs, "window_start_at"),
                 dateTime(rs, "window_end_at"),
                 dateTime(rs, "promised_at"),

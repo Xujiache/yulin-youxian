@@ -6,10 +6,12 @@ import com.xianda.freshdelivery.delivery.dispatch.DispatchScheduler;
 import com.xianda.freshdelivery.delivery.dispatch.DispatchSuggestResponse;
 import com.xianda.freshdelivery.delivery.dispatch.ManualDispatchResult;
 import com.xianda.freshdelivery.delivery.dispatch.ManualDispatchService;
+import com.xianda.freshdelivery.delivery.dispatch.SlotDispatchService;
 import com.xianda.freshdelivery.delivery.dto.AssignRequest;
 import com.xianda.freshdelivery.delivery.dto.BatchAssignRequest;
 import com.xianda.freshdelivery.delivery.dto.DispatchSuggestRequest;
 import com.xianda.freshdelivery.delivery.dto.ReassignRequest;
+import com.xianda.freshdelivery.delivery.dto.SlotDispatchRequest;
 import com.xianda.freshdelivery.delivery.task.DeliveryTaskControllerSupport;
 import com.xianda.freshdelivery.service.AuthService;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -23,15 +25,33 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/admin/delivery")
 public class AdminDispatchController extends DeliveryTaskControllerSupport {
     private final ManualDispatchService manualDispatchService;
+    private final SlotDispatchService slotDispatchService;
     private final DispatchScheduler dispatchScheduler;
     private final AuthService authService;
 
     public AdminDispatchController(ManualDispatchService manualDispatchService,
+                                   SlotDispatchService slotDispatchService,
                                    DispatchScheduler dispatchScheduler,
                                    AuthService authService) {
         this.manualDispatchService = manualDispatchService;
+        this.slotDispatchService = slotDispatchService;
         this.dispatchScheduler = dispatchScheduler;
         this.authService = authService;
+    }
+
+    /**
+     * 按时段发车：把一个时段备好的单一次性发给一个骑手。
+     *
+     * 与 batch-assign 的区别是它不走打分和聚类 —— 店主已经决定好了给谁，
+     * 系统只负责原样落库并触发路径规划。整批成功或整批不动。
+     */
+    @PostMapping("/waves/dispatch-slot")
+    public ApiResponse<SlotDispatchService.SlotDispatchResult> dispatchSlot(
+            @RequestBody SlotDispatchRequest request) {
+        return ApiResponse.ok(slotDispatchService.dispatch(new SlotDispatchService.SlotDispatchCommand(
+                request == null ? null : request.riderId(),
+                request == null ? null : request.slotLabel(),
+                request == null ? null : request.taskIds())));
     }
 
     @PostMapping("/tasks/{taskId}/assign")
@@ -47,11 +67,9 @@ public class AdminDispatchController extends DeliveryTaskControllerSupport {
 
     @PostMapping("/tasks/batch-assign")
     public ApiResponse<ManualDispatchResult> batchAssign(@RequestBody BatchAssignRequest request) {
-        boolean createWave = request == null || !Boolean.FALSE.equals(request.createWave());
         return ApiResponse.ok(manualDispatchService.batchAssign(
                 request == null ? null : request.taskIds(),
-                request == null ? null : request.riderId(),
-                createWave));
+                request == null ? null : request.riderId()));
     }
 
     @PostMapping("/tasks/{taskId}/reassign")

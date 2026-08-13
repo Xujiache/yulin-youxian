@@ -101,6 +101,7 @@ export const waveDetailContractFixture = {
   riderName: '测试骑手',
   status: 'PLANNED',
   deliveryDate: '2026-08-12',
+  slotLabel: '今日 14:00-16:00',
   taskCount: 1,
   completedCount: 0,
   totalWeightKg: 1.5,
@@ -115,6 +116,7 @@ export const waveDetailContractFixture = {
   assignedAt: null,
   startedAt: null,
   completedAt: null,
+  returnedAt: null,
   stops: [
     {
       taskId: 101,

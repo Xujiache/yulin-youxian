@@ -49,12 +49,19 @@ public class ManualDispatchService {
         return assignAll(List.of(taskId), riderId, force, reason);
     }
 
-    public ManualDispatchResult batchAssign(List<Long> taskIds, Long riderId, boolean createWave) {
+    /**
+     * 批量指派。
+     *
+     * 注意这里一定会建或并波次 —— 原来的 createWave 参数只影响日志文案，传 false 也照样建，
+     * 是个从来没生效过的开关。真要「只指派不建波次」得走另一条路径，
+     * 但那样产生的单没有波次、也不会被自动派单再捡起来，属于有害配置，所以直接去掉。
+     */
+    public ManualDispatchResult batchAssign(List<Long> taskIds, Long riderId) {
         List<Long> ids = taskIds == null ? List.of() : taskIds.stream().filter(Objects::nonNull).distinct().toList();
         if (ids.isEmpty()) {
             throw new DeliveryException(DeliveryErrorCode.TASK_NOT_FOUND, "taskIds 不能为空");
         }
-        return assignAll(ids, riderId, false, createWave ? "批量指派并建波次" : "批量指派");
+        return assignAll(ids, riderId, false, "批量指派并建波次");
     }
 
     private ManualDispatchResult assignAll(List<Long> taskIds, Long riderId, boolean force, String reason) {

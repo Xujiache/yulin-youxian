@@ -11,6 +11,8 @@ public final class DeliveryErrorCode {
     public static final int TASK_NOT_OWNED_BY_RIDER = 1012;
     public static final int ORDER_NOT_DISPATCHABLE = 1013;
     public static final int TASK_ALREADY_EXISTS = 1014;
+    /** 当前是推荐模式，系统不自动派单。 */
+    public static final int DISPATCH_ADVISORY_ONLY = 1015;
     public static final int NO_AVAILABLE_RIDER = 1020;
     public static final int RIDER_CONCURRENCY_LIMIT = 1021;
     public static final int RIDER_FATIGUE_SUSPENDED = 1022;
@@ -35,6 +37,7 @@ public final class DeliveryErrorCode {
             case TASK_NOT_OWNED_BY_RIDER -> "任务不属于当前骑手";
             case ORDER_NOT_DISPATCHABLE -> "订单状态不满足派单条件";
             case TASK_ALREADY_EXISTS -> "该订单已存在配送任务";
+            case DISPATCH_ADVISORY_ONLY -> "当前是推荐模式，系统不会自动派单";
             case NO_AVAILABLE_RIDER -> "无可用骑手";
             case RIDER_CONCURRENCY_LIMIT -> "骑手已达并发上限";
             case RIDER_FATIGUE_SUSPENDED -> "骑手处于疲劳停派期";

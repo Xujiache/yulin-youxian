@@ -169,6 +169,16 @@ class PendingActionQueue private constructor(private val appContext: Context) {
             PendingActionTypes.ACCEPT ->
                 apis.caller.dataOrNull { apis.task.accept(requireNotNull(taskId), requireNotNull(transition)) }
 
+            PendingActionTypes.ACCEPT_WAVE ->
+                apis.caller.dataOrNull {
+                    apis.task.acceptWave(requireNotNull(payload.waveId), requireNotNull(transition))
+                }
+
+            PendingActionTypes.RETURN_WAVE ->
+                apis.caller.dataOrNull {
+                    apis.task.returnWave(requireNotNull(payload.waveId), requireNotNull(transition))
+                }
+
             PendingActionTypes.PICKUP -> {
                 val waveId = payload.waveId
                 if (waveId != null) {
