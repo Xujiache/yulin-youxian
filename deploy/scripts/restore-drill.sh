@@ -100,5 +100,5 @@ if [[ "${KEEP_DRILL_DB:-0}" == "1" ]]; then
 else
   cleanup
   trap - EXIT
-  log "restore drill passed: Flyway V11 and all 36 business tables verified; isolated database removed"
+  log "restore drill passed: Flyway baseline and all business tables verified; isolated database removed"
 fi

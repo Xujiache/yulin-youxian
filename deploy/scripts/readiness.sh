@@ -117,4 +117,4 @@ health_json="$(curl --fail --silent --show-error \
   || die "loopback Actuator health request failed"
 [[ "$health_json" == *'"status":"UP"'* ]] || die "Actuator is not UP: $health_json"
 
-log "READY: release manifest, Flyway V11, 36 business tables, storage, disk, backup age and Actuator passed"
+log "READY: release manifest, Flyway baseline, business tables, storage, disk, backup age and Actuator passed"

@@ -1,8 +1,8 @@
 SET @schema_name := DATABASE();
 
-SELECT COUNT(*) INTO @flyway_v11
+SELECT COUNT(*) INTO @flyway_latest
 FROM flyway_schema_history
-WHERE version = '11' AND success = 1;
+WHERE version = '14' AND success = 1;
 
 SELECT COUNT(*) INTO @flyway_failed
 FROM flyway_schema_history
@@ -58,19 +58,21 @@ WHERE table_schema = @schema_name
     'marketing_lottery_challenge',
     'marketing_lottery_draw',
     'marketing_lottery_gift',
-    'marketing_lottery_order_decision'
+    'marketing_lottery_order_decision',
+    'marketing_lottery_draw_guard',
+    'delivery_route_plan_failure'
   );
 
 SELECT IF(
-  @flyway_v11 = 1
+  @flyway_latest = 1
   AND @flyway_failed = 0
-  AND @flyway_max_version = 11
-  AND @business_table_count = 36
-  AND @expected_table_count = 36,
+  AND @flyway_max_version = 14
+  AND @business_table_count = 38
+  AND @expected_table_count = 38,
   'READY',
   CONCAT(
     'NOT_READY',
-    ' flyway_v11=', @flyway_v11,
+    ' flyway_latest=', @flyway_latest,
     ' flyway_failed=', @flyway_failed,
     ' flyway_max=', @flyway_max_version,
     ' business_tables=', @business_table_count,
