@@ -2,7 +2,8 @@
 # 三端自动审查循环：同步远端 -> 全量审查 -> 自动修复 -> 提交推送 -> 等待 -> 下一轮。
 #
 # 每一轮做的事（检查口径对齐 .github/workflows/ci.yml 的全部任务）：
-#   1. 与远端同步，自动处理分叉与冲突（策略见 sync_with_remote 注释）
+#   1. 与远端同步，自动处理分叉与冲突（策略见 sync_with_remote 注释）；
+#      基线 main 有新内容时并进来一起审查；出现新分支时在日志里点名
 #   2. 后端      server/mvnw clean test
 #   3. 后台      eslint --fix 自动修复，复查必须归零；vite build + vue-tsc
 #   4. 骑手端    gradle testDebugUnitTest lintDebug
@@ -13,19 +14,28 @@
 #   8. 结果写入 docs/auto-review/review-log.md，连同自动修复一起提交推送
 #
 # 同步策略（无人值守的前提是永远不能卡死在冲突上）：
-#   仅远端领先        -> fast-forward
-#   仅本地领先        -> 不动，轮末推送
-#   双方分叉          -> 先试 rebase（历史保持线性）
-#     rebase 冲突     -> 放弃 rebase，改 merge -X theirs（冲突块以远端为准；
+#   本分支：
+#     仅远端领先      -> fast-forward
+#     仅本地领先      -> 不动，轮末推送
+#     双方分叉        -> 先试 rebase（历史保持线性）
+#       rebase 冲突   -> 放弃 rebase，改 merge -X theirs（冲突块以远端为准；
 #                        本地未推送的内容基本是审查日志与 eslint 修复，本轮会自动重做）
-#     merge 也失败    -> 本地提交备份到 review-backup-<时间戳> 分支，
+#       merge 也失败  -> 本地提交备份到 review-backup-<时间戳> 分支，
 #                        工作区硬重置到远端，日志里大写标注 —— 绝不丢内容，也绝不停摆
+#   基线 main（新项目可能直接传到 main）：
+#     main 有本分支缺的提交 -> 普通合并进来一起审查；
+#     合并冲突 -> 放弃并标红留给人工 —— main 侧冲突意味着两边改了同一处业务，
+#     机器不该替人裁决，这一点与本分支冲突「以远端为准」刻意不同
+#   新分支（新项目也可能另开分支上传）：
+#     每轮对比远端分支清单，新出现的分支在日志里点名并给出领先提交数，
+#     不自动并入 —— 是否纳入主线由人决定
 #   审查日志本身在 .gitattributes 里配了 merge=union，两边的轮次记录都会保留。
 #
 # 停止方式：touch scripts/auto-review.stop（当前轮跑完后退出），或直接 kill。
 # 可调参数（环境变量）：
 #   SLEEP_SECONDS   两轮之间的等待，默认 60
 #   MAX_ROUNDS      跑满多少轮后退出，默认 0 = 不限
+#   BASE_BRANCH     基线分支，默认 main
 #
 # 依赖：JDK 17、Node 22.14.0 + npm 10.9.2、Android SDK。脚本会按常见路径
 # 自动探测；探测不到就用当前 PATH 里的版本并在日志里注明。
@@ -43,6 +53,7 @@ STOP_FILE="$SCRIPT_DIR/auto-review.stop"
 STATE_DIR="${TMPDIR:-/tmp}/auto-review-state"
 SLEEP_SECONDS="${SLEEP_SECONDS:-60}"
 MAX_ROUNDS="${MAX_ROUNDS:-0}"
+BASE_BRANCH="${BASE_BRANCH:-main}"
 BRANCH="$(git -C "$REPO_ROOT" rev-parse --abbrev-ref HEAD)"
 
 mkdir -p "$STATE_DIR" "$(dirname "$LOG_FILE")"
@@ -106,7 +117,7 @@ abort_in_progress_ops() {
   return 0
 }
 
-# 与远端同步。结果写入全局 SYNC_NOTE / SYNC_OLD_HEAD 供日志与差异分析使用。
+# 与远端同分支同步。结果写入全局 SYNC_NOTE / SYNC_OLD_HEAD。
 sync_with_remote() {
   SYNC_OLD_HEAD="$(git -C "$REPO_ROOT" rev-parse HEAD)"
   SYNC_NOTE="拉取远端：网络失败，本轮只审查本地内容"
@@ -150,9 +161,64 @@ sync_with_remote() {
   return 0
 }
 
+# 基线 main 有新内容（例如新项目直接传到 main）时并进来一起审查。
+# 与本分支冲突时不自动裁决：main 侧冲突意味着两边改了同一处业务，
+# 机器不该替人挑边 —— 这与同分支同步「以远端为准」刻意不同。
+sync_with_base() {
+  MAIN_NOTE=""
+  [[ "$BRANCH" == "$BASE_BRANCH" ]] && return 0
+  git -C "$REPO_ROOT" fetch origin "$BASE_BRANCH" > /dev/null 2>&1 || return 0
+  git -C "$REPO_ROOT" merge-base --is-ancestor "origin/$BASE_BRANCH" HEAD 2>/dev/null && return 0
+
+  local incoming
+  incoming="$(git -C "$REPO_ROOT" rev-list --count "HEAD..origin/$BASE_BRANCH")"
+  if git -C "$REPO_ROOT" merge --no-edit "origin/$BASE_BRANCH" \
+       > "$STATE_DIR/base-merge.log" 2>&1; then
+    MAIN_NOTE="- 基线 ${BASE_BRANCH} 有 ${incoming} 个本分支没有的提交，已合并进来一起审查"
+  else
+    git -C "$REPO_ROOT" merge --abort >/dev/null 2>&1
+    MAIN_NOTE="- **基线 ${BASE_BRANCH} 有 ${incoming} 个新提交，但与本分支冲突，未自动合并，需要人工处理（详见 base-merge.log）**"
+  fi
+  return 0
+}
+
+# 远端出现新分支（新项目可能另开分支上传）时在日志里点名，不自动并入。
+report_new_branches() {
+  local entry="$1"
+  local known="$STATE_DIR/known-branches" current="$STATE_DIR/branches.now"
+  git -C "$REPO_ROOT" ls-remote --heads origin 2>/dev/null \
+    | awk '{print $2}' | sed 's|refs/heads/||' | sort > "$current" || return 0
+  [[ -s "$current" ]] || { rm -f "$current"; return 0; }
+
+  if [[ -f "$known" ]]; then
+    local fresh b n
+    fresh="$(comm -13 "$known" "$current")"
+    for b in $fresh; do
+      [[ "$b" == review-backup-* ]] && continue
+      if git -C "$REPO_ROOT" fetch origin "$b" >/dev/null 2>&1; then
+        n="$(git -C "$REPO_ROOT" rev-list --count HEAD..FETCH_HEAD 2>/dev/null || echo '?')"
+      else
+        n="?"
+      fi
+      echo "- **检测到远端新分支 ${b}（相对本分支新增 ${n} 个提交）。未自动并入；要纳入审查请把它合并到本分支，或告知如何处理**" >> "$entry"
+    done
+  fi
+  mv "$current" "$known"
+  return 0
+}
+
 # 本轮新拉取的改动都动了哪些顶层目录；没有对应审查步骤的目录要点名
 CHECKED_DIRS="server art-lnb-master rider-android client-wechat deploy"
 KNOWN_NO_CHECK="docs scripts .github packages design design-assets third_party tmp deliverables .claude"
+
+project_hint() {
+  local d="$1"
+  if [[ -f "$REPO_ROOT/$d/package.json" ]]; then echo "，看结构是 Node 项目";
+  elif [[ -f "$REPO_ROOT/$d/pom.xml" ]]; then echo "，看结构是 Maven 项目";
+  elif [[ -f "$REPO_ROOT/$d/build.gradle" || -f "$REPO_ROOT/$d/build.gradle.kts" \
+          || -f "$REPO_ROOT/$d/settings.gradle.kts" ]]; then echo "，看结构是 Gradle 项目";
+  fi
+}
 
 describe_incoming() {
   local old="$1" entry="$2"
@@ -166,7 +232,7 @@ describe_incoming() {
   while read -r _ d; do
     [[ "$d" == "(根目录)" ]] && continue
     if [[ " $CHECKED_DIRS $KNOWN_NO_CHECK " != *" $d "* ]]; then
-      echo "- **注意：目录 ${d} 没有对应的审查步骤，若是新项目请补充构建与检查方式**" >> "$entry"
+      echo "- **注意：目录 ${d} 没有对应的审查步骤$(project_hint "$d")，若是新项目请补充构建与检查方式**" >> "$entry"
     fi
     if [[ "$d" == "print-agent" ]]; then
       echo "- 注意：print-agent 有改动，但它只能在 Windows 上编译，本机跳过（CI 的 Print agent build 任务覆盖）" >> "$entry"
@@ -201,9 +267,12 @@ review_round() {
     echo "- 发现上一轮遗留的未提交改动，已先行收拢为独立提交" >> "$entry"
   fi
 
-  # 1. 同步远端（分叉、冲突都在这里消化）
+  # 1. 同步：本分支 -> 基线 main -> 新分支检测（分叉、冲突都在这里消化）
   sync_with_remote
   echo "- ${SYNC_NOTE}" >> "$entry"
+  sync_with_base
+  [[ -n "$MAIN_NOTE" ]] && echo "$MAIN_NOTE" >> "$entry"
+  report_new_branches "$entry"
   describe_incoming "$SYNC_OLD_HEAD" "$entry"
 
   # 2. 后端测试
@@ -299,7 +368,7 @@ review_round() {
     {
       echo "# 自动审查日志"
       echo
-      echo "由 scripts/auto-review.sh 生成。每一轮：同步远端 -> 三端与小程序、运维模板全量检查 ->"
+      echo "由 scripts/auto-review.sh 生成。每一轮：同步远端与基线 -> 三端与小程序、运维模板全量检查 ->"
       echo "eslint 自动修复 -> 记录本文件 -> 提交推送。最新一轮在最上面。"
       echo
     } > "$LOG_FILE"
@@ -322,7 +391,7 @@ review_round() {
 
 # ---------- 主循环 ----------
 round=$(( $(grep -c '^## 第' "$LOG_FILE" 2>/dev/null || echo 0) + 1 ))
-echo "[$(ts)] 自动审查循环启动，分支 ${BRANCH}，起始轮次 ${round}，轮间隔 ${SLEEP_SECONDS}s，停止方式：touch $STOP_FILE"
+echo "[$(ts)] 自动审查循环启动，分支 ${BRANCH}（基线 ${BASE_BRANCH}），起始轮次 ${round}，轮间隔 ${SLEEP_SECONDS}s，停止方式：touch $STOP_FILE"
 
 while true; do
   review_round "$round"
