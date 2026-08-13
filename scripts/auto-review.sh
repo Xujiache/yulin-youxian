@@ -22,6 +22,10 @@
 
 set -u
 
+# 整个循环不允许任何子进程读终端：gradle 客户端会把 TTY 当 stdin 去探测，
+# 在 tmux 里作为后台进程组读终端会被内核 SIGTTIN 挂起，整轮审查就此卡死。
+exec < /dev/null
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 LOG_FILE="$REPO_ROOT/docs/auto-review/review-log.md"
@@ -160,7 +164,7 @@ review_round() {
 
   # 5. 骑手端单测 + lint（保留 daemon，循环里增量很快）
   run_step rider "$STATE_DIR/rider.log" 1800 \
-    bash -c "cd '$REPO_ROOT/rider-android' && ./gradlew testDebugUnitTest lintDebug"
+    bash -c "cd '$REPO_ROOT/rider-android' && ./gradlew --console=plain testDebugUnitTest lintDebug"
   rc=$?
   echo "- 骑手端 testDebugUnitTest + lintDebug：$(summarize $rc "$STATE_DIR/rider.log")" >> "$entry"
   [[ $rc -ne 0 ]] && failures=$((failures + 1))
