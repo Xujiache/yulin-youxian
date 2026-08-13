@@ -35,6 +35,7 @@ import com.yulin.rider.core.model.GeoPoint
 internal fun AmapMapCanvas(
     state: RiderMapUiState,
     modifier: Modifier = Modifier,
+    onUnavailable: @Composable () -> Unit = {},
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -42,7 +43,16 @@ internal fun AmapMapCanvas(
 
     // Bundle 是 Parcelable,rememberSaveable 会随 Activity 一起保存/恢复相机位置
     val savedState = rememberSaveable { Bundle() }
-    val mapView = remember { MapView(context).apply { onCreate(savedState) } }
+    // AmapKeyState 的缺库判定是往「有」兜底的(误判成没有会连带掐掉定位和导航),
+    // 所以真的加载不出 native 库时要在这里兜住 —— UnsatisfiedLinkError 是 Error,
+    // 不接会直接崩在渲染线程上。
+    val mapView = remember {
+        runCatching { MapView(context).apply { onCreate(savedState) } }.getOrNull()
+    }
+    if (mapView == null) {
+        onUnavailable()
+        return
+    }
     val renderer = remember { MapRenderer() }
 
     DisposableEffect(lifecycleOwner) {

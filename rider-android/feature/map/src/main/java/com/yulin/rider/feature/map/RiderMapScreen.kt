@@ -156,7 +156,11 @@ private fun MapContent(
 
             else -> {
                 if (mapUnavailable == null && state.hasAnyGeo) {
-                    AmapMapCanvas(state = state, modifier = Modifier.fillMaxSize())
+                    AmapMapCanvas(
+                        state = state,
+                        modifier = Modifier.fillMaxSize(),
+                        onUnavailable = { MapPlaceholder(MapUnavailable.NATIVE_MISSING) },
+                    )
                 } else {
                     MapPlaceholder(mapUnavailable)
                 }
