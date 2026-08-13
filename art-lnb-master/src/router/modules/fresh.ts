@@ -147,7 +147,9 @@ export const freshRoutes: AppRouteRecord = {
       name: 'FreshDeliveryTasks',
       component: '/fresh/delivery/tasks/index',
       meta: {
-        title: '配送任务'
+        title: '配送任务',
+        icon: 'ri:task-line',
+        keepAlive: true
       }
     },
     {
@@ -155,7 +157,9 @@ export const freshRoutes: AppRouteRecord = {
       name: 'FreshDeliveryWaves',
       component: '/fresh/delivery/waves/index',
       meta: {
-        title: '配送波次'
+        title: '配送波次',
+        icon: 'ri:stack-line',
+        keepAlive: true
       }
     },
     {
@@ -172,7 +176,9 @@ export const freshRoutes: AppRouteRecord = {
       name: 'FreshDeliveryRiders',
       component: '/fresh/delivery/riders/index',
       meta: {
-        title: '骑手管理'
+        title: '骑手管理',
+        icon: 'ri:team-line',
+        keepAlive: true
       }
     },
     {
@@ -189,7 +195,9 @@ export const freshRoutes: AppRouteRecord = {
       name: 'FreshDeliveryExceptions',
       component: '/fresh/delivery/exceptions/index',
       meta: {
-        title: '异常处理'
+        title: '异常处理',
+        icon: 'ri:error-warning-line',
+        keepAlive: true
       }
     },
     {
@@ -197,7 +205,9 @@ export const freshRoutes: AppRouteRecord = {
       name: 'FreshDeliverySettlements',
       component: '/fresh/delivery/settlements/index',
       meta: {
-        title: '骑手结算'
+        title: '骑手结算',
+        icon: 'ri:wallet-3-line',
+        keepAlive: true
       }
     },
     {
@@ -205,7 +215,9 @@ export const freshRoutes: AppRouteRecord = {
       name: 'FreshDeliveryAnalytics',
       component: '/fresh/delivery/analytics/index',
       meta: {
-        title: '配送分析'
+        title: '配送分析',
+        icon: 'ri:bar-chart-2-line',
+        keepAlive: true
       }
     },
     {
@@ -213,7 +225,9 @@ export const freshRoutes: AppRouteRecord = {
       name: 'FreshDeliverySettings',
       component: '/fresh/delivery/settings/index',
       meta: {
-        title: '调度参数'
+        title: '调度参数',
+        icon: 'ri:sliders-line',
+        keepAlive: true
       }
     },
     {

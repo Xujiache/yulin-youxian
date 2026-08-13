@@ -1,4 +1,5 @@
 import { AppRouteRecordRaw } from '@/utils/router'
+import { HOME_PAGE_PATH } from '../routesAlias'
 
 export const staticRoutes: AppRouteRecordRaw[] = [
   {
@@ -44,6 +45,16 @@ export const staticRoutes: AppRouteRecordRaw[] = [
         meta: { title: 'iframe' }
       }
     ]
+  },
+  // 模板默认首页为 /dashboard，本项目已改为 /fresh/dashboard。
+  // 保留重定向以兼容浏览器书签和历史记录中残留的旧地址。
+  {
+    path: '/dashboard',
+    redirect: HOME_PAGE_PATH
+  },
+  {
+    path: '/dashboard/:pathMatch(.*)*',
+    redirect: HOME_PAGE_PATH
   },
   {
     path: '/:pathMatch(.*)*',
