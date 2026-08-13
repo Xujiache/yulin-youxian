@@ -1,16 +1,26 @@
 #!/usr/bin/env bash
-# 三端自动审查循环：审查 -> 自动修复 -> 提交推送 -> 等待 -> 下一轮。
+# 三端自动审查循环：同步远端 -> 全量审查 -> 自动修复 -> 提交推送 -> 等待 -> 下一轮。
 #
-# 每一轮做的事（与 CI 的检查口径一致）：
-#   1. git pull --rebase 拉取远端新提交（循环的长期价值就在这里：
-#      任何人推了代码，最迟一轮之内就会被完整审查一遍）
-#   2. 后端    server/mvnw clean test          （512 个测试）
-#   3. 后台    eslint --fix 自动修复，再复查必须为零问题
-#   4. 后台    vite build + vue-tsc 构建与类型检查
-#   5. 骑手端  gradle testDebugUnitTest lintDebug
-#   6. 全仓库  密钥与归档扫描（.github/scripts/audit_tracked_files.py）
-#   7. 把本轮结果追加到 docs/auto-review/review-log.md，连同自动修复
-#      一起提交并推送 —— 每一轮都有提交，日志就是审查凭证
+# 每一轮做的事（检查口径对齐 .github/workflows/ci.yml 的全部任务）：
+#   1. 与远端同步，自动处理分叉与冲突（策略见 sync_with_remote 注释）
+#   2. 后端      server/mvnw clean test
+#   3. 后台      eslint --fix 自动修复，复查必须归零；vite build + vue-tsc
+#   4. 骑手端    gradle testDebugUnitTest lintDebug
+#   5. 小程序    node .github/scripts/check-miniprogram.mjs client-wechat
+#   6. 运维模板  deploy 脚本 bash -n + PM2 配置 node --check + 发布契约检查
+#   7. 全仓库    密钥与归档扫描
+#   （打印代理只能在 Windows 上编译，本机跳过；若本轮拉到 print-agent 改动会在日志里标注）
+#   8. 结果写入 docs/auto-review/review-log.md，连同自动修复一起提交推送
+#
+# 同步策略（无人值守的前提是永远不能卡死在冲突上）：
+#   仅远端领先        -> fast-forward
+#   仅本地领先        -> 不动，轮末推送
+#   双方分叉          -> 先试 rebase（历史保持线性）
+#     rebase 冲突     -> 放弃 rebase，改 merge -X theirs（冲突块以远端为准；
+#                        本地未推送的内容基本是审查日志与 eslint 修复，本轮会自动重做）
+#     merge 也失败    -> 本地提交备份到 review-backup-<时间戳> 分支，
+#                        工作区硬重置到远端，日志里大写标注 —— 绝不丢内容，也绝不停摆
+#   审查日志本身在 .gitattributes 里配了 merge=union，两边的轮次记录都会保留。
 #
 # 停止方式：touch scripts/auto-review.stop（当前轮跑完后退出），或直接 kill。
 # 可调参数（环境变量）：
@@ -33,6 +43,7 @@ STOP_FILE="$SCRIPT_DIR/auto-review.stop"
 STATE_DIR="${TMPDIR:-/tmp}/auto-review-state"
 SLEEP_SECONDS="${SLEEP_SECONDS:-60}"
 MAX_ROUNDS="${MAX_ROUNDS:-0}"
+BRANCH="$(git -C "$REPO_ROOT" rev-parse --abbrev-ref HEAD)"
 
 mkdir -p "$STATE_DIR" "$(dirname "$LOG_FILE")"
 
@@ -58,8 +69,6 @@ export ANDROID_SDK_ROOT="${ANDROID_HOME:-}"
 # ---------- 工具函数 ----------
 ts() { date -u '+%Y-%m-%d %H:%M:%S UTC'; }
 
-# run_step <名称> <日志片段文件> <超时秒> <命令...>
-# 返回命令退出码；stdout/stderr 全部落到独立文件便于失败时摘录。
 run_step() {
   local name="$1" out="$2" limit="$3"; shift 3
   local started ended rc
@@ -68,13 +77,10 @@ run_step() {
   rc=$?
   ended=$(date +%s)
   STEP_SECONDS=$((ended - started))
-  if [[ $rc -eq 124 ]]; then
-    echo "（超时 ${limit}s 被终止）" >> "$out"
-  fi
+  [[ $rc -eq 124 ]] && echo "（超时 ${limit}s 被终止）" >> "$out"
   return $rc
 }
 
-# 失败时取输出末尾几行进日志，成功时只记录耗时
 summarize() {
   local rc="$1" out="$2"
   if [[ $rc -eq 0 ]]; then
@@ -87,12 +93,93 @@ summarize() {
   fi
 }
 
+# 清掉上一轮可能留下的半截 rebase/merge，保证本轮从干净状态开始
+abort_in_progress_ops() {
+  local git_dir
+  git_dir="$(git -C "$REPO_ROOT" rev-parse --git-dir)"
+  [[ -d "$git_dir/rebase-merge" || -d "$git_dir/rebase-apply" ]] \
+    && git -C "$REPO_ROOT" rebase --abort >/dev/null 2>&1
+  [[ -f "$git_dir/MERGE_HEAD" ]] \
+    && git -C "$REPO_ROOT" merge --abort >/dev/null 2>&1
+  [[ -f "$git_dir/CHERRY_PICK_HEAD" ]] \
+    && git -C "$REPO_ROOT" cherry-pick --abort >/dev/null 2>&1
+  return 0
+}
+
+# 与远端同步。结果写入全局 SYNC_NOTE / SYNC_OLD_HEAD 供日志与差异分析使用。
+sync_with_remote() {
+  SYNC_OLD_HEAD="$(git -C "$REPO_ROOT" rev-parse HEAD)"
+  SYNC_NOTE="拉取远端：网络失败，本轮只审查本地内容"
+
+  abort_in_progress_ops
+  git -C "$REPO_ROOT" fetch origin "$BRANCH" > "$STATE_DIR/fetch.log" 2>&1 || return 0
+
+  local local_head remote_head base ahead behind
+  local_head="$(git -C "$REPO_ROOT" rev-parse HEAD)"
+  remote_head="$(git -C "$REPO_ROOT" rev-parse "origin/$BRANCH")"
+  base="$(git -C "$REPO_ROOT" merge-base HEAD "origin/$BRANCH")"
+  ahead="$(git -C "$REPO_ROOT" rev-list --count "origin/$BRANCH..HEAD")"
+  behind="$(git -C "$REPO_ROOT" rev-list --count "HEAD..origin/$BRANCH")"
+
+  if [[ "$remote_head" == "$local_head" ]]; then
+    SYNC_NOTE="拉取远端：无新内容"
+  elif [[ "$base" == "$local_head" ]]; then
+    git -C "$REPO_ROOT" merge --ff-only "origin/$BRANCH" >/dev/null 2>&1 \
+      && SYNC_NOTE="拉取远端：快进合入 ${behind} 个新提交" \
+      || SYNC_NOTE="拉取远端：**快进失败，本轮只审查本地内容**"
+  elif [[ "$base" == "$remote_head" ]]; then
+    SYNC_NOTE="拉取远端：无新内容（本地领先 ${ahead} 个提交，轮末推送）"
+  else
+    # 双方分叉。先 rebase 保线性，冲突就退回 merge，合并里冲突块以远端为准。
+    if git -C "$REPO_ROOT" rebase "origin/$BRANCH" > "$STATE_DIR/rebase.log" 2>&1; then
+      SYNC_NOTE="拉取远端：双方分叉（本地 ${ahead} / 远端 ${behind}），已变基保持线性"
+    else
+      git -C "$REPO_ROOT" rebase --abort >/dev/null 2>&1
+      if git -C "$REPO_ROOT" merge -X theirs --no-edit "origin/$BRANCH" \
+           > "$STATE_DIR/merge.log" 2>&1; then
+        SYNC_NOTE="拉取远端：**变基有冲突，已改用合并收拢（冲突块以远端为准），本轮全量检查会复核结果**"
+      else
+        git -C "$REPO_ROOT" merge --abort >/dev/null 2>&1
+        local backup="review-backup-$(date -u +%Y%m%d-%H%M%S)"
+        git -C "$REPO_ROOT" branch "$backup" >/dev/null 2>&1
+        git -C "$REPO_ROOT" reset --hard "origin/$BRANCH" >/dev/null 2>&1
+        SYNC_NOTE="拉取远端：**自动合并失败。本地提交已备份到分支 ${backup}，工作区已重置到远端，需要人工合并该备份分支**"
+      fi
+    fi
+  fi
+  return 0
+}
+
+# 本轮新拉取的改动都动了哪些顶层目录；没有对应审查步骤的目录要点名
+CHECKED_DIRS="server art-lnb-master rider-android client-wechat deploy"
+KNOWN_NO_CHECK="docs scripts .github packages design design-assets third_party tmp deliverables .claude"
+
+describe_incoming() {
+  local old="$1" entry="$2"
+  [[ "$old" == "$(git -C "$REPO_ROOT" rev-parse HEAD)" ]] && return 0
+  local dirs
+  dirs=$(git -C "$REPO_ROOT" diff --name-only "$old"..HEAD 2>/dev/null \
+    | awk -F/ 'NF>1{print $1} NF==1{print "(根目录)"}' | sort | uniq -c | sort -rn)
+  [[ -z "$dirs" ]] && return 0
+  echo "- 本轮新拉取的改动：$(echo "$dirs" | awk '{printf "%s(%s) ", $2, $1}')" >> "$entry"
+  local d
+  while read -r _ d; do
+    [[ "$d" == "(根目录)" ]] && continue
+    if [[ " $CHECKED_DIRS $KNOWN_NO_CHECK " != *" $d "* ]]; then
+      echo "- **注意：目录 ${d} 没有对应的审查步骤，若是新项目请补充构建与检查方式**" >> "$entry"
+    fi
+    if [[ "$d" == "print-agent" ]]; then
+      echo "- 注意：print-agent 有改动，但它只能在 Windows 上编译，本机跳过（CI 的 Print agent build 任务覆盖）" >> "$entry"
+    fi
+  done <<< "$dirs"
+}
+
 git_push_with_retry() {
   local attempt
   for attempt in 1 2 3 4; do
-    git -C "$REPO_ROOT" push && return 0
-    # 远端在本轮期间又前进了：拉下来再推，下一轮会审查这些新提交
-    git -C "$REPO_ROOT" pull --rebase --autostash || git -C "$REPO_ROOT" rebase --abort
+    git -C "$REPO_ROOT" push origin "$BRANCH" && return 0
+    # 推送被拒说明远端又前进了：重新同步（含冲突处理）再试
+    sync_with_remote
     sleep $((attempt * 4))
   done
   return 1
@@ -107,18 +194,17 @@ review_round() {
   : > "$entry"
   echo "## 第 ${round} 轮 · $(ts)" >> "$entry"
 
-  # 1. 同步远端
-  local pull_out="$STATE_DIR/pull.log"
-  if git -C "$REPO_ROOT" pull --rebase --autostash > "$pull_out" 2>&1; then
-    if grep -q "Fast-forward\|Successfully rebased" "$pull_out" 2>/dev/null; then
-      echo "- 拉取远端：有新提交，本轮将连同审查" >> "$entry"
-    else
-      echo "- 拉取远端：无新内容" >> "$entry"
-    fi
-  else
-    git -C "$REPO_ROOT" rebase --abort 2>/dev/null
-    echo "- 拉取远端：**失败（可能有冲突），本轮只审查本地内容**" >> "$entry"
+  # 0. 上一轮若在提交前崩掉会留下未提交改动，先收拢，绝不带着脏树做合并
+  if [[ -n "$(git -C "$REPO_ROOT" status --porcelain)" ]]; then
+    git -C "$REPO_ROOT" add -A
+    git -C "$REPO_ROOT" commit -q -m "chore(review): 收拢上一轮遗留的工作区改动" || true
+    echo "- 发现上一轮遗留的未提交改动，已先行收拢为独立提交" >> "$entry"
   fi
+
+  # 1. 同步远端（分叉、冲突都在这里消化）
+  sync_with_remote
+  echo "- ${SYNC_NOTE}" >> "$entry"
+  describe_incoming "$SYNC_OLD_HEAD" "$entry"
 
   # 2. 后端测试
   local rc
@@ -162,21 +248,42 @@ review_round() {
   echo "- 后台 vite build + vue-tsc：$(summarize $rc "$STATE_DIR/admin-build.log")" >> "$entry"
   [[ $rc -ne 0 ]] && failures=$((failures + 1))
 
-  # 5. 骑手端单测 + lint（保留 daemon，循环里增量很快）
+  # 5. 骑手端单测 + lint
   run_step rider "$STATE_DIR/rider.log" 1800 \
     bash -c "cd '$REPO_ROOT/rider-android' && ./gradlew --console=plain testDebugUnitTest lintDebug"
   rc=$?
   echo "- 骑手端 testDebugUnitTest + lintDebug：$(summarize $rc "$STATE_DIR/rider.log")" >> "$entry"
   [[ $rc -ne 0 ]] && failures=$((failures + 1))
 
-  # 6. 密钥扫描
+  # 6. 小程序全量语法检查（与 CI 同一脚本）
+  run_step miniprogram "$STATE_DIR/miniprogram.log" 300 \
+    bash -c "cd '$REPO_ROOT' && node .github/scripts/check-miniprogram.mjs client-wechat"
+  rc=$?
+  echo "- 小程序语法检查：$(summarize $rc "$STATE_DIR/miniprogram.log")" >> "$entry"
+  [[ $rc -ne 0 ]] && failures=$((failures + 1))
+
+  # 7. 运维模板与发布契约（与 CI 的 operations 任务同口径）
+  run_step operations "$STATE_DIR/operations.log" 300 \
+    bash -c "cd '$REPO_ROOT' \
+      && bash -n deploy/scripts/lib/common.sh deploy/scripts/validate-env.sh \
+           deploy/scripts/readiness.sh deploy/scripts/build-release.sh \
+           deploy/scripts/render-nginx.sh deploy/scripts/install-release.sh \
+           deploy/scripts/go-live.sh deploy/scripts/rollback.sh \
+           deploy/scripts/restore-drill.sh scripts/auto-review.sh \
+      && node --check deploy/pm2/ecosystem.config.cjs \
+      && python3 .github/scripts/check_release_contract.py"
+  rc=$?
+  echo "- 运维模板与发布契约：$(summarize $rc "$STATE_DIR/operations.log")" >> "$entry"
+  [[ $rc -ne 0 ]] && failures=$((failures + 1))
+
+  # 8. 密钥扫描
   run_step secrets "$STATE_DIR/secrets.log" 300 \
     bash -c "cd '$REPO_ROOT' && python3 .github/scripts/audit_tracked_files.py"
   rc=$?
   echo "- 密钥与归档扫描：$(summarize $rc "$STATE_DIR/secrets.log")" >> "$entry"
   [[ $rc -ne 0 ]] && failures=$((failures + 1))
 
-  # 7. 结论 + 提交推送
+  # 9. 结论 + 提交推送
   local verdict
   if [[ $failures -eq 0 && -z "$fixes" ]]; then
     verdict="全部通过，无需改动"
@@ -192,12 +299,11 @@ review_round() {
     {
       echo "# 自动审查日志"
       echo
-      echo "由 scripts/auto-review.sh 生成。每一轮：拉取远端 -> 三端全量检查 ->"
+      echo "由 scripts/auto-review.sh 生成。每一轮：同步远端 -> 三端与小程序、运维模板全量检查 ->"
       echo "eslint 自动修复 -> 记录本文件 -> 提交推送。最新一轮在最上面。"
       echo
     } > "$LOG_FILE"
   fi
-  # 新轮次插到文件头部（标题四行之后），最近的审查一眼可见
   local tmp="$STATE_DIR/log.tmp"
   head -5 "$LOG_FILE" > "$tmp"
   cat "$entry" >> "$tmp"
@@ -216,7 +322,7 @@ review_round() {
 
 # ---------- 主循环 ----------
 round=$(( $(grep -c '^## 第' "$LOG_FILE" 2>/dev/null || echo 0) + 1 ))
-echo "[$(ts)] 自动审查循环启动，起始轮次 ${round}，轮间隔 ${SLEEP_SECONDS}s，停止方式：touch $STOP_FILE"
+echo "[$(ts)] 自动审查循环启动，分支 ${BRANCH}，起始轮次 ${round}，轮间隔 ${SLEEP_SECONDS}s，停止方式：touch $STOP_FILE"
 
 while true; do
   review_round "$round"
