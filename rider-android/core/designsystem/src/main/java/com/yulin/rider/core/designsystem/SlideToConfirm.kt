@@ -47,17 +47,25 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
 
 /** 触发阈值:水平拖动必须达到控件宽度的 60%。口袋、手套、颠簸产生的误触太多,点击不可靠。 */
 private const val CONFIRM_FRACTION = 0.6f
 
 private val TrackPadding = 6.dp
+
+/** 右端提示箭头的尺寸与外距,文案留白要按它算。 */
+private val HintWidth = 30.dp
+private val HintEndPadding = 12.dp
+
+/** 缩到这个字号还放不下就只能截断了,实际上 360dp 窄屏也到不了这一步。 */
+private val MinLabelFontSize = 12.sp
 
 /**
  * 全 App 状态流转的唯一入口(06 §3.5)。
@@ -97,6 +105,9 @@ fun SlideToConfirm(
     val thumbSize = trackHeight - TrackPadding * 2
     val thumbPx = with(density) { thumbSize.toPx() }
     val paddingPx = with(density) { TrackPadding.toPx() }
+
+    // 文案两侧要让开的东西:左边是停在原位的滑块,右边是提示箭头。取两者较大值保持居中。
+    val labelInset = maxOf(TrackPadding + thumbSize, HintEndPadding + HintWidth)
 
     val maxOffsetPx = (trackWidthPx - thumbPx - paddingPx * 2).coerceAtLeast(0f)
     // 窄屏上 60% 控件宽度可能超过滑块可行程,收敛到行程末端,保证动作永远可完成
@@ -191,16 +202,27 @@ fun SlideToConfirm(
                 .background(Color.Black.copy(alpha = if (active) 0.12f else 0f)),
         )
 
+        // 文案随可用宽度缩放,不截断。
+        //
+        // 原来两边各留一个 trackHeight(48dp+)再配 Ellipsis,窄屏上「滑动确认已送达」
+        // 会被截成「滑动确认已…」—— 骑手看不出这一滑到底是取货还是送达,而这两个动作
+        // 都不可撤销。留白改成按真实遮挡物计算(左边滑块、右边提示箭头),剩下的交给缩放:
+        // 宁可字小一号,也不能让动作名缺一半。
         Text(
             text = if (confirmed) "已确认" else text,
             style = MaterialTheme.typography.titleMedium,
             color = labelColor,
             maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
+            softWrap = false,
+            autoSize = TextAutoSize.StepBased(
+                minFontSize = MinLabelFontSize,
+                maxFontSize = MaterialTheme.typography.titleMedium.fontSize,
+                stepSize = 0.5.sp,
+            ),
             textAlign = TextAlign.Center,
             modifier = Modifier
                 .align(Alignment.Center)
-                .padding(horizontal = trackHeight)
+                .padding(horizontal = labelInset)
                 .graphicsLayer { alpha = (1f - progress * 1.2f).coerceIn(0f, 1f) },
         )
 
@@ -210,7 +232,7 @@ fun SlideToConfirm(
             progress = progress,
             modifier = Modifier
                 .align(Alignment.CenterEnd)
-                .padding(end = 20.dp),
+                .padding(end = HintEndPadding),
         )
 
         Box(

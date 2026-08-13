@@ -6,6 +6,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.IntrinsicSize
@@ -455,6 +457,11 @@ fun MtGhostAction(
 
 /**
  * 底部操作条：左侧若干竖排次级动作，右侧主按钮占满剩余宽度。
+ *
+ * 窄屏或大字号下自动换成两行 —— 次级动作在上、主按钮独占一行。
+ * 「联系」「遇到问题」这类次级动作各要占掉 60dp 上下，320dp 的机器上再挤一个
+ * 滑动条，主按钮的文案就只剩三四十 dp，「滑动确认已送达」会被切成「滑动确」。
+ * 骑手看不出这一滑到底是取货还是送达，而这两个动作都不可撤销。
  */
 @Composable
 fun MtBottomActionBar(
@@ -477,19 +484,53 @@ fun MtBottomActionBar(
                     icon = FreshIconType.PROBLEM,
                 )
             }
-            Row(
-                modifier = Modifier
+            BoxWithConstraints {
+                // 字号放大时次级动作和滑块一起变宽，阈值要跟着放大
+                val fontScale = LocalDensity.current.fontScale.coerceIn(1f, 1.35f)
+                val stacked = maxWidth < SingleRowMinWidth * fontScale
+                val rowModifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = FreshSpacing.Sm, vertical = FreshSpacing.Xs),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(FreshSpacing.Xs),
-            ) {
-                secondaryActions()
-                primary()
+                    .padding(horizontal = FreshSpacing.Sm, vertical = FreshSpacing.Xs)
+
+                if (stacked) {
+                    Column {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(
+                                    start = FreshSpacing.Sm,
+                                    end = FreshSpacing.Sm,
+                                    top = FreshSpacing.Xxs,
+                                ),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(FreshSpacing.Md),
+                        ) {
+                            secondaryActions()
+                        }
+                        Row(
+                            modifier = rowModifier,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            primary()
+                        }
+                    }
+                } else {
+                    Row(
+                        modifier = rowModifier,
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(FreshSpacing.Xs),
+                    ) {
+                        secondaryActions()
+                        primary()
+                    }
+                }
             }
         }
     }
 }
+
+/** 低于这个宽度就把主按钮挪到单独一行。360dp 的常见机型在标准字号下仍是一行。 */
+private val SingleRowMinWidth = 356.dp
 
 /* ------------------------------------------------------------------ 卡片与行程 */
 
