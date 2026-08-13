@@ -20,7 +20,7 @@
 - [ ] 正式域名和打印代理 API 均为 HTTPS，证书有效。
 - [ ] `go-live.sh --preflight` 已通过。
 - [ ] `rollback.sh --check` 已确认 current 与 N-1 都存在且 manifest 正确。
-- [ ] 最近一次 MySQL 备份已执行 `restore-drill.sh`，在隔离库验证 Flyway V11 与 36 张业务表。
+- [ ] 最近一次 MySQL 备份已执行 `restore-drill.sh`，在隔离库验证 Flyway 基线与业务表张数（以 deploy/versions.env 为准）。
 - [ ] 数据目录和日志目录为绝对路径，磁盘余量超过阈值。
 
 ## 上线
@@ -29,7 +29,7 @@
 - [ ] `current` 原子切换到新版本，`previous` 指向 N-1。
 - [ ] PM2 使用单实例 ecosystem 执行 `startOrReload --update-env`，随后执行 `pm2 save`。
 - [ ] Nginx `nginx -t` 通过并 reload。
-- [ ] readiness 同时通过 manifest、Flyway V11、36 张业务表、存储写入、磁盘、备份年龄和 Actuator。
+- [ ] readiness 同时通过 manifest、Flyway 基线、业务表张数、存储写入、磁盘、备份年龄和 Actuator。
 - [ ] SSE 响应头含 `X-Accel-Buffering: no`，调度台持续连接至少 10 分钟无批量延迟。
 - [ ] 管理后台、骑手 debug/release 策略、小程序关键路径和门店测试打印已验收。
 
