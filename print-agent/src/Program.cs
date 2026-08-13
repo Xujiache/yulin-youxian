@@ -716,7 +716,11 @@ internal static class Program
                         giftHeadingPrinted = true;
                     }
                     WriteWrapped(ReadString(gift, "name"), 32);
-                    WritePair(ReadString(gift, "quantity"), "¥ 0.00");
+                    string giftUnitPrice = ReadString(gift, "unitPrice");
+                    string giftQuantity = ReadString(gift, "quantity");
+                    WritePair(
+                        HasPositiveMoney(giftUnitPrice) ? giftQuantity + " x " + giftUnitPrice : giftQuantity,
+                        ValueOr(ReadString(gift, "amount"), "¥ 0.00"));
                 }
             }
             Line();
