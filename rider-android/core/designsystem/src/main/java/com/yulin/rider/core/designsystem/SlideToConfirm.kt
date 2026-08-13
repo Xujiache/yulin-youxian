@@ -53,6 +53,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 /** 触发阈值:水平拖动必须达到控件宽度的 60%。口袋、手套、颠簸产生的误触太多,点击不可靠。 */
@@ -100,6 +101,7 @@ fun SlideToConfirm(
     var confirmed by remember(text) { mutableStateOf(false) }
     val offsetX = remember(text) { Animatable(0f) }
     var trackWidthPx by remember { mutableIntStateOf(0) }
+    var dragJob by remember(text) { mutableStateOf<Job?>(null) }
 
     val trackHeight = riderControlHeight(RiderDimens.BigButtonHeight)
     val thumbSize = trackHeight - TrackPadding * 2
@@ -144,11 +146,16 @@ fun SlideToConfirm(
                 enabled = active,
                 orientation = Orientation.Horizontal,
                 state = rememberDraggableState { delta ->
-                    scope.launch {
+                    // 记住最后一次位移的协程,松手时要等它落地。
+                    // Animatable 的操作是互斥的:回弹 animateTo 一旦和还没执行完的 snapTo
+                    // 撞上,后到的 snapTo 会把动画取消掉,滑块就钉在手指离开的位置不动了。
+                    dragJob = scope.launch {
                         offsetX.snapTo((offsetX.value + delta).coerceIn(0f, maxOffsetPx))
                     }
                 },
                 onDragStopped = {
+                    // 位移协程都在同一个主线程调度器上按序执行,等最后一个就等于等全部
+                    dragJob?.join()
                     if (thresholdPx > 0f && offsetX.value >= thresholdPx) {
                         confirmed = true
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
