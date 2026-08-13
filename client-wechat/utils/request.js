@@ -54,7 +54,12 @@ function sendOnce(config) {
             return;
           }
           const retryable = [408, 429, 500, 502, 503, 504].includes(response.statusCode);
-          const requestError = createRequestError((body && body.message) || "请求失败", response.statusCode, retryable);
+          // 后端的业务错误统一是 HTTP 200 + body.code（404 表示资源已失效、409 表示状态冲突），
+          // 只保留 statusCode 会把这些语义全压成 200，调用方的 404/409 分支永远走不到。
+          const businessCode = body && typeof body.code === "number" && body.code !== 0
+            ? body.code
+            : response.statusCode;
+          const requestError = createRequestError((body && body.message) || "请求失败", businessCode, retryable);
           requestError.statusCode = response.statusCode;
           reject(requestError);
         },

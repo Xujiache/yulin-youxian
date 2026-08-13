@@ -12,6 +12,7 @@ const {
   createPaymentShare,
   getOrder,
   getPaymentMethod,
+  getPaymentShare,
   restartOrder
 } = require("../../api/orders");
 const {
@@ -33,6 +34,17 @@ const {
   readLotterySession,
   writeLotterySession
 } = require("../../utils/lottery-session");
+const {
+  hasActivePaymentShare,
+  isChallengeInvalid: lotteryChallengeInvalid,
+  lotteryCampaignEnabled,
+  lotteryReasonText
+} = require("../../utils/lottery-status");
+const {
+  forgetPaymentShareToken,
+  inspectPaymentShare,
+  rememberPaymentShareToken
+} = require("../../utils/payment-share-store");
 const {
   isPaidOrder,
   isPaymentCancelled,
@@ -175,29 +187,37 @@ function isCancelableOrder(order) {
   return String(order && order.status || "").trim() === "待支付";
 }
 
-function lotteryCampaignEnabled(state) {
-  return Boolean(state && state.campaign && state.campaign.enabled !== false);
-}
-
-function lotteryReasonText(state) {
-  const reason = String((state && state.reason) || "");
-  const messages = {
-    CAMPAIGN_DISABLED: "活动已结束",
-    CAMPAIGN_NOT_STARTED: "活动尚未开始",
-    ORDER_NOT_ELIGIBLE: "本单不符合活动条件",
-    BELOW_THRESHOLD: "本单未达到活动门槛",
-    CHALLENGE_EXPIRED: "分享凭证已失效",
-    ORDER_NOT_PENDING: "订单状态已变化"
+// 待支付区域的鲜礼入口：转盘不再自动弹出，改为用户主动点击
+function buildLotteryEntry(state) {
+  if (!state || (!state.drawn && !state.shareTriggered)) {
+    return null;
+  }
+  if (state.drawn) {
+    const result = state.result;
+    if (!result) {
+      return {
+        mode: "drawn",
+        title: "本单已抽取鲜礼",
+        desc: "结果正在同步，点击可重新确认",
+        actionText: "查看结果"
+      };
+    }
+    const discountAmount = Number(result.discountAmount || 0);
+    return {
+      mode: "drawn",
+      title: `已抽中${result.prizeName ? `「${result.prizeName}」` : "本单鲜礼"}`,
+      desc: discountAmount > 0
+        ? `本单立减 ¥${yuan(discountAmount)}，最终应付 ¥${yuan(result.payableAmount)}`
+        : "鲜礼已随本单锁定，可继续完成支付",
+      actionText: "查看鲜礼并继续支付"
+    };
+  }
+  return {
+    mode: "shared",
+    title: "分享资格已记录",
+    desc: "本单还没有开签，点击即可抽取鲜礼",
+    actionText: "抽取本单鲜礼"
   };
-  return messages[reason] || reason || "本单暂不能参与鲜礼活动";
-}
-
-function lotteryChallengeInvalid(state) {
-  return [
-    "CHALLENGE_EXPIRED",
-    "CHALLENGE_INVALID",
-    "INVALID_CHALLENGE"
-  ].includes(String((state && state.reason) || ""));
 }
 
 function modalChoice(options) {
@@ -342,6 +362,8 @@ Page({
     selectedPaymentMethod: "WECHAT",
     paymentNotice: "",
     lotteryState: null,
+    lotteryEntry: null,
+    lotteryEntryBusy: false,
     lotteryBusy: false,
     showLotteryChoice: false,
     showLuckyWheel: false,
@@ -451,6 +473,7 @@ Page({
       isPendingPayment,
       canCancel: isCancelableOrder(order),
       canRestartPayment: Boolean(order.canRestartPayment),
+      lotteryEntry: isPendingPayment ? this.data.lotteryEntry : null,
       canRefund: canApplyRefund(order),
       address: order.address || {},
       deliverySlotText: order.deliverySlot || "",
@@ -504,6 +527,8 @@ Page({
     this.continuePendingOrder(paymentMethod);
   },
 
+  // 只在待支付区域挂一个入口，不自动弹转盘：从列表进来只是想看地址的用户不该被弹层拦住，
+  // 更不能让误点把已经发给好友的代付链接冲掉。
   async restoreSavedLottery() {
     if (
       this._requestedPaymentStarted
@@ -518,20 +543,50 @@ Page({
     try {
       const state = await getOrderLottery(this.data.orderId);
       if (!state.drawn && !state.shareTriggered) {
+        this.setData({ lotteryEntry: null });
         return;
       }
+      this.setData({
+        lotteryState: state,
+        wheelPrizes: state.prizes || [],
+        lotteryEntry: buildLotteryEntry(state)
+      });
+    } catch {}
+  },
+
+  async handleLotteryEntry() {
+    if (
+      this.data.lotteryEntryBusy
+      || this.data.paying
+      || !this.data.orderId
+      || !this.data.isPendingPayment
+    ) {
+      return;
+    }
+    this.setData({ lotteryEntryBusy: true });
+    try {
+      // 必须以服务端的支付方式为准：转盘上的继续按钮会据此决定走微信支付还是好友代付
       let paymentMethod = this.data.paymentMethod || "WECHAT";
       try {
         const method = await getPaymentMethod(this.data.orderId);
         paymentMethod = method && method.code === "FRIEND" ? "FRIEND" : "WECHAT";
+        this.setData({ paymentMethod });
       } catch {}
-      this.setData({
-        paymentMethod,
-        flowPaymentMethod: paymentMethod,
-        selectedPaymentMethod: paymentMethod
+      const state = await getOrderLottery(this.data.orderId);
+      if (!this.applyLotteryGate(state, paymentMethod)) {
+        wx.showToast({
+          title: lotteryReasonText(state, "本单暂不能参与鲜礼，可直接继续支付"),
+          icon: "none"
+        });
+      }
+    } catch (error) {
+      wx.showToast({
+        title: (error && error.message) || "鲜礼状态加载失败，请稍后重试",
+        icon: "none"
       });
-      this.applyLotteryGate(state, paymentMethod);
-    } catch {}
+    } finally {
+      this.setData({ lotteryEntryBusy: false });
+    }
   },
 
   async refreshPaymentMethod() {
@@ -1242,6 +1297,7 @@ Page({
   applyLotteryGate(state, paymentMethod) {
     this.setData({
       lotteryState: state,
+      lotteryEntry: buildLotteryEntry(state),
       flowPaymentMethod: paymentMethod,
       selectedPaymentMethod: paymentMethod,
       wheelPrizes: (state && state.prizes) || [],
@@ -1445,17 +1501,28 @@ Page({
       }
       const state = await getOrderLottery(orderId);
       clearLotterySession(orderId, "order-detail");
+      // 从活动页返回不代表用户要付款，只更新状态并把付款交还给用户点击
       if (!this.applyLotteryGate(state, paymentMethod)) {
-        await this.runFinalPayment(paymentMethod);
+        wx.showToast({
+          title: lotteryReasonText(state, "本单暂不能参与鲜礼，可直接继续支付"),
+          icon: "none"
+        });
       }
     } catch (error) {
-      await this.handleLotteryCheckFailure(error, paymentMethod);
+      await this.handleLotteryCheckFailure(error, paymentMethod, { allowPay: false });
     } finally {
       this._resumingLottery = false;
     }
   },
 
-  async handleLotteryCheckFailure(error, paymentMethod) {
+  async handleLotteryCheckFailure(error, paymentMethod, options = {}) {
+    if (options.allowPay === false) {
+      this.setData({
+        paymentNotice: `${(error && error.message) || "网络连接失败"}。鲜礼资格暂未确认，订单已保留，可稍后点击继续支付。`
+      });
+      this.refitMapSoon();
+      return;
+    }
     const originalPay = await modalChoice({
       title: "鲜礼资格暂未确认",
       content: `${(error && error.message) || "网络连接失败"}。可按原价支付，或留在订单详情稍后再试。`,
@@ -1595,23 +1662,79 @@ Page({
     if (!this.data.orderId || this.data.drawLoading || this.data.lotteryContinueLoading) {
       return;
     }
+    const detail = (event && event.detail) || {};
+    const paymentMethod = this.data.flowPaymentMethod || this.data.paymentMethod || "WECHAT";
     const hasResult = Boolean(
-      (event && event.detail && event.detail.hasResult)
+      detail.hasResult
       || (this.data.lotteryState && this.data.lotteryState.drawn)
     );
-    const continueNow = await modalChoice({
-      title: hasResult ? "鲜礼结果已保存" : "暂不抽取鲜礼？",
-      content: hasResult
-        ? "本单金额已经锁定，可现在继续支付，也可稍后回来恢复。"
-        : "按原价支付将不再等待本次分享抽奖；也可以留在订单详情稍后继续。",
-      confirmText: hasResult ? "继续支付" : "原价支付",
-      cancelText: "稍后再付"
-    });
     this.setData({ showLuckyWheel: false });
     this.refitMapSoon();
-    if (continueNow) {
-      await this.runFinalPayment(this.data.flowPaymentMethod || this.data.paymentMethod || "WECHAT");
+    // 点遮罩只是收起弹层，绝不触发任何支付动作
+    if (detail.source === "mask") {
+      wx.showToast({
+        title: hasResult ? "鲜礼已保存，可从待支付区域继续" : "已收起，可从待支付区域继续抽取",
+        icon: "none"
+      });
+      return;
     }
+    if (!hasResult) {
+      const keepDrawing = await modalChoice({
+        title: "先不抽鲜礼？",
+        content: paymentMethod === "FRIEND"
+          ? "生成代付链接后本单会按原价锁定，不再参与本次鲜礼抽奖。"
+          : "按原价支付后本单不再参与本次鲜礼抽奖；也可以先抽完再付款。",
+        confirmText: "继续抽奖",
+        cancelText: "原价支付"
+      });
+      if (keepDrawing) {
+        this.setData({ showLuckyWheel: true });
+        return;
+      }
+      await this.runFinalPayment(paymentMethod);
+      return;
+    }
+    const continueNow = await modalChoice({
+      title: "鲜礼结果已保存",
+      content: "本单金额已经锁定，可现在继续支付，也可稍后回来恢复。",
+      confirmText: "继续支付",
+      cancelText: "稍后再付"
+    });
+    if (continueNow) {
+      await this.runFinalPayment(paymentMethod);
+    }
+  },
+
+  // 后端在生成新代付链接时会作废该订单已有的全部链接并轮换支付单号，
+  // 好友手上的旧链接会立刻 404，所以先复用仍然有效的链接。
+  async resolveFriendPaymentShare(orderId) {
+    const existing = await inspectPaymentShare(orderId, getPaymentShare);
+    if (existing.state === "REUSABLE") {
+      wx.showToast({ title: "本单已有代付链接，直接打开", icon: "none" });
+      return { token: existing.token };
+    }
+    if (existing.state === "PAID") {
+      wx.showToast({ title: "好友已完成付款", icon: "none" });
+      await this.refreshOrder();
+      return null;
+    }
+    const needsConfirm = existing.state === "UNKNOWN" || hasActivePaymentShare(this.data.lotteryState);
+    if (needsConfirm) {
+      const regenerate = await modalChoice({
+        title: "本单已有代付链接",
+        content: existing.state === "UNKNOWN"
+          ? "暂时无法确认已生成的代付链接是否仍然有效。重新生成会让好友手上的旧链接立刻失效。"
+          : "本单已经生成过好友代付链接。重新生成会让好友手上的旧链接立刻失效。",
+        confirmText: "重新生成",
+        cancelText: "先不生成"
+      });
+      if (!regenerate) {
+        return null;
+      }
+    }
+    const share = await createPaymentShare(orderId);
+    rememberPaymentShareToken(orderId, share.token);
+    return share;
   },
 
   async runFinalPayment(paymentMethod) {
@@ -1625,7 +1748,10 @@ Page({
     });
     try {
       if (paymentMethod === "FRIEND") {
-        const share = await createPaymentShare(this.data.orderId);
+        const share = await this.resolveFriendPaymentShare(this.data.orderId);
+        if (!share) {
+          return;
+        }
         this.setData({ paymentMethod: "FRIEND" });
         wx.navigateTo({
           url: `/pages/pay-for-other/index?token=${encodeURIComponent(share.token)}&owner=1&orderId=${this.data.orderId}`
@@ -1634,6 +1760,8 @@ Page({
       }
 
       const payment = await changeToWechatPayment(this.data.orderId);
+      // 切回微信支付时服务端已作废全部代付链接，本机记录也要同步清掉
+      forgetPaymentShareToken(this.data.orderId);
       this.setData({ paymentMethod: "WECHAT" });
       await requestWechatPayment(payment);
       const order = await waitForPaymentResult(this.data.orderId);

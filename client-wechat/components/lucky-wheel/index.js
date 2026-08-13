@@ -1,4 +1,5 @@
 const { yuan } = require("../../utils/format");
+const { resolvePrizeIndex, targetRotation } = require("./wheel-math");
 
 const SPIN_DURATION = 4600;
 const SPIN_TIMEOUT = SPIN_DURATION + 700;
@@ -13,10 +14,6 @@ function hasResult(result) {
       || result.payableAmount !== undefined
     )
   );
-}
-
-function normalizeDegrees(value) {
-  return ((Number(value || 0) % 360) + 360) % 360;
 }
 
 function shortenName(value) {
@@ -123,18 +120,7 @@ Component({
     },
 
     resultIndex(result) {
-      const prizes = this.data.displayPrizes || [];
-      const matchedIndex = prizes.findIndex(
-        (prize) => String(prize.id) === String(result && result.prizeId)
-      );
-      if (matchedIndex >= 0) {
-        return matchedIndex;
-      }
-      const backendIndex = Number(result && result.prizeIndex);
-      if (Number.isInteger(backendIndex) && backendIndex >= 0 && backendIndex < prizes.length) {
-        return backendIndex;
-      }
-      return 0;
+      return resolvePrizeIndex(this.data.displayPrizes, result);
     },
 
     resultViewData(result) {
@@ -151,15 +137,23 @@ Component({
     },
 
     targetRotation(result, withTurns) {
-      const count = Math.max((this.data.displayPrizes || []).length, 1);
-      const index = this.resultIndex(result);
-      const targetModulo = normalizeDegrees(-(360 / count) * index);
-      if (!withTurns) {
-        return targetModulo;
-      }
-      const current = Number(this.data.wheelRotation || 0);
-      const delta = normalizeDegrees(targetModulo - normalizeDegrees(current));
-      return current + 5 * 360 + delta;
+      return targetRotation({
+        index: this.resultIndex(result),
+        count: (this.data.displayPrizes || []).length,
+        currentRotation: this.data.wheelRotation,
+        withTurns
+      });
+    },
+
+    // 结果对不上任何一格时直接出结果卡：停在错误的格子比不转动更容易让用户误解
+    showResultWithoutSpin(result, source) {
+      this.setData({
+        ...this.resultViewData(result),
+        wheelTransition: "none",
+        spinning: false,
+        showResult: true
+      });
+      this.triggerEvent("finish", { result, source });
     },
 
     spinTo(result) {
@@ -167,7 +161,11 @@ Component({
         return;
       }
       this.clearSpinTimer();
-      const targetRotation = this.targetRotation(result, true);
+      if (this.resultIndex(result) < 0) {
+        this.showResultWithoutSpin(result, "unmatched");
+        return;
+      }
+      const rotation = this.targetRotation(result, true);
       this.setData({
         ...this.resultViewData(result),
         showResult: false,
@@ -180,7 +178,7 @@ Component({
             return;
           }
           this.setData({
-            wheelRotation: targetRotation,
+            wheelRotation: rotation,
             wheelTransition: `transform ${SPIN_DURATION}ms cubic-bezier(0.12, 0.68, 0.16, 1)`
           });
           this._spinTimer = setTimeout(() => this.finishSpin("timeout"), SPIN_TIMEOUT);
@@ -239,14 +237,24 @@ Component({
       this.triggerEvent("draw");
     },
 
-    handleClose() {
+    emitClose(source) {
       if (this.data.spinning || this.properties.drawLoading || this.properties.continueLoading) {
         return;
       }
       this.triggerEvent("close", {
         hasResult: this.data.showResult,
-        result: this.data.localResult
+        result: this.data.localResult,
+        source
       });
+    },
+
+    handleClose() {
+      this.emitClose("button");
+    },
+
+    // 点遮罩只表示「先收起」，页面侧不会据此发起任何支付
+    handleMaskTap() {
+      this.emitClose("mask");
     },
 
     handleContinue() {

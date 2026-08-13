@@ -3,7 +3,13 @@ const { getAddresses } = require("../../api/addresses");
 const { getCart } = require("../../api/cart");
 const { getHome } = require("../../api/catalog");
 const { getDeliverySlots } = require("../../api/delivery");
-const { createOrder, createPaymentShare, payOrder, previewOrder } = require("../../api/orders");
+const {
+  createOrder,
+  createPaymentShare,
+  getPaymentShare,
+  payOrder,
+  previewOrder
+} = require("../../api/orders");
 const {
   createLotteryChallenge,
   drawLottery,
@@ -17,6 +23,21 @@ const {
   readLotterySession,
   writeLotterySession
 } = require("../../utils/lottery-session");
+const {
+  hasActivePaymentShare,
+  isChallengeInvalid: lotteryChallengeInvalid,
+  lotteryCampaignEnabled,
+  lotteryReasonText
+} = require("../../utils/lottery-status");
+const {
+  inspectPaymentShare,
+  rememberPaymentShareToken
+} = require("../../utils/payment-share-store");
+const {
+  pendingOrderDecision,
+  pendingOrderLockKind,
+  pendingOrderSignature
+} = require("./pending-order");
 const {
   isPaidOrder,
   isPaymentCancelled,
@@ -126,31 +147,6 @@ function hasOrderSource(page) {
   return Boolean(page.data.buyNowRequest || page.data.cartItemIds.length);
 }
 
-function lotteryCampaignEnabled(state) {
-  return Boolean(state && state.campaign && state.campaign.enabled !== false);
-}
-
-function lotteryReasonText(state) {
-  const reason = String((state && state.reason) || "");
-  const messages = {
-    CAMPAIGN_DISABLED: "活动已结束",
-    CAMPAIGN_NOT_STARTED: "活动尚未开始",
-    ORDER_NOT_ELIGIBLE: "本单不符合活动条件",
-    BELOW_THRESHOLD: "本单未达到活动门槛",
-    CHALLENGE_EXPIRED: "分享凭证已失效",
-    ORDER_NOT_PENDING: "订单状态已变化"
-  };
-  return messages[reason] || reason || "本单暂不能参与鲜礼活动";
-}
-
-function lotteryChallengeInvalid(state) {
-  return [
-    "CHALLENGE_EXPIRED",
-    "CHALLENGE_INVALID",
-    "INVALID_CHALLENGE"
-  ].includes(String((state && state.reason) || ""));
-}
-
 function modalChoice(options) {
   return new Promise((resolve) => {
     wx.showModal({
@@ -191,6 +187,7 @@ Page({
     paymentMethods: PAYMENT_METHODS,
     paymentMethod: "WECHAT",
     pendingOrderId: 0,
+    pendingOrderSignature: "",
     flowPaymentMethod: "WECHAT",
     lotteryState: null,
     lotteryBusy: false,
@@ -230,12 +227,23 @@ Page({
       return;
     }
     wx.removeStorageSync("checkoutSelectedAddress");
+    this.applySelectedAddress(selectedAddress);
+  },
+
+  async applySelectedAddress(selectedAddress) {
+    const changed = Number(selectedAddress.id) !== Number((this.data.address && this.data.address.id) || 0);
+    if (changed && Number(this.data.pendingOrderId)) {
+      if (!(await this.confirmPendingOrderChange())) {
+        return;
+      }
+      this.clearPendingOrder();
+    }
     if (!hasOrderSource(this) || !this.data.activeSlotId) {
       this.setData({ address: selectedAddress });
       this.loadCheckout();
       return;
     }
-    this.refreshPreview(selectedAddress, this.data.activeSlotId);
+    await this.refreshPreview(selectedAddress, this.data.activeSlotId);
   },
 
   async loadCheckout() {
@@ -253,6 +261,15 @@ Page({
       remark: "",
       paying: false,
       paymentMethod: "WECHAT",
+      // 重新加载相当于换了一单，旧的待支付订单与鲜礼状态都不能再复用
+      pendingOrderId: 0,
+      pendingOrderSignature: "",
+      lotteryState: null,
+      showLotteryChoice: false,
+      showLuckyWheel: false,
+      wheelPrizes: [],
+      wheelInitialResult: null,
+      lotteryResult: null,
       ...EMPTY_AMOUNT
     });
     try {
@@ -410,8 +427,63 @@ Page({
     wx.redirectTo({ url: "/pages/cart/index" });
   },
 
+  currentOrderSignature() {
+    return pendingOrderSignature({
+      addressId: this.data.address && this.data.address.id,
+      deliverySlotId: this.data.activeSlotId,
+      remark: this.data.remark,
+      buyNowRequest: this.data.buyNowRequest,
+      cartItemIds: this.data.cartItemIds
+    });
+  },
+
+  // 作废本页缓存的待支付订单，下次付款会按当前地址/时段/备注重新建单
+  clearPendingOrder() {
+    const orderId = Number(this.data.pendingOrderId || 0);
+    if (orderId) {
+      clearLotterySession(orderId, "checkout");
+    }
+    this.setData({
+      pendingOrderId: 0,
+      pendingOrderSignature: "",
+      lotteryState: null,
+      showLotteryChoice: false,
+      showLuckyWheel: false,
+      wheelPrizes: [],
+      wheelInitialResult: null,
+      lotteryResult: null,
+      lotteryDiscountText: "0.00",
+      hasLotteryDiscount: false
+    });
+  },
+
+  // 已经抽到鲜礼或已用分享换到资格的订单，作废前必须让用户知道代价
+  async confirmPendingOrderChange() {
+    const lockKind = pendingOrderLockKind(this.data.lotteryState);
+    if (!Number(this.data.pendingOrderId) || !lockKind) {
+      return true;
+    }
+    return modalChoice({
+      title: "本单已锁定鲜礼",
+      content: lockKind === "DRAWN"
+        ? "本单已经抽到鲜礼并锁定金额。修改后需要重新下单并重新抽取，本次抽到的减免不会保留。"
+        : "本单已经用一次朋友圈分享解锁了抽奖资格。修改后需要重新下单并重新分享解锁。",
+      confirmText: "仍要修改",
+      cancelText: "保持原单"
+    });
+  },
+
   async chooseSlot(event) {
     const activeSlotId = Number(event.currentTarget.dataset.id);
+    if (!activeSlotId || activeSlotId === Number(this.data.activeSlotId)) {
+      return;
+    }
+    if (Number(this.data.pendingOrderId)) {
+      if (!(await this.confirmPendingOrderChange())) {
+        return;
+      }
+      this.clearPendingOrder();
+    }
     this.setData({ activeSlotId });
     if (!this.data.address || !hasOrderSource(this)) {
       return;
@@ -441,7 +513,26 @@ Page({
       return;
     }
 
-    let orderId = Number(this.data.pendingOrderId || 0);
+    // 地址、时段、备注、商品来源任何一项变化，旧的待支付订单都不能再复用
+    const signature = this.currentOrderSignature();
+    const decision = pendingOrderDecision({
+      pendingOrderId: this.data.pendingOrderId,
+      pendingSignature: this.data.pendingOrderSignature,
+      signature,
+      lotteryState: this.data.lotteryState
+    });
+    if (decision.action === "confirm" && !(await this.confirmPendingOrderChange())) {
+      return;
+    }
+    if (decision.action === "confirm" || decision.action === "recreate") {
+      const hadLotteryDiscount = this.data.hasLotteryDiscount;
+      this.clearPendingOrder();
+      if (hadLotteryDiscount) {
+        await this.refreshPreview(this.data.address, this.data.activeSlotId);
+      }
+    }
+
+    let orderId = decision.action === "reuse" ? Number(this.data.pendingOrderId || 0) : 0;
     this.setData({
       paying: true,
       payDisabled: true,
@@ -459,7 +550,7 @@ Page({
         if (!orderId) {
           throw new Error("订单创建成功但未返回订单编号");
         }
-        this.setData({ pendingOrderId: orderId });
+        this.setData({ pendingOrderId: orderId, pendingOrderSignature: signature });
       }
     } catch (error) {
       const message = paymentErrorMessage(error, "订单提交失败，请重试");
@@ -725,17 +816,33 @@ Page({
       }
       const state = await getOrderLottery(orderId);
       clearLotterySession(orderId, "checkout");
+      // 等待期间订单可能已被作废（例如用户顺手改了地址），此时不能再恢复它的鲜礼状态
+      if (Number(this.data.pendingOrderId) !== orderId) {
+        return;
+      }
+      // 用户只是从活动页返回，没有点过付款；这里只更新状态，付款交还给用户点击
       if (!this.applyLotteryGate(state, paymentMethod)) {
-        await this.runFinalPayment(orderId, paymentMethod);
+        wx.showToast({
+          title: lotteryReasonText(state, "本单暂不能参与鲜礼，可直接点击付款"),
+          icon: "none"
+        });
       }
     } catch (error) {
-      await this.handleLotteryCheckFailure(error, orderId, paymentMethod);
+      await this.handleLotteryCheckFailure(error, orderId, paymentMethod, { allowPay: false });
     } finally {
       this._resumingLottery = false;
     }
   },
 
-  async handleLotteryCheckFailure(error, orderId, paymentMethod) {
+  async handleLotteryCheckFailure(error, orderId, paymentMethod, options = {}) {
+    if (options.allowPay === false) {
+      wx.showModal({
+        title: "鲜礼资格暂未确认",
+        content: `${(error && error.message) || "网络连接失败"}。订单已保留，可稍后再点击付款，或在订单详情继续处理。`,
+        showCancel: false
+      });
+      return;
+    }
     const originalPay = await modalChoice({
       title: "鲜礼资格暂未确认",
       content: `${(error && error.message) || "网络连接失败"}。可按原价支付，或稍后在订单详情继续确认。`,
@@ -884,27 +991,79 @@ Page({
     if (!orderId || this.data.drawLoading || this.data.lotteryContinueLoading) {
       return;
     }
+    const detail = (event && event.detail) || {};
+    const paymentMethod = this.data.flowPaymentMethod || this.data.paymentMethod;
     const hasResult = Boolean(
-      (event && event.detail && event.detail.hasResult)
+      detail.hasResult
       || (this.data.lotteryState && this.data.lotteryState.drawn)
     );
+    this.setData({ showLuckyWheel: false });
+    // 点遮罩只是收起弹层，绝不触发任何支付动作
+    if (detail.source === "mask") {
+      wx.showToast({
+        title: hasResult ? "鲜礼已保存，可再次点击付款" : "已收起，可再次点击付款继续抽取",
+        icon: "none"
+      });
+      return;
+    }
+    if (!hasResult) {
+      const keepDrawing = await modalChoice({
+        title: "先不抽鲜礼？",
+        content: paymentMethod === "FRIEND"
+          ? "生成代付链接后本单会按原价锁定，不再参与本次鲜礼抽奖。"
+          : "按原价支付后本单不再参与本次鲜礼抽奖；也可以先抽完再付款。",
+        confirmText: "继续抽奖",
+        cancelText: "原价支付"
+      });
+      if (keepDrawing) {
+        this.setData({ showLuckyWheel: true });
+        return;
+      }
+      await this.runFinalPayment(orderId, paymentMethod);
+      return;
+    }
     const continueNow = await modalChoice({
-      title: hasResult ? "鲜礼结果已保存" : "暂不抽取鲜礼？",
-      content: hasResult
-        ? "本单金额已经锁定，可现在继续支付，也可稍后在订单详情恢复。"
-        : "按原价支付将不再等待本次分享抽奖；也可以稍后回订单详情继续。",
-      confirmText: hasResult ? "继续支付" : "原价支付",
+      title: "鲜礼结果已保存",
+      content: "本单金额已经锁定，可现在继续支付，也可稍后在订单详情恢复。",
+      confirmText: "继续支付",
       cancelText: "稍后再付"
     });
-    this.setData({ showLuckyWheel: false });
     if (continueNow) {
-      await this.runFinalPayment(
-        orderId,
-        this.data.flowPaymentMethod || this.data.paymentMethod
-      );
+      await this.runFinalPayment(orderId, paymentMethod);
       return;
     }
     wx.redirectTo({ url: `/pages/order-detail/index?id=${orderId}` });
+  },
+
+  // 重新调用 createPaymentShare 会作废好友手上的旧链接并轮换支付单号，先确认有没有可复用的链接
+  async resolveFriendPaymentShare(orderId) {
+    const existing = await inspectPaymentShare(orderId, getPaymentShare);
+    if (existing.state === "REUSABLE") {
+      wx.showToast({ title: "本单已有代付链接，直接打开", icon: "none" });
+      return { token: existing.token };
+    }
+    if (existing.state === "PAID") {
+      wx.showToast({ title: "好友已完成付款", icon: "none" });
+      wx.redirectTo({ url: `/pages/order-detail/index?id=${orderId}` });
+      return null;
+    }
+    const needsConfirm = existing.state === "UNKNOWN" || hasActivePaymentShare(this.data.lotteryState);
+    if (needsConfirm) {
+      const regenerate = await modalChoice({
+        title: "本单已有代付链接",
+        content: existing.state === "UNKNOWN"
+          ? "暂时无法确认已生成的代付链接是否仍然有效。重新生成会让好友手上的旧链接立刻失效。"
+          : "本单已经生成过好友代付链接。重新生成会让好友手上的旧链接立刻失效。",
+        confirmText: "重新生成",
+        cancelText: "先不生成"
+      });
+      if (!regenerate) {
+        return null;
+      }
+    }
+    const share = await createPaymentShare(orderId);
+    rememberPaymentShareToken(orderId, share.token);
+    return share;
   },
 
   async runFinalPayment(orderId, paymentMethod) {
@@ -918,7 +1077,10 @@ Page({
     });
     try {
       if (paymentMethod === "FRIEND") {
-        const share = await createPaymentShare(orderId);
+        const share = await this.resolveFriendPaymentShare(orderId);
+        if (!share) {
+          return;
+        }
         wx.redirectTo({
           url: `/pages/pay-for-other/index?token=${encodeURIComponent(share.token)}&owner=1&orderId=${orderId}`
         });

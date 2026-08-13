@@ -35,9 +35,9 @@
       <text class="notice-desc">{{loadError}}，稍后再来看看。</text>
     </view>
 
-    <view wx:elif="{{!campaignEnabled}}" class="landing-notice">
-      <text class="notice-title">本期鲜礼已经收篮</text>
-      <text class="notice-desc">新一期活动开放后，会在这里展示可抽取的内容。</text>
+    <view wx:elif="{{campaignNotice}}" class="landing-notice">
+      <text class="notice-title">{{campaignNotice.title}}</text>
+      <text class="notice-desc">{{campaignNotice.desc}}</text>
     </view>
 
     <view wx:else class="landing-section">

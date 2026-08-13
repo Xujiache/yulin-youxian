@@ -1,5 +1,7 @@
 package com.xianda.freshdelivery.service;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.xianda.freshdelivery.common.BusinessException;
@@ -102,7 +104,14 @@ public class StorefrontService {
     private static final int MAX_SPEC_OPTIONS = 20;
     private static final int MAX_SKU_COMBINATIONS = 200;
 
-    private final ObjectMapper objectMapper = new ObjectMapper().enable(SerializationFeature.INDENT_OUTPUT);
+    /**
+     * 反序列化容忍未知字段：新版本写过盘之后要能回滚到旧版本，否则 loadState() 会因为
+     * 多出来的字段直接抛异常，服务起不来。快照本身的损坏检测在 StatePayloadCodec 里，
+     * 与这里的字段绑定无关。
+     */
+    private final ObjectMapper objectMapper = new ObjectMapper()
+            .enable(SerializationFeature.INDENT_OUTPUT)
+            .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
     private final Path storagePath;
     private final StateStore stateStore;
     private final PrintJobService printJobService;
@@ -1248,6 +1257,7 @@ public class StorefrontService {
             orders.put(order.id(), paid);
             invalidatePaymentShares(order.id());
             persist();
+            notifyLotteryPaid(order.id(), now);
             return new PaymentConfirmationResult(toOrderDetailDto(paid), true);
         }
 
@@ -1265,6 +1275,7 @@ public class StorefrontService {
             orders.put(order.id(), paid);
             invalidatePaymentShares(order.id());
             persist();
+            notifyLotteryPaid(order.id(), now);
             return new PaymentConfirmationResult(toOrderDetailDto(paid), true);
         }
 
@@ -1280,6 +1291,7 @@ public class StorefrontService {
                 request.orderNo()
         );
         persist();
+        notifyLotteryPaid(order.id(), now);
         return new PaymentConfirmationResult(
                 toOrderDetailDto(paidForRefund),
                 true,
@@ -1410,15 +1422,14 @@ public class StorefrontService {
         );
         refunds.put(id, new RefundState(state.userId(), nextRefund));
         OrderState order = adminOrderState(current.orderId());
-        boolean orderAlreadyFulfilled = "已完成".equals(order.status())
-                || "已完成".equals(refundOriginalStatuses.get(order.id()));
+        boolean giftAlreadyDispatched = isDispatched(effectiveOrderStatus(order));
         int refundedAmount = order.refundedAmount() + current.refundAmount();
         String orderStatus = refundedAmount >= order.paidAmount() ? "已退款" : "部分退款";
         orders.put(order.id(), order.withStatus(orderStatus).withRefundedAmount(refundedAmount));
         refundOriginalStatuses.remove(order.id());
         persist();
         if (refundedAmount >= order.paidAmount()) {
-            notifyLotteryFullyRefunded(order.id(), orderAlreadyFulfilled);
+            notifyLotteryFullyRefunded(order.id(), giftAlreadyDispatched);
         }
         return nextRefund;
     }
@@ -2739,6 +2750,46 @@ public class StorefrontService {
         return toOrderDetailDto(order);
     }
 
+    /**
+     * 抽奖后台和对账只需要订单的状态与收付款事实，不该为此触发一次全量的超时订单清扫
+     * （对账循环里那是 O(抽奖数 × 订单数)）。
+     */
+    public synchronized LotteryOrderView lotteryOrderView(long orderId) {
+        OrderState order = orders.get(orderId);
+        if (order == null) {
+            return null;
+        }
+        String effectiveStatus = effectiveOrderStatus(order);
+        return new LotteryOrderView(
+                order.id(),
+                order.status(),
+                effectiveStatus,
+                order.paidAmount() == null ? 0 : order.paidAmount(),
+                order.refundedAmount() == null ? 0 : order.refundedAmount(),
+                isDispatched(effectiveStatus)
+        );
+    }
+
+    /**
+     * 退款流程会把订单状态改写成「退款中/退款失败」，判断货是否已发出要看进入退款流程
+     * 之前的状态。
+     */
+    private String effectiveOrderStatus(OrderState order) {
+        if (!List.of(REFUND_STATUS_PROCESSING, REFUND_STATUS_FAILED).contains(order.status())) {
+            return order.status();
+        }
+        String original = refundOriginalStatuses.get(order.id());
+        return original == null || original.isBlank() ? order.status() : original;
+    }
+
+    /**
+     * 订单商品在配送中之后不再回补库存（货已装车），赠品必须同口径，否则一张配送中的订单
+     * 被全额退款时赠品会被当成没发出，两套库存凭空多出一件。
+     */
+    private boolean isDispatched(String effectiveStatus) {
+        return List.of("配送中", "已完成").contains(effectiveStatus);
+    }
+
     public synchronized boolean hasActivePaymentShare(long orderId) {
         OrderState order = orders.get(orderId);
         if (order == null || !"待支付".equals(order.status())) {
@@ -2926,25 +2977,38 @@ public class StorefrontService {
                 decreaseLotteryGiftStock(gift);
             }
         }
-        if (projection.payableAmount() != null
-                && !Objects.equals(order.payableAmount(), projection.payableAmount())) {
-            OrderState repaired = order.withPayableAmount(projection.payableAmount());
-            if (order.paidAmount() != null && order.paidAmount() > 0) {
-                repaired = repaired.withPaidAmount(projection.payableAmount());
+        // 只有待支付订单的应付额可以按投影推导；已付款订单的 paidAmount 是用户实付的
+        // 事实，任何情况下都不能被投影覆盖，否则可退金额会跟着缩水，用户退不回自己付过的钱。
+        boolean amountMismatch = projection.payableAmount() != null
+                && !Objects.equals(order.payableAmount(), projection.payableAmount());
+        if (amountMismatch) {
+            if ("待支付".equals(order.status())) {
+                orders.put(orderId, order.withPayableAmount(projection.payableAmount()));
+            } else {
+                LOGGER.warn(
+                        "订单 {} 状态为 {}，只补抽奖投影不改金额（快照 payable={}, 投影 payable={}, paid={}）",
+                        orderId,
+                        order.status(),
+                        order.payableAmount(),
+                        projection.payableAmount(),
+                        order.paidAmount()
+                );
             }
-            orders.put(orderId, repaired);
         }
         orderPromotions.put(orderId, projection);
         persist();
     }
 
+    /**
+     * 撤销订单上的抽奖投影。非待支付订单同样要回补赠品库存并清掉投影，否则对账每一轮都会
+     * 重新发现同一笔、永远收敛不了，库存也一直泄漏；只是它们的金额不再回改。
+     *
+     * <p>调用方必须在改价之前先关掉微信侧的 prepay：这里会轮换 out_trade_no，旧单号上
+     * 支付成功的回调将找不到订单。</p>
+     */
     public synchronized void rollbackLotteryPromotion(long orderId, long drawId, int payableBefore) {
         OrderPromotionProjection projection = orderPromotions.get(orderId);
         if (projection == null || !Objects.equals(projection.drawId(), drawId)) {
-            return;
-        }
-        OrderState order = orders.get(orderId);
-        if (order == null || !"待支付".equals(order.status())) {
             return;
         }
         for (Gift gift : projection.gifts()) {
@@ -2953,6 +3017,23 @@ public class StorefrontService {
             }
         }
         orderPromotions.remove(orderId);
+        OrderState order = orders.get(orderId);
+        if (order == null) {
+            LOGGER.warn("订单 {} 已不存在，仅回补赠品库存并清理抽奖投影", orderId);
+            persist();
+            return;
+        }
+        if (!"待支付".equals(order.status())) {
+            LOGGER.warn(
+                    "订单 {} 状态为 {}，回滚抽奖投影时不再改动金额（当前 payable={}, paid={}）",
+                    orderId,
+                    order.status(),
+                    order.payableAmount(),
+                    order.paidAmount()
+            );
+            persist();
+            return;
+        }
         orders.put(orderId, order.withPayableAmount(payableBefore));
         if (!Objects.equals(order.payableAmount(), payableBefore)) {
             rotatePaymentAttempt(order.withPayableAmount(payableBefore), LocalDateTime.now(STORE_ZONE));
@@ -3112,15 +3193,27 @@ public class StorefrontService {
         }
     }
 
-    private void notifyLotteryFullyRefunded(long orderId, boolean orderAlreadyFulfilled) {
+    private void notifyLotteryFullyRefunded(long orderId, boolean giftAlreadyDispatched) {
         LotteryOrderLifecycle lifecycle = lotteryLifecycle();
         if (lifecycle == null) {
             return;
         }
         try {
-            lifecycle.onOrderFullyRefunded(orderId, orderAlreadyFulfilled);
+            lifecycle.onOrderFullyRefunded(orderId, giftAlreadyDispatched);
         } catch (RuntimeException exception) {
             LOGGER.error("订单全额退款后的抽奖补偿失败，orderId={}", orderId, exception);
+        }
+    }
+
+    private void notifyLotteryPaid(long orderId, LocalDateTime paidAt) {
+        LotteryOrderLifecycle lifecycle = lotteryLifecycle();
+        if (lifecycle == null) {
+            return;
+        }
+        try {
+            lifecycle.onOrderPaid(orderId, paidAt);
+        } catch (RuntimeException exception) {
+            LOGGER.error("订单支付完成后的抽奖审计更新失败，orderId={}", orderId, exception);
         }
     }
 
@@ -3335,7 +3428,25 @@ public class StorefrontService {
                 .filter(item -> orderItemIds.contains(item.id()))
                 .mapToInt(OrderItemDto::amount)
                 .sum();
-        return Math.min(refundable, selectedAmount);
+        return Math.min(refundable, selectedAmount - allocatedDiscount(order, selectedAmount));
+    }
+
+    /**
+     * 抽奖减免是整单优惠，按商品行退款时必须按比例扣掉对应的那部分；否则先退的那行按原价
+     * 退走，后退的行会被剩余可退金额压缩。
+     */
+    private int allocatedDiscount(OrderState order, int selectedAmount) {
+        OrderPromotionProjection promotion = orderPromotions.get(order.id());
+        int discount = promotion == null || promotion.discountAmount() == null ? 0 : promotion.discountAmount();
+        int productAmount = order.items().stream().mapToInt(OrderItemDto::amount).sum();
+        if (discount <= 0 || productAmount <= 0 || selectedAmount <= 0) {
+            return 0;
+        }
+        int allocated = BigDecimal.valueOf(discount)
+                .multiply(BigDecimal.valueOf(selectedAmount))
+                .divide(BigDecimal.valueOf(productAmount), 0, RoundingMode.HALF_UP)
+                .intValue();
+        return Math.min(allocated, selectedAmount);
     }
 
     private int availableRefundAmount(OrderState order, Long excludedRefundId) {
@@ -4181,6 +4292,8 @@ public class StorefrontService {
             Map<String, PaymentShareState> paymentShares,
             Map<String, OrderCreationIdempotencyState> orderCreationIdempotency,
             Map<String, Long> refundAttemptIds,
+            // 没启用抽奖时不写这个字段，保证快照仍能被不认识它的旧版本读回去。
+            @JsonInclude(JsonInclude.Include.NON_EMPTY)
             Map<Long, OrderPromotionProjection> orderPromotions,
             SettingsDto settings
     ) {
@@ -4214,6 +4327,20 @@ public class StorefrontService {
     public record PaymentSharePaymentContext(
             OrderDetailDto order,
             Long creatorUserId
+    ) {
+    }
+
+    /**
+     * 抽奖侧只读的订单视图：status 是快照上的当前状态，effectiveStatus 会把退款流程中
+     * 被覆盖掉的原始状态还原出来。
+     */
+    public record LotteryOrderView(
+            Long orderId,
+            String status,
+            String effectiveStatus,
+            int paidAmount,
+            int refundedAmount,
+            boolean dispatched
     ) {
     }
 

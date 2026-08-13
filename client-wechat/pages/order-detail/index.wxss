@@ -480,6 +480,78 @@
   border-radius: 999rpx;
 }
 
+.lottery-entry-card {
+  display: flex;
+  align-items: center;
+  gap: 18rpx;
+  padding: 24rpx 26rpx;
+  background: linear-gradient(135deg, #fffdf5 0%, #f1f9ef 100%);
+  border: 1rpx solid #e6e0c3;
+}
+
+.lottery-entry-card.is-busy {
+  opacity: 0.6;
+}
+
+.lottery-entry-mark {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 68rpx;
+  height: 68rpx;
+  color: #fff8e7;
+  font-family: "STKaiti", "KaiTi", sans-serif;
+  font-size: 34rpx;
+  font-weight: 900;
+  background: linear-gradient(145deg, #60c041, #008a52);
+  border: 4rpx solid #f4c95d;
+  border-radius: 22rpx 22rpx 26rpx 26rpx;
+}
+
+.lottery-entry-leaf {
+  position: absolute;
+  top: -11rpx;
+  right: 2rpx;
+  width: 24rpx;
+  height: 34rpx;
+  background: #006d42;
+  border-radius: 24rpx 4rpx 24rpx 4rpx;
+  transform: rotate(38deg);
+}
+
+.lottery-entry-copy {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.lottery-entry-title {
+  color: #17211c;
+  font-size: 28rpx;
+  font-weight: 800;
+  line-height: 38rpx;
+}
+
+.lottery-entry-desc {
+  margin-top: 3rpx;
+  color: #6c7a71;
+  font-size: 22rpx;
+  line-height: 30rpx;
+}
+
+.lottery-entry-action {
+  flex: 0 0 auto;
+  padding: 10rpx 18rpx;
+  color: #a5760a;
+  font-size: 23rpx;
+  font-weight: 700;
+  background: #fdf1cf;
+  border-radius: 999rpx;
+}
+
 /* Bottom Action Bar - Premium Floating Glass Bar */
 .detail-actions {
   position: fixed;

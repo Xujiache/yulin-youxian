@@ -1,4 +1,4 @@
-<view wx:if="{{visible}}" class="lucky-mask" catchtap="handleClose">
+<view wx:if="{{visible}}" class="lucky-mask" catchtap="handleMaskTap">
   <view class="lucky-sheet" catchtap="stopPanelTap">
     <view class="ticket-cut ticket-cut-left"></view>
     <view class="ticket-cut ticket-cut-right"></view>

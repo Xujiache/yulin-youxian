@@ -214,8 +214,8 @@ class LotteryServiceTests {
         assertEquals(0, task.marketingDiscountAmount());
         assertTrue(task.marketingGiftSummary().contains(gift.gifts().get(0).productName()));
         assertTrue(task.goodsSummary().contains("赠"));
-        assertEquals(1, service.draws(null, "GOODS", "PENDING").size());
-        assertNotNull(service.draws(null, "GOODS", "PENDING").get(0).drawnAt());
+        assertEquals(1, adminDraws(null, "GOODS", "PENDING").size());
+        assertNotNull(adminDraws(null, "GOODS", "PENDING").get(0).drawnAt());
 
         DrawResult fallback = triggerAndDraw(second);
         assertEquals("NONE", fallback.prizeType());
@@ -234,7 +234,7 @@ class LotteryServiceTests {
                 .findFirst()
                 .orElseThrow();
         assertEquals(1, restoredGift.stockRemaining());
-        assertEquals("VOIDED", service.draws(null, null, null).stream()
+        assertEquals("VOIDED", adminDraws(null, null, null).stream()
                 .filter(draw -> draw.orderId().equals(first.id()))
                 .findFirst().orElseThrow().status());
         assertFalse(service.orderState(third.id()).eligible(), "取消不返还每日抽奖次数");
@@ -327,7 +327,7 @@ class LotteryServiceTests {
         storefront.closeExpiredOrders(expiredAt);
         service.onOrderExpired(order.id());
         assertEquals(stockBefore, storefront.product(104L).stockQty());
-        assertEquals("RELEASED", service.draws(null, null, null).get(0).giftStockStatus());
+        assertEquals("RELEASED", adminDraws(null, null, null).get(0).giftStockStatus());
 
         service.onOrderRestarting(order.id());
         OrderDetailDto restarted = storefront.restartOrder(order.id(), 3L, expiredAt);
@@ -336,7 +336,7 @@ class LotteryServiceTests {
         assertEquals(result.drawId(), restarted.lotteryResult().drawId());
         assertEquals(result.payableAmount(), restarted.payableAmount());
         assertEquals(stockBefore.subtract(BigDecimal.ONE), storefront.product(104L).stockQty());
-        assertEquals("RESERVED", service.draws(null, null, null).get(0).giftStockStatus());
+        assertEquals("RESERVED", adminDraws(null, null, null).get(0).giftStockStatus());
     }
 
     @Test
@@ -348,7 +348,7 @@ class LotteryServiceTests {
 
         service.onOrderFullyRefunded(unfulfilled.id(), false);
         assertEquals(stockBefore, storefront.product(104L).stockQty());
-        assertEquals("VOIDED", service.draws(null, null, null).get(0).status());
+        assertEquals("VOIDED", adminDraws(null, null, null).get(0).status());
 
         OrderDetailDto fulfilled = createOrder();
         triggerAndDraw(fulfilled);
@@ -356,12 +356,12 @@ class LotteryServiceTests {
         service.onOrderFullyRefunded(fulfilled.id(), true);
 
         assertEquals(stockBefore.subtract(BigDecimal.ONE), storefront.product(104L).stockQty());
-        LotteryModels.AdminDraw fulfilledDraw = service.draws(null, null, null).stream()
+        LotteryModels.AdminDraw fulfilledDraw = adminDraws(null, null, null).stream()
                 .filter(draw -> draw.orderId().equals(fulfilled.id()))
                 .findFirst()
                 .orElseThrow();
         assertEquals("FULFILLED", fulfilledDraw.status());
-        assertEquals("APPLIED", fulfilledDraw.relationStatus());
+        assertEquals("SETTLED", fulfilledDraw.relationStatus(), "履约完成的流水应进入终态，不再被对账扫到");
         assertEquals("FULFILLED", fulfilledDraw.giftStockStatus());
     }
 
@@ -404,6 +404,10 @@ class LotteryServiceTests {
         assertEquals(null, loaded.lotteryResult());
     }
 
+    private List<LotteryModels.AdminDraw> adminDraws(String keyword, String prizeType, String status) {
+        return service.draws(keyword, prizeType, status, null, null, null, null).items();
+    }
+
     private DrawResult triggerAndDraw(OrderDetailDto order) {
         OrderState challenge = service.challenge(order.id());
         service.shareTriggered(order.id(), challenge.challengeToken());
@@ -433,7 +437,8 @@ class LotteryServiceTests {
                 "分享后抽奖",
                 "仅记录朋友圈菜单触发，不验证最终发布",
                 "/lottery.png",
-                List.of(new Tier(null, "全金额", 0, null, true, 10, prizes))
+                // 减免额必须小于阶梯下限，否则实际减免会被 payable - 1 压缩成另一个数字。
+                List.of(new Tier(null, "满 10 元", 1000, null, true, 10, prizes))
         );
     }
 

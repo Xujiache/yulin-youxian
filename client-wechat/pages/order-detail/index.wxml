@@ -281,6 +281,23 @@
     <view class="payment-route-change">更改</view>
   </view>
 
+  <!-- 鲜礼入口：转盘只在用户主动点击后打开，避免每次进详情都被弹层拦住 -->
+  <view
+    wx:if="{{isPendingPayment && lotteryEntry}}"
+    class="lottery-entry-card card {{lotteryEntryBusy ? 'is-busy' : ''}}"
+    bindtap="handleLotteryEntry"
+  >
+    <view class="lottery-entry-mark">
+      <view class="lottery-entry-leaf"></view>
+      <text>鲜</text>
+    </view>
+    <view class="lottery-entry-copy">
+      <text class="lottery-entry-title">{{lotteryEntry.title}}</text>
+      <text class="lottery-entry-desc">{{lotteryEntry.desc}}</text>
+    </view>
+    <view class="lottery-entry-action">{{lotteryEntryBusy ? '读取中…' : lotteryEntry.actionText}}</view>
+  </view>
+
   <view class="detail-actions">
     <view wx:if="{{canCancel}}" class="action-btn btn-cancel {{cancelling || paying ? 'is-disabled' : ''}}" catchtap="handleCancelOrder">
       <text>{{cancelling ? '取消中' : '取消订单'}}</text>

@@ -14,6 +14,25 @@ public final class LotteryModels {
         NONE
     }
 
+    /**
+     * {@link OrderState#reason()} 是给用户看的中文文案，会随运营口径调整；小程序按
+     * reasonCode 做分支判断，两者不能混用。
+     */
+    public enum ReasonCode {
+        ELIGIBLE,
+        ALREADY_DRAWN,
+        ORDER_NOT_PENDING,
+        ORDER_SKIPPED,
+        ACTIVE_PAYMENT_SHARE,
+        DAILY_LIMIT_REACHED,
+        TIER_NOT_MATCHED,
+        CAMPAIGN_DISABLED,
+        CAMPAIGN_NOT_STARTED,
+        CAMPAIGN_ENDED,
+        CHALLENGE_EXPIRED,
+        NO_AVAILABLE_PRIZE
+    }
+
     public record Campaign(
             Long id,
             Boolean enabled,
@@ -143,6 +162,7 @@ public final class LotteryModels {
     public record OrderState(
             Boolean eligible,
             String reason,
+            ReasonCode reasonCode,
             String challengeToken,
             Boolean shareTriggered,
             Boolean drawn,
@@ -187,8 +207,11 @@ public final class LotteryModels {
             String relationStatus,
             String giftStockStatus,
             String voidReason,
+            String orderStatus,
+            String shareTriggeredAt,
             String drawnAt,
             String createdAt,
+            String paidAt,
             String fulfilledAt,
             String fulfillmentRemark,
             List<Gift> gifts

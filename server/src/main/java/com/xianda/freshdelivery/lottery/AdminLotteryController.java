@@ -1,10 +1,10 @@
 package com.xianda.freshdelivery.lottery;
 
 import com.xianda.freshdelivery.common.ApiResponse;
+import com.xianda.freshdelivery.common.PageResult;
 import com.xianda.freshdelivery.lottery.LotteryModels.AdminDraw;
 import com.xianda.freshdelivery.lottery.LotteryModels.Campaign;
 import com.xianda.freshdelivery.lottery.LotteryModels.FulfillRequest;
-import java.util.List;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -33,13 +33,30 @@ public class AdminLotteryController {
         return ApiResponse.ok(lotteryService.saveCampaign(request));
     }
 
+    /**
+     * 后台记录页发的是本地时间文本（2026-08-07T00:00:00），并且为了兼容项目里其它列表
+     * 的命名把 size 和 pageSize 都发了一份，这里两个都接，size 优先。
+     */
     @GetMapping("/draws")
-    public ApiResponse<List<AdminDraw>> draws(
+    public ApiResponse<PageResult<AdminDraw>> draws(
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String prizeType,
-            @RequestParam(required = false) String status
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String startAt,
+            @RequestParam(required = false) String endAt,
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer size,
+            @RequestParam(required = false) Integer pageSize
     ) {
-        return ApiResponse.ok(lotteryService.draws(keyword, prizeType, status));
+        return ApiResponse.ok(lotteryService.draws(
+                keyword,
+                prizeType,
+                status,
+                startAt,
+                endAt,
+                page,
+                size == null ? pageSize : size
+        ));
     }
 
     @PostMapping("/draws/{id}/fulfill")

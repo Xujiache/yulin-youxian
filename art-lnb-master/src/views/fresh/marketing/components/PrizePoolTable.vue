@@ -3,7 +3,9 @@
     <div class="prize-pool__head">
       <div>
         <strong>奖项池</strong>
-        <span>整数权重会实时换算为概率；禁用和库存耗尽的奖项不计入分母。</span>
+        <span>
+          整数权重会实时换算为概率；禁用和库存耗尽的奖项不计入分母，预算与商品可售性以右侧预览为准。
+        </span>
       </div>
       <div class="prize-pool__add">
         <ElButton size="small" type="primary" plain @click="addPrize('DISCOUNT')">
@@ -195,7 +197,7 @@
 
 <script setup lang="ts">
   import { ElMessageBox } from 'element-plus'
-  import type { EditableLotteryPrize, LotteryPrizeType } from '@/api/marketing'
+  import { createLocalId, type EditableLotteryPrize, type LotteryPrizeType } from '@/api/marketing'
   import ProductPicker from './ProductPicker.vue'
 
   interface ProductSelection {
@@ -214,16 +216,8 @@
     'update:modelValue': [value: EditableLotteryPrize[]]
   }>()
 
-  let localKeySequence = 0
-  const localKeys = new WeakMap<EditableLotteryPrize, string>()
-  const rowKey = (row: EditableLotteryPrize) => {
-    if (row.id !== null && row.id !== undefined) return `prize-${row.id}`
-    if (!localKeys.has(row)) {
-      localKeySequence += 1
-      localKeys.set(row, `new-prize-${localKeySequence}`)
-    }
-    return localKeys.get(row) as string
-  }
+  const rowKey = (row: EditableLotteryPrize) =>
+    row.id === null || row.id === undefined ? row.localId : `prize-${row.id}`
 
   const centToYuan = (value?: number | null) => Number((Number(value || 0) / 100).toFixed(2))
   const yuanToCent = (value?: number | null) => Math.max(0, Math.round(Number(value || 0) * 100))
@@ -350,6 +344,7 @@
   const addPrize = (type: LotteryPrizeType) => {
     const limited = type === 'GOODS'
     const next: EditableLotteryPrize = {
+      localId: createLocalId('prize'),
       id: null,
       type,
       name: type === 'DISCOUNT' ? '随机减免' : type === 'GOODS' ? '实物赠品' : '谢谢惠顾',

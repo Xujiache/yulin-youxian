@@ -51,6 +51,43 @@ class LotteryRulesTests {
     }
 
     @Test
+    void discountMustStayBelowTheTierFloorSoTheWheelDoesNotLie() {
+        Prize discount = new Prize(
+                3L, "DISCOUNT", "随机减 5 元", 500, null, null, null, 1, 0, 0, true, 10
+        );
+        Campaign tooLarge = campaign(List.of(new Tier(
+                1L, "满 3 元", 300, null, true, 10, List.of(discount)
+        )));
+        Campaign valid = campaign(List.of(new Tier(
+                1L, "满 10 元", 1000, null, true, 10, List.of(discount)
+        )));
+
+        BusinessException rejected = assertThrows(BusinessException.class, () -> LotteryRules.validate(tooLarge));
+        assertEquals(400, rejected.code());
+        LotteryRules.validate(valid);
+    }
+
+    @Test
+    void oversizedTextIsRejectedWithAReadableMessage() {
+        Campaign longName = new Campaign(
+                1L, true, "活".repeat(129), null, null, 1, null,
+                "分享标题", "分享描述", null, List.of(tier(1L, 0, null, 10))
+        );
+        Campaign longDescription = new Campaign(
+                1L, true, "随机减免", null, null, 1, null,
+                "分享标题", "描".repeat(513), null, List.of(tier(1L, 0, null, 10))
+        );
+        Campaign longPrizeName = campaign(List.of(new Tier(
+                1L, "全部订单", 0, null, true, 10,
+                List.of(new Prize(1L, "NONE", "奖".repeat(129), null, null, null, null, 1, 0, 0, true, 10))
+        )));
+
+        assertEquals(400, assertThrows(BusinessException.class, () -> LotteryRules.validate(longName)).code());
+        assertEquals(400, assertThrows(BusinessException.class, () -> LotteryRules.validate(longDescription)).code());
+        assertEquals(400, assertThrows(BusinessException.class, () -> LotteryRules.validate(longPrizeName)).code());
+    }
+
+    @Test
     void disabledPrizeMayKeepZeroWeight() {
         Prize disabled = new Prize(
                 2L, "NONE", "暂时停用", null, null, null, null,

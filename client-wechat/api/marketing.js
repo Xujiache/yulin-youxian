@@ -1,10 +1,14 @@
 const request = require("../utils/request");
-const { normalizeAssetUrl } = require("./normalize");
+const { normalizeAssetUrl, normalizePrizeResult } = require("./normalize");
 
 function numberOr(value, fallback = 0) {
   const number = Number(value);
   return Number.isFinite(number) ? number : fallback;
 }
+
+// 后端下发的列表已经排好序，缺省 sortOrder 按 100 处理、并列时按 id 排。
+// 本地排序必须用同一套规则，否则转盘的下标空间会和 prizeIndex 错开。
+const DEFAULT_SORT_ORDER = 100;
 
 function normalizePrize(prize = {}) {
   return {
@@ -13,21 +17,22 @@ function normalizePrize(prize = {}) {
     type: prize.type || "",
     name: prize.name || "鲜礼",
     imageUrl: normalizeAssetUrl(prize.imageUrl || ""),
-    sortOrder: numberOr(prize.sortOrder)
+    sortOrder: numberOr(prize.sortOrder, DEFAULT_SORT_ORDER)
   };
+}
+
+function comparePrizes(left, right) {
+  const bySortOrder = left.sortOrder - right.sortOrder;
+  if (bySortOrder !== 0) {
+    return bySortOrder;
+  }
+  return numberOr(left.id, Number.MAX_SAFE_INTEGER) - numberOr(right.id, Number.MAX_SAFE_INTEGER);
 }
 
 function normalizePrizes(prizes) {
   return (Array.isArray(prizes) ? prizes : [])
     .map(normalizePrize)
-    .sort((left, right) => left.sortOrder - right.sortOrder);
-}
-
-function normalizeGift(gift = {}) {
-  return {
-    ...gift,
-    imageUrl: normalizeAssetUrl(gift.imageUrl || "")
-  };
+    .sort(comparePrizes);
 }
 
 function normalizeDrawResult(result) {
@@ -35,12 +40,10 @@ function normalizeDrawResult(result) {
     return null;
   }
   return {
-    ...result,
+    ...normalizePrizeResult(result),
     prizeIndex: numberOr(result.prizeIndex, -1),
     discountAmount: numberOr(result.discountAmount),
-    payableAmount: numberOr(result.payableAmount),
-    imageUrl: normalizeAssetUrl(result.imageUrl || ""),
-    gifts: (Array.isArray(result.gifts) ? result.gifts : []).map(normalizeGift)
+    payableAmount: numberOr(result.payableAmount)
   };
 }
 
@@ -81,6 +84,8 @@ function normalizeLotteryState(payload = {}) {
     ...payload,
     eligible: Boolean(payload.eligible),
     reason: payload.reason || "",
+    // 稳定枚举，判定统一按它走；旧服务端不下发时保持空串，由 utils/lottery-status 从中文 reason 兜底
+    reasonCode: String(payload.reasonCode || "").trim().toUpperCase(),
     challengeToken: payload.challengeToken || "",
     shareTriggered: Boolean(payload.shareTriggered),
     drawn: Boolean(payload.drawn || result),

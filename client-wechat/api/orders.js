@@ -1,5 +1,11 @@
 const request = require("../utils/request");
-const { normalizeOrder, normalizeOrderItem, normalizeRefund } = require("./normalize");
+const {
+  normalizeGifts,
+  normalizeOrder,
+  normalizeOrderItem,
+  normalizePrizeResult,
+  normalizeRefund
+} = require("./normalize");
 const { API_BASE_URL } = require("../utils/config");
 
 function getBaseUrl() {
@@ -33,6 +39,8 @@ function normalizeOrderDetail(order) {
   return {
     ...order,
     items: (order.items || []).map(normalizeOrderItem),
+    gifts: normalizeGifts(order.gifts),
+    lotteryResult: normalizePrizeResult(order.lotteryResult),
     refunds: (order.refunds || []).map(normalizeRefund)
   };
 }
@@ -84,11 +92,19 @@ function createPaymentShare(id) {
   });
 }
 
-function getPaymentShare(token) {
-  return request({
+async function getPaymentShare(token) {
+  const share = await request({
     url: `/api/public/payment-shares/${encodeURIComponent(token)}`,
     skipAuth: true
   });
+  if (!share) {
+    return share;
+  }
+  return {
+    ...share,
+    gifts: normalizeGifts(share.gifts),
+    lotteryResult: normalizePrizeResult(share.lotteryResult)
+  };
 }
 
 function payPaymentShare(token) {
@@ -176,6 +192,7 @@ function uploadRefundEvidence(filePath) {
 module.exports = {
   getOrders,
   getOrder,
+  normalizeOrderDetail,
   previewOrder,
   createOrder,
   payOrder,

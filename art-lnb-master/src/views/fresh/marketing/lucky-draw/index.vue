@@ -95,17 +95,27 @@
                 />
               </ElFormItem>
               <ElFormItem label="每日现金预算（元）" required>
-                <ElInputNumber
-                  :model-value="centToYuan(form.dailyBudgetAmount)"
-                  :min="0"
-                  :max="99999999"
-                  :precision="2"
-                  :step="100"
-                  controls-position="right"
-                  class="form-full"
-                  @update:model-value="updateDailyBudget"
-                />
-                <span class="field-tip">预算与减免金额均按“分”提交；赠品库存不占现金预算。</span>
+                <div class="budget-editor">
+                  <ElInputNumber
+                    v-if="form.dailyBudgetAmount !== null"
+                    :model-value="centToYuan(form.dailyBudgetAmount)"
+                    :min="0"
+                    :max="99999999"
+                    :precision="2"
+                    :step="100"
+                    controls-position="right"
+                    @update:model-value="updateDailyBudget"
+                  />
+                  <div v-else class="budget-editor__unlimited">+∞ 不限预算</div>
+                  <ElSwitch
+                    :model-value="form.dailyBudgetAmount === null"
+                    inline-prompt
+                    active-text="不限"
+                    inactive-text="限额"
+                    @change="(value) => toggleDailyBudget(Boolean(value))"
+                  />
+                </div>
+                <span class="field-tip">{{ budgetTip }}</span>
               </ElFormItem>
             </div>
           </ElForm>
@@ -341,12 +351,14 @@
 <script setup lang="ts">
   import { ElMessage, ElMessageBox } from 'element-plus'
   import {
+    createLocalId,
     getLotteryCampaign,
     updateLotteryCampaign,
     type EditableLotteryCampaign,
     type EditableLotteryPrize,
     type EditableLotteryTier,
     type LotteryCampaign,
+    type LotteryCampaignPayload,
     type LotteryId,
     type LotteryPrize,
     type LotteryPrizeType,
@@ -361,10 +373,11 @@
   const router = useRouter()
   const loading = ref(false)
   const saving = ref(false)
-  let tierKeySequence = 0
-  const tierKeys = new WeakMap<EditableLotteryTier, string>()
+  /** 切到“不限预算”前的限额，便于切回时恢复 */
+  const lastBudgetAmount = ref(10000)
 
   const safeNumber = (value: unknown, fallback = 0) => {
+    if (value === null || value === undefined || value === '') return fallback
     const parsed = Number(value)
     return Number.isFinite(parsed) ? parsed : fallback
   }
@@ -377,6 +390,7 @@
 
   const createDefaultPrizes = (): EditableLotteryPrize[] => [
     {
+      localId: createLocalId('prize'),
       id: null,
       type: 'DISCOUNT',
       name: '随机减免',
@@ -391,6 +405,7 @@
       sortOrder: 10
     },
     {
+      localId: createLocalId('prize'),
       id: null,
       type: 'NONE',
       name: '谢谢惠顾',
@@ -407,6 +422,7 @@
   ]
 
   const createDefaultTier = (): EditableLotteryTier => ({
+    localId: createLocalId('tier'),
     id: null,
     name: '全部订单',
     minProductAmount: 0,
@@ -437,6 +453,12 @@
     return safeInteger(value)
   }
 
+  /** 后端用 null 表示不限每日现金预算，前端必须原样保留 */
+  const normalizeBudget = (value: unknown) => {
+    if (value === null || value === undefined || value === '') return null
+    return safeInteger(value)
+  }
+
   const normalizePrize = (
     prize: LotteryPrize | null | undefined,
     index: number
@@ -448,6 +470,7 @@
     const normalizedTotal = hasFiniteStock ? (stockTotal ?? stockRemaining ?? 0) : null
     const normalizedRemaining = hasFiniteStock ? (stockRemaining ?? stockTotal ?? 0) : null
     return {
+      localId: createLocalId('prize'),
       id: normalizeId(prize?.id),
       type,
       name:
@@ -472,6 +495,7 @@
     tier: LotteryTier | null | undefined,
     index: number
   ): EditableLotteryTier => ({
+    localId: createLocalId('tier'),
     id: normalizeId(tier?.id),
     name: String(tier?.name || '').trim() || `金额阶梯 ${index + 1}`,
     minProductAmount: safeInteger(tier?.minProductAmount),
@@ -500,7 +524,7 @@
       startAt: String(campaign.startAt || ''),
       endAt: String(campaign.endAt || ''),
       dailyUserLimit: Math.max(1, safeInteger(campaign.dailyUserLimit, 1)),
-      dailyBudgetAmount: safeInteger(campaign.dailyBudgetAmount),
+      dailyBudgetAmount: normalizeBudget(campaign.dailyBudgetAmount),
       shareTitle: String(campaign.shareTitle || ''),
       shareDescription: String(campaign.shareDescription || ''),
       shareImageUrl: String(campaign.shareImageUrl || ''),
@@ -521,14 +545,24 @@
   const money = (value?: number | null) => `￥${centToYuan(value).toFixed(2)}`
   const assetUrl = resolveFreshAssetUrl
 
-  const updateDailyBudget = (value?: number) => {
+  const updateDailyBudget = (value?: number | null) => {
     form.dailyBudgetAmount = yuanToCent(value)
+    lastBudgetAmount.value = form.dailyBudgetAmount
   }
-  const updateTierMin = (tier: EditableLotteryTier, value?: number) => {
+  const toggleDailyBudget = (unlimited: boolean) => {
+    if (!unlimited) {
+      form.dailyBudgetAmount = lastBudgetAmount.value
+      return
+    }
+    if (form.dailyBudgetAmount !== null) lastBudgetAmount.value = form.dailyBudgetAmount
+    form.dailyBudgetAmount = null
+  }
+  const updateTierMin = (tier: EditableLotteryTier, value?: number | null) => {
     tier.minProductAmount = yuanToCent(value)
   }
-  const updateTierMax = (tier: EditableLotteryTier, value?: number) => {
-    tier.maxProductAmount = value === undefined ? null : yuanToCent(value)
+  const updateTierMax = (tier: EditableLotteryTier, value?: number | null) => {
+    // ElInputNumber 清空时 emit 的是 null，此处不能只判断 undefined
+    tier.maxProductAmount = value === null || value === undefined ? null : yuanToCent(value)
   }
   const toggleTierMax = (tier: EditableLotteryTier, unlimited: boolean) => {
     tier.maxProductAmount = unlimited
@@ -572,6 +606,12 @@
   const overlapPairs = computed(() => overlapState.value.pairs)
   const overlappingTiers = computed(() => overlapState.value.affected)
 
+  const budgetTip = computed(() =>
+    form.dailyBudgetAmount === null
+      ? '不限预算：现金奖项不会因当日累计减免而退出奖池，保存时提交 null。'
+      : '预算与减免金额均按“分”提交；赠品库存不占现金预算。'
+  )
+
   const statusCaption = computed(() => {
     if (!form.enabled) return '配置可以继续编辑，顾客端不会触发抽奖。'
     if (!form.startAt || !form.endAt) return '活动已开启，但需要补全活动时段后才能保存。'
@@ -584,27 +624,38 @@
     return '当前处于活动时段内，保存后新规则整体生效。'
   })
 
-  const tierKey = (tier: EditableLotteryTier) => {
-    if (tier.id !== null) return `tier-${tier.id}`
-    if (!tierKeys.has(tier)) {
-      tierKeySequence += 1
-      tierKeys.set(tier, `new-tier-${tierKeySequence}`)
-    }
-    return tierKeys.get(tier) as string
-  }
+  const tierKey = (tier: EditableLotteryTier) =>
+    tier.id === null ? tier.localId : `tier-${tier.id}`
 
-  const addTier = () => {
+  const addTier = async () => {
     const ordered = [...form.tiers].sort(
       (left, right) => left.minProductAmount - right.minProductAmount
     )
     const last = ordered[ordered.length - 1]
     let minProductAmount = 0
     if (last) {
-      minProductAmount =
-        last.maxProductAmount === null ? last.minProductAmount + 10000 : last.maxProductAmount
-      if (last.maxProductAmount === null) last.maxProductAmount = minProductAmount
+      if (last.maxProductAmount === null) {
+        const boundary = last.minProductAmount + 10000
+        try {
+          await ElMessageBox.confirm(
+            `「${last.name || '最后一个阶梯'}」当前无上限。新增阶梯会把它的上限改为 ${money(
+              boundary
+            )}，新阶梯从 ${money(boundary)} 起接管。`,
+            '需要调整兜底阶梯',
+            { type: 'warning', confirmButtonText: '继续新增', cancelButtonText: '取消' }
+          )
+        } catch (error) {
+          if (error !== 'cancel' && error !== 'close') throw error
+          return
+        }
+        last.maxProductAmount = boundary
+        minProductAmount = boundary
+      } else {
+        minProductAmount = last.maxProductAmount
+      }
     }
     form.tiers.push({
+      localId: createLocalId('tier'),
       id: null,
       name: minProductAmount > 0 ? `满 ${centToYuan(minProductAmount)} 元` : '全部订单',
       minProductAmount,
@@ -652,7 +703,10 @@
     if (!Number.isInteger(form.dailyUserLimit) || form.dailyUserLimit < 1) {
       errors.push('每日抽取次数必须是大于 0 的整数')
     }
-    if (!Number.isInteger(form.dailyBudgetAmount) || form.dailyBudgetAmount < 0) {
+    if (
+      form.dailyBudgetAmount !== null &&
+      (!Number.isInteger(form.dailyBudgetAmount) || form.dailyBudgetAmount < 0)
+    ) {
       errors.push('每日现金预算必须是大于等于 0 的金额')
     }
 
@@ -669,6 +723,9 @@
       errors.push('开启活动前请设置完整活动时段')
     }
     if (form.tiers.length === 0) errors.push('请至少添加一个金额阶梯')
+    else if (form.enabled && !form.tiers.some((tier) => tier.enabled)) {
+      errors.push('开启活动前请至少启用一个金额阶梯')
+    }
     if (overlapPairs.value.length > 0) errors.push('启用中的金额阶梯不能重叠')
 
     let maxDiscount = 0
@@ -691,27 +748,32 @@
       let weightedPrizeCount = 0
       tier.prizes.forEach((prize, prizeIndex) => {
         const prizeLabel = prize.name.trim() || `奖项 ${prizeIndex + 1}`
+        // 后端对停用阶梯与停用奖项同样校验金额和商品绑定，这里不能按 enabled 收窄
+        const stateHint = !tier.enabled ? '（阶梯已停用）' : !prize.enabled ? '（奖项已停用）' : ''
+        const scope = `「${tierLabel} / ${prizeLabel}」${stateHint}`
         if (!Number.isInteger(prize.weight) || prize.weight < 0) {
-          errors.push(`「${tierLabel} / ${prizeLabel}」权重必须是非负整数`)
+          errors.push(`${scope}权重必须是非负整数`)
         }
         if (prize.enabled && prize.weight <= 0) {
-          errors.push(`「${tierLabel} / ${prizeLabel}」启用时权重必须大于 0`)
+          errors.push(`${scope}启用时权重必须大于 0`)
         }
         if (prize.enabled && prize.weight > 0) weightedPrizeCount += 1
-        if (tier.enabled && prize.enabled && prize.type === 'DISCOUNT') {
+        if (prize.type === 'DISCOUNT') {
           if (!Number.isInteger(prize.discountAmount) || prize.discountAmount <= 0) {
-            errors.push(`「${tierLabel} / ${prizeLabel}」现金减免必须大于 0 元`)
+            errors.push(`${scope}现金减免必须大于 0 元`)
           }
-          maxDiscount = Math.max(maxDiscount, prize.discountAmount)
+          if (tier.enabled && prize.enabled) {
+            maxDiscount = Math.max(maxDiscount, prize.discountAmount)
+          }
         }
-        if (prize.enabled && prize.type === 'GOODS' && !prize.productId) {
-          errors.push(`「${tierLabel} / ${prizeLabel}」尚未绑定商品`)
+        if (prize.type === 'GOODS' && !prize.productId) {
+          errors.push(`${scope}尚未绑定商品`)
         }
 
         const hasTotal = prize.stockTotal !== null
         const hasRemaining = prize.stockRemaining !== null
         if (prize.type === 'GOODS' && (!hasTotal || !hasRemaining)) {
-          errors.push(`「${tierLabel} / ${prizeLabel}」实物赠品必须设置营销库存`)
+          errors.push(`${scope}实物赠品必须设置营销库存`)
         } else if (prize.type === 'GOODS' && hasTotal && hasRemaining) {
           if (
             !Number.isInteger(prize.stockTotal) ||
@@ -719,9 +781,9 @@
             Number(prize.stockTotal) < 0 ||
             Number(prize.stockRemaining) < 0
           ) {
-            errors.push(`「${tierLabel} / ${prizeLabel}」库存必须是非负整数`)
+            errors.push(`${scope}库存必须是非负整数`)
           } else if (Number(prize.stockRemaining) > Number(prize.stockTotal)) {
-            errors.push(`「${tierLabel} / ${prizeLabel}」剩余库存不能大于总库存`)
+            errors.push(`${scope}剩余库存不能大于总库存`)
           }
         }
       })
@@ -730,20 +792,25 @@
       }
     })
 
-    if (form.enabled && maxDiscount > 0 && form.dailyBudgetAmount < maxDiscount) {
+    if (
+      form.enabled &&
+      form.dailyBudgetAmount !== null &&
+      maxDiscount > 0 &&
+      form.dailyBudgetAmount < maxDiscount
+    ) {
       errors.push(`每日现金预算不能低于最高单笔减免 ${money(maxDiscount)}`)
     }
     return [...new Set(errors)]
   }
 
-  const createPayload = (): EditableLotteryCampaign => ({
+  const createPayload = (): LotteryCampaignPayload => ({
     id: form.id,
     enabled: Boolean(form.enabled),
     name: form.name.trim(),
     startAt: form.startAt,
     endAt: form.endAt,
     dailyUserLimit: Math.round(form.dailyUserLimit),
-    dailyBudgetAmount: Math.round(form.dailyBudgetAmount),
+    dailyBudgetAmount: form.dailyBudgetAmount === null ? null : Math.round(form.dailyBudgetAmount),
     shareTitle: form.shareTitle.trim(),
     shareDescription: form.shareDescription.trim(),
     shareImageUrl: form.shareImageUrl.trim(),
@@ -800,10 +867,10 @@
     try {
       const payload = createPayload()
       const result = await updateLotteryCampaign(payload)
-      Object.assign(
-        form,
-        result && Object.keys(result).length > 0 ? normalizeCampaign(result) : payload
-      )
+      // 服务端未回传内容时用提交数据回填，同样走一遍归一化以补齐本地标识
+      const saved: LotteryCampaign =
+        result && Object.keys(result).length > 0 ? result : { ...payload }
+      Object.assign(form, normalizeCampaign(saved))
       ElMessage.success('随机减免整体配置已保存')
     } catch (error) {
       ElMessage.error(error instanceof Error ? error.message : '随机减免配置保存失败')
@@ -1179,6 +1246,7 @@
     }
   }
 
+  .budget-editor,
   .tier-max-editor {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
@@ -1190,6 +1258,11 @@
     }
   }
 
+  .budget-editor {
+    width: 100%;
+  }
+
+  .budget-editor__unlimited,
   .tier-max-editor__infinity,
   .range-code {
     display: flex;

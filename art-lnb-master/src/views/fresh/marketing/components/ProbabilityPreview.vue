@@ -11,14 +11,14 @@
     <div class="preview-title">
       <span>LIVE ODDS</span>
       <h2>实时概率预览</h2>
-      <p>每个金额阶梯独立计算；禁用、零权重和库存耗尽项自动退出分母。</p>
+      <p>每个金额阶梯独立计算；禁用、零权重、库存耗尽、超预算和商品不可售项自动退出分母。</p>
     </div>
 
     <div class="budget-strip" :class="{ 'has-risk': budgetRisk }">
       <ArtSvgIcon :icon="budgetRisk ? 'ri:alarm-warning-line' : 'ri:safe-2-line'" />
       <div>
         <span>每日现金预算</span>
-        <strong>{{ money(dailyBudgetAmount) }}</strong>
+        <strong>{{ budgetText }}</strong>
         <small>{{ budgetCaption }}</small>
       </div>
     </div>
@@ -26,7 +26,7 @@
     <div v-if="previewTiers.length" class="tier-preview-list">
       <section
         v-for="(tier, tierIndex) in previewTiers"
-        :key="tierKey(tier, tierIndex)"
+        :key="tierKey(tier)"
         class="tier-preview"
         :class="{ 'is-disabled': !tier.enabled }"
       >
@@ -48,8 +48,8 @@
 
         <div v-if="tier.prizes.length" class="odds-list">
           <div
-            v-for="(prize, prizeIndex) in sortedPrizes(tier)"
-            :key="prizeKey(prize, prizeIndex)"
+            v-for="prize in sortedPrizes(tier)"
+            :key="prizeKey(prize)"
             class="odds-row"
             :class="{ 'is-excluded': isExcluded(prize) || !tier.enabled }"
           >
@@ -91,18 +91,24 @@
 
     <footer class="preview-foot">
       <ArtSvgIcon icon="ri:braces-line" />
-      <span>区间规则：productAmount ∈ [min, max)</span>
+      <span>区间规则：productAmount ∈ [min, max)；赠品可售性以抽奖时服务端校验为准</span>
     </footer>
   </aside>
 </template>
 
 <script setup lang="ts">
-  import type { EditableLotteryPrize, EditableLotteryTier, LotteryPrizeType } from '@/api/marketing'
+  import type { Product } from '@/api/admin'
+  import {
+    getLotteryGiftProduct,
+    type EditableLotteryPrize,
+    type EditableLotteryTier,
+    type LotteryPrizeType
+  } from '@/api/marketing'
 
   const props = defineProps<{
     tiers: EditableLotteryTier[]
     enabled: boolean
-    dailyBudgetAmount: number
+    dailyBudgetAmount: number | null
   }>()
 
   const previewTiers = computed(() =>
@@ -116,8 +122,79 @@
   const money = (value?: number | null) => `￥${(Number(value || 0) / 100).toFixed(2)}`
   const isExhausted = (prize: EditableLotteryPrize) =>
     prize.type === 'GOODS' && Number(prize.stockRemaining || 0) <= 0
+
+  /**
+   * 与后端 eligiblePrizes 对齐：单笔减免超过每日预算的现金奖项永远无法被抽中。
+   */
+  const isOverBudget = (prize: EditableLotteryPrize) =>
+    prize.type === 'DISCOUNT' &&
+    props.dailyBudgetAmount !== null &&
+    Number(prize.discountAmount || 0) > Number(props.dailyBudgetAmount)
+
+  const giftProducts = ref(new Map<number, Product | null>())
+  const inflightProducts = new Set<number>()
+
+  const giftBindings = computed(() =>
+    props.tiers.flatMap((tier) =>
+      tier.prizes
+        .filter((prize) => prize.type === 'GOODS' && prize.enabled && prize.productId)
+        .map((prize) => Number(prize.productId))
+    )
+  )
+
+  /**
+   * 与后端 canReserveLotteryGift 对齐：商品下架、SKU 停用或实际库存不足时赠品不进奖池。
+   * 返回空串表示暂时无法判定（尚未拉到商品），此时不改变分母。
+   */
+  const giftIssue = (prize: EditableLotteryPrize) => {
+    if (prize.type !== 'GOODS') return ''
+    if (!prize.productId) return '未绑定商品'
+    const productId = Number(prize.productId)
+    if (!giftProducts.value.has(productId)) return ''
+    const product = giftProducts.value.get(productId)
+    if (!product) return '关联商品不存在或读取失败'
+    if (Number(product.status) !== 1) return '关联商品已下架'
+    if (product.skuEnabled) {
+      if (!prize.skuId) return '多规格商品必须绑定 SKU'
+      const sku = (product.skus || []).find((item) => Number(item.id) === Number(prize.skuId))
+      if (!sku) return '绑定的 SKU 不属于该商品'
+      if (Number(sku.status) !== 1) return '绑定的 SKU 已停用'
+      if (Number(sku.stockQty || 0) < 1) return '绑定 SKU 商品库存不足'
+      return ''
+    }
+    if (prize.skuId) return '单规格商品不能绑定 SKU'
+    if (Number(product.stockQty || 0) < 1) return '关联商品库存不足'
+    return ''
+  }
+
+  const loadGiftProducts = async () => {
+    const pendingIds = [...new Set(giftBindings.value)].filter(
+      (id) => !giftProducts.value.has(id) && !inflightProducts.has(id)
+    )
+    if (pendingIds.length === 0) return
+    pendingIds.forEach((id) => inflightProducts.add(id))
+    await Promise.all(
+      pendingIds.map(async (id) => {
+        try {
+          giftProducts.value.set(id, (await getLotteryGiftProduct(id)) || null)
+        } catch {
+          giftProducts.value.set(id, null)
+        } finally {
+          inflightProducts.delete(id)
+        }
+      })
+    )
+  }
+
+  watch(() => [...new Set(giftBindings.value)].join(','), loadGiftProducts, { immediate: true })
+
   const isExcluded = (prize: EditableLotteryPrize) =>
-    !prize.enabled || isExhausted(prize) || !Number.isInteger(prize.weight) || prize.weight <= 0
+    !prize.enabled ||
+    isExhausted(prize) ||
+    !Number.isInteger(prize.weight) ||
+    prize.weight <= 0 ||
+    isOverBudget(prize) ||
+    Boolean(giftIssue(prize))
 
   const sortedPrizes = (tier: EditableLotteryTier) =>
     [...tier.prizes].sort(
@@ -162,10 +239,15 @@
   const budgetRisk = computed(
     () =>
       props.enabled &&
+      props.dailyBudgetAmount !== null &&
       maxDiscount.value > 0 &&
-      Number(props.dailyBudgetAmount || 0) < maxDiscount.value
+      props.dailyBudgetAmount < maxDiscount.value
+  )
+  const budgetText = computed(() =>
+    props.dailyBudgetAmount === null ? '不限预算' : money(props.dailyBudgetAmount)
   )
   const budgetCaption = computed(() => {
+    if (props.dailyBudgetAmount === null) return '现金奖项不会因为当日累计减免退出奖池'
     if (maxDiscount.value <= 0) return '当前奖池没有现金减免'
     if (props.dailyBudgetAmount <= 0) return '启用现金减免前需设置预算'
     if (budgetRisk.value) return `低于最高单笔减免 ${money(maxDiscount.value)}`
@@ -188,6 +270,9 @@
     if (!prize.enabled) return '已停用'
     if (isExhausted(prize)) return '库存耗尽'
     if (prize.weight <= 0) return '权重为 0'
+    if (isOverBudget(prize)) return `超出每日预算 ${budgetText.value}，抽奖时会退出奖池`
+    const issue = giftIssue(prize)
+    if (issue) return `${issue}，抽奖时会退出奖池`
     if (prize.type === 'DISCOUNT') return `减免 ${money(prize.discountAmount)}`
     if (prize.type === 'GOODS') {
       const stock = `剩余 ${prize.stockRemaining || 0}`
@@ -196,10 +281,10 @@
     return `权重 ${prize.weight}`
   }
 
-  const tierKey = (tier: EditableLotteryTier, index: number) =>
-    tier.id === null ? `tier-preview-${index}` : `tier-preview-${tier.id}`
-  const prizeKey = (prize: EditableLotteryPrize, index: number) =>
-    prize.id === null ? `prize-preview-${index}` : `prize-preview-${prize.id}`
+  const tierKey = (tier: EditableLotteryTier) =>
+    tier.id === null ? `tier-preview-${tier.localId}` : `tier-preview-${tier.id}`
+  const prizeKey = (prize: EditableLotteryPrize) =>
+    prize.id === null ? `prize-preview-${prize.localId}` : `prize-preview-${prize.id}`
 </script>
 
 <style scoped lang="scss">

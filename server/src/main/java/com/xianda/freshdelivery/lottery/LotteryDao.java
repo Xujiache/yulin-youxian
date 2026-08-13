@@ -7,13 +7,16 @@ import com.xianda.freshdelivery.lottery.LotteryModels.Tier;
 import java.sql.PreparedStatement;
 import java.sql.Statement;
 import java.sql.Timestamp;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
@@ -23,11 +26,14 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Repository
 public class LotteryDao {
+    /** 预算护栏行用 user_id = 0 占位，与真实用户行共用一张表。 */
+    public static final long BUDGET_GUARD_USER = 0L;
+    private static final ZoneId STORE_ZONE = ZoneId.of("Asia/Shanghai");
     private static final String DRAW_COLUMNS = """
             id, campaign_id, tier_id, prize_id, order_id, order_no, user_id, product_amount,
             prize_index, prize_type, prize_name, discount_amount, product_id, sku_id, image_url,
             payable_before, payable_amount, status, gift_stock_status, void_reason,
-            fulfilled_at, fulfillment_remark, created_at, updated_at
+            fulfilled_at, fulfillment_remark, applied_at, paid_at, settled_at, created_at, updated_at
             """;
 
     private static final RowMapper<ChallengeRow> CHALLENGE_MAPPER = (rs, rowNum) -> new ChallengeRow(
@@ -65,6 +71,9 @@ public class LotteryDao {
             rs.getString("void_reason"),
             localDateTime(rs.getTimestamp("fulfilled_at")),
             rs.getString("fulfillment_remark"),
+            localDateTime(rs.getTimestamp("applied_at")),
+            localDateTime(rs.getTimestamp("paid_at")),
+            localDateTime(rs.getTimestamp("settled_at")),
             localDateTime(rs.getTimestamp("created_at")),
             localDateTime(rs.getTimestamp("updated_at"))
     );
@@ -210,7 +219,7 @@ public class LotteryDao {
                     request.shareTitle(),
                     request.shareDescription(),
                     request.shareImageUrl(),
-                    timestamp(LocalDateTime.now()),
+                    timestamp(LocalDateTime.now(STORE_ZONE)),
                     campaignId
             );
         }
@@ -409,7 +418,7 @@ public class LotteryDao {
                 SELECT COALESCE(SUM(discount_amount), 0)
                 FROM marketing_lottery_draw
                 WHERE campaign_id = ? AND created_at >= ? AND created_at < ?
-                  AND status IN ('RESERVED','APPLIED')
+                  AND status IN ('RESERVED','APPLIED','SETTLED')
                 """, Integer.class, campaignId, timestamp(start), timestamp(end));
         return amount == null ? 0 : amount;
     }
@@ -422,12 +431,34 @@ public class LotteryDao {
         );
     }
 
+    /**
+     * 抽奖统计（当日预算、用户当日次数）在 REPEATABLE READ 下会读到事务开始时的快照，
+     * 所以先加锁读一行护栏，再做统计；锁的粒度是「活动 + 日期 + 用户」而不是整个活动。
+     */
+    public void lockDrawGuard(DrawGuardKey key) {
+        try {
+            jdbcTemplate.update("""
+                    INSERT INTO marketing_lottery_draw_guard (campaign_id, stat_date, user_id, created_at)
+                    VALUES (?,?,?,?)
+                    """, key.campaignId(), key.statDate(), key.userId(),
+                    timestamp(LocalDateTime.now(STORE_ZONE)));
+        } catch (DataIntegrityViolationException alreadyCreated) {
+            // 并发下由另一个事务插入，下面的加锁读会等它提交。
+        }
+        jdbcTemplate.queryForList("""
+                SELECT campaign_id
+                FROM marketing_lottery_draw_guard
+                WHERE campaign_id = ? AND stat_date = ? AND user_id = ?
+                FOR UPDATE
+                """, Long.class, key.campaignId(), key.statDate(), key.userId());
+    }
+
     public int reserveMarketingStock(long prizeId) {
         return jdbcTemplate.update("""
                 UPDATE marketing_lottery_prize
                 SET stock_remaining = stock_remaining - 1, updated_at = ?
                 WHERE id = ? AND enabled = 1 AND stock_remaining > 0
-                """, timestamp(LocalDateTime.now()), prizeId);
+                """, timestamp(LocalDateTime.now(STORE_ZONE)), prizeId);
     }
 
     public void restoreMarketingStock(long prizeId) {
@@ -439,7 +470,7 @@ public class LotteryDao {
                     END,
                     updated_at = ?
                 WHERE id = ?
-                """, timestamp(LocalDateTime.now()), prizeId);
+                """, timestamp(LocalDateTime.now(STORE_ZONE)), prizeId);
     }
 
     public long insertDraw(DrawInsert draw, LocalDateTime now) {
@@ -500,31 +531,100 @@ public class LotteryDao {
     }
 
     public List<Gift> findGifts(long drawId) {
-        return jdbcTemplate.query("""
+        return findGiftsByDraws(List.of(drawId)).getOrDefault(drawId, List.of());
+    }
+
+    /**
+     * 后台流水列表逐条查赠品会退化成 N+1，这里一次查完再按 draw 分组。
+     */
+    public Map<Long, List<Gift>> findGiftsByDraws(List<Long> drawIds) {
+        List<Long> ids = drawIds == null ? List.of() : drawIds.stream().filter(java.util.Objects::nonNull).toList();
+        if (ids.isEmpty()) {
+            return Map.of();
+        }
+        String placeholders = String.join(",", java.util.Collections.nCopies(ids.size(), "?"));
+        Map<Long, List<Gift>> grouped = new LinkedHashMap<>();
+        jdbcTemplate.query("""
                 SELECT draw_id, prize_id, product_id, sku_id, product_name, sku_name, image_url,
                        quantity, status
                 FROM marketing_lottery_gift
-                WHERE draw_id = ?
-                ORDER BY id
-                """, (rs, rowNum) -> new Gift(
-                rs.getLong("draw_id"),
-                rs.getLong("prize_id"),
-                rs.getLong("product_id"),
-                nullableLong(rs.getObject("sku_id")),
-                rs.getString("product_name"),
-                rs.getString("sku_name"),
-                rs.getString("image_url"),
-                rs.getBigDecimal("quantity"),
-                rs.getString("status")
-        ), drawId);
+                WHERE draw_id IN (%s)
+                ORDER BY draw_id, id
+                """.formatted(placeholders), rs -> {
+            grouped.computeIfAbsent(rs.getLong("draw_id"), key -> new ArrayList<>()).add(new Gift(
+                    rs.getLong("draw_id"),
+                    rs.getLong("prize_id"),
+                    rs.getLong("product_id"),
+                    nullableLong(rs.getObject("sku_id")),
+                    rs.getString("product_name"),
+                    rs.getString("sku_name"),
+                    rs.getString("image_url"),
+                    rs.getBigDecimal("quantity"),
+                    rs.getString("status")
+            ));
+        }, ids.toArray());
+        return grouped;
+    }
+
+    /**
+     * 后台审计需要「朋友圈分享菜单触发时间」，抽奖时消费的挑战就是该订单最后一次触发的那条。
+     */
+    public Map<Long, LocalDateTime> findShareTriggeredAt(List<Long> orderIds) {
+        List<Long> ids = orderIds == null ? List.of() : orderIds.stream().filter(java.util.Objects::nonNull).toList();
+        if (ids.isEmpty()) {
+            return Map.of();
+        }
+        String placeholders = String.join(",", java.util.Collections.nCopies(ids.size(), "?"));
+        Map<Long, LocalDateTime> triggered = new LinkedHashMap<>();
+        jdbcTemplate.query("""
+                SELECT order_id, MAX(share_triggered_at) AS share_triggered_at
+                FROM marketing_lottery_challenge
+                WHERE order_id IN (%s) AND share_triggered_at IS NOT NULL
+                GROUP BY order_id
+                """.formatted(placeholders), rs -> {
+            triggered.put(rs.getLong("order_id"), localDateTime(rs.getTimestamp("share_triggered_at")));
+        }, ids.toArray());
+        return triggered;
+    }
+
+    /**
+     * challenge 表此前只写不删。已消费或过期足够久的记录没有审计价值，按批清理。
+     */
+    public int deleteStaleChallenges(LocalDateTime cutoff, int limit) {
+        return jdbcTemplate.update("""
+                DELETE FROM marketing_lottery_challenge
+                WHERE created_at < ?
+                  AND (consumed_at IS NOT NULL OR expires_at < ?)
+                LIMIT %d
+                """.formatted(Math.max(limit, 1)), timestamp(cutoff), timestamp(cutoff));
     }
 
     public void markDrawApplied(long drawId, LocalDateTime now) {
         jdbcTemplate.update("""
                 UPDATE marketing_lottery_draw
-                SET status = 'APPLIED', updated_at = ?
+                SET status = 'APPLIED', applied_at = COALESCE(applied_at, ?), updated_at = ?
                 WHERE id = ? AND status = 'RESERVED'
-                """, timestamp(now), drawId);
+                """, timestamp(now), timestamp(now), drawId);
+    }
+
+    /**
+     * 成功抽奖此前永远停在 APPLIED，reconcile 的结果集只增不减。订单已完结（履约或
+     * 无需履约）之后置为终态，后续对账不再扫到。
+     */
+    public int settleDraw(long drawId, LocalDateTime now) {
+        return jdbcTemplate.update("""
+                UPDATE marketing_lottery_draw
+                SET status = 'SETTLED', settled_at = COALESCE(settled_at, ?), updated_at = ?
+                WHERE id = ? AND status = 'APPLIED'
+                """, timestamp(now), timestamp(now), drawId);
+    }
+
+    public int markDrawPaid(long orderId, LocalDateTime paidAt) {
+        return jdbcTemplate.update("""
+                UPDATE marketing_lottery_draw
+                SET paid_at = COALESCE(paid_at, ?), updated_at = ?
+                WHERE order_id = ?
+                """, timestamp(paidAt), timestamp(paidAt), orderId);
     }
 
     public void saveDecision(
@@ -617,8 +717,44 @@ public class LotteryDao {
                 """, timestamp(now), remark, timestamp(now), drawId);
     }
 
-    public List<DrawRow> searchDraws(String keyword, String prizeType, String status) {
+    public List<DrawRow> searchDraws(
+            String keyword,
+            String prizeType,
+            String status,
+            LocalDateTime createdFrom,
+            LocalDateTime createdTo,
+            int offset,
+            int limit
+    ) {
         StringBuilder sql = new StringBuilder("SELECT " + DRAW_COLUMNS + " FROM marketing_lottery_draw WHERE 1=1");
+        List<Object> args = appendDrawFilters(sql, keyword, prizeType, status, createdFrom, createdTo);
+        sql.append(" ORDER BY id DESC LIMIT ? OFFSET ?");
+        args.add(Math.max(limit, 1));
+        args.add(Math.max(offset, 0));
+        return jdbcTemplate.query(sql.toString(), DRAW_MAPPER, args.toArray());
+    }
+
+    public long countDraws(
+            String keyword,
+            String prizeType,
+            String status,
+            LocalDateTime createdFrom,
+            LocalDateTime createdTo
+    ) {
+        StringBuilder sql = new StringBuilder("SELECT COUNT(*) FROM marketing_lottery_draw WHERE 1=1");
+        List<Object> args = appendDrawFilters(sql, keyword, prizeType, status, createdFrom, createdTo);
+        Long total = jdbcTemplate.queryForObject(sql.toString(), Long.class, args.toArray());
+        return total == null ? 0 : total;
+    }
+
+    private List<Object> appendDrawFilters(
+            StringBuilder sql,
+            String keyword,
+            String prizeType,
+            String status,
+            LocalDateTime createdFrom,
+            LocalDateTime createdTo
+    ) {
         List<Object> args = new ArrayList<>();
         if (keyword != null && !keyword.isBlank()) {
             sql.append("""
@@ -638,19 +774,54 @@ public class LotteryDao {
             sql.append(" AND prize_type = ?");
             args.add(prizeType.trim().toUpperCase());
         }
-        if (status != null && !status.isBlank()) {
-            sql.append(" AND status = ?");
-            args.add(status.trim().toUpperCase());
+        // created_at 与后台展示的「抽奖时间」同源（applied_at 只比它晚毫秒级），
+        // 且有 (created_at)、(status, created_at) 两个索引可用。
+        if (createdFrom != null) {
+            sql.append(" AND created_at >= ?");
+            args.add(timestamp(createdFrom));
         }
-        sql.append(" ORDER BY id DESC");
-        return jdbcTemplate.query(sql.toString(), DRAW_MAPPER, args.toArray());
+        if (createdTo != null) {
+            // 后台的结束时间取当天 23:59:59，是闭区间。
+            sql.append(" AND created_at <= ?");
+            args.add(timestamp(createdTo));
+        }
+        // 后台的 status 既可能是流水状态，也可能是履约状态；分页之后不能再在内存里过滤，
+        // 否则会把当页的记录筛掉，所以两种口径都下推到 SQL。这里的每个分支必须与
+        // LotteryService#fulfillmentStatus 完全互为反函数，否则下拉里会出现永远为空的选项。
+        switch (status == null ? "" : status.trim().toUpperCase()) {
+            case "RESERVED", "APPLIED", "VOIDED", "SETTLED" -> {
+                sql.append(" AND status = ?");
+                args.add(status.trim().toUpperCase());
+            }
+            case "PENDING" -> sql.append(" AND status <> 'VOIDED' AND prize_type = 'GOODS'"
+                    + " AND gift_stock_status NOT IN ('FULFILLED','RELEASED')");
+            case "FULFILLED" -> sql.append(
+                    " AND status <> 'VOIDED' AND prize_type = 'GOODS' AND gift_stock_status = 'FULFILLED'");
+            case "RELEASED" -> sql.append(
+                    " AND status <> 'VOIDED' AND prize_type = 'GOODS' AND gift_stock_status = 'RELEASED'");
+            case "NOT_REQUIRED" -> sql.append(" AND status <> 'VOIDED' AND prize_type <> 'GOODS'");
+            default -> {
+                // 空值或未知过滤条件不生效，保持向后兼容。
+            }
+        }
+        return args;
     }
 
-    public List<DrawRow> findDrawsWithStatus(String status) {
+    /**
+     * 对账只看时间窗内的在途流水，并且一轮最多处理 limit 条；终态流水不会再被扫到。
+     */
+    public List<DrawRow> findDrawsForReconcile(String status, LocalDateTime createdAfter, int limit) {
         return jdbcTemplate.query(
-                "SELECT " + DRAW_COLUMNS + " FROM marketing_lottery_draw WHERE status = ? ORDER BY id",
+                "SELECT " + DRAW_COLUMNS + """
+                         FROM marketing_lottery_draw
+                         WHERE status = ? AND created_at >= ?
+                         ORDER BY id
+                         LIMIT ?
+                        """,
                 DRAW_MAPPER,
-                status
+                status,
+                timestamp(createdAfter),
+                Math.max(limit, 1)
         );
     }
 
@@ -762,6 +933,13 @@ public class LotteryDao {
     ) {
     }
 
+    public record DrawGuardKey(
+            long campaignId,
+            LocalDate statDate,
+            long userId
+    ) {
+    }
+
     public record DrawRow(
             long id,
             long campaignId,
@@ -785,6 +963,9 @@ public class LotteryDao {
             String voidReason,
             LocalDateTime fulfilledAt,
             String fulfillmentRemark,
+            LocalDateTime appliedAt,
+            LocalDateTime paidAt,
+            LocalDateTime settledAt,
             LocalDateTime createdAt,
             LocalDateTime updatedAt
     ) {

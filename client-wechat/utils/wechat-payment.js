@@ -47,7 +47,8 @@ function paymentShareConfirmationState({ share, error } = {}) {
     }
     return "PENDING";
   }
-  const code = Number(error && (error.statusCode || error.code));
+  // 业务码在 error.code 上（HTTP 层永远是 200），statusCode 只作为网关错误的兜底。
+  const code = Number(error && (error.code || error.statusCode));
   if ([404, 410].includes(code)) {
     // 代付成功后服务端会让一次性 token 失效；支付前已成功读取过该 token，因此失效可作为确认信号。
     return "CONFIRMED";

@@ -7,6 +7,12 @@ const {
   readLotterySession,
   updateLotterySession
 } = require("../../utils/lottery-session");
+const {
+  campaignNotice,
+  isChallengeInvalid: challengeInvalid,
+  lotteryCampaignEnabled: campaignEnabled,
+  lotteryReasonText: stateMessage
+} = require("../../utils/lottery-status");
 
 const LANDING_SCENE = 1154;
 
@@ -16,34 +22,6 @@ function getCurrentScene(options = {}) {
     enterOptions = typeof wx.getEnterOptionsSync === "function" ? wx.getEnterOptionsSync() : {};
   } catch {}
   return Number(options.scene || enterOptions.scene || 0);
-}
-
-function campaignEnabled(state) {
-  return Boolean(state && state.campaign && state.campaign.enabled !== false);
-}
-
-function stateMessage(state, fallback) {
-  if (!state) {
-    return fallback;
-  }
-  const reason = String(state.reason || "");
-  const messages = {
-    CAMPAIGN_DISABLED: "本期鲜礼活动已结束，可返回按原价支付",
-    CAMPAIGN_NOT_STARTED: "本期鲜礼活动还未开始，可返回按原价支付",
-    ORDER_NOT_ELIGIBLE: "本单暂不符合活动条件，可返回按原价支付",
-    BELOW_THRESHOLD: "本单未达到活动门槛，可返回按原价支付",
-    CHALLENGE_EXPIRED: "分享凭证已失效，请返回付款页重新进入",
-    ORDER_NOT_PENDING: "订单状态已变化，请返回订单查看最新状态"
-  };
-  return messages[reason] || reason || fallback;
-}
-
-function challengeInvalid(state) {
-  return [
-    "CHALLENGE_EXPIRED",
-    "CHALLENGE_INVALID",
-    "INVALID_CHALLENGE"
-  ].includes(String((state && state.reason) || ""));
 }
 
 function publicShareData(campaign) {
@@ -76,6 +54,7 @@ Page({
     campaign: {},
     prizes: [],
     campaignEnabled: true,
+    campaignNotice: null,
     orderId: 0,
     source: "",
     challengeToken: "",
@@ -135,6 +114,12 @@ Page({
       || !this.data.challengeToken
       || this.data.reporting
     ) {
+      // 帖子照样会发出去，但资格没记录；静默返回会让用户白发一条朋友圈
+      const hint = this.data.reporting
+        ? "上一次分享正在记录，请稍候"
+        : "活动还没准备好，请稍候再分享";
+      wx.showToast({ title: hint, icon: "none" });
+      this.setData({ statusText: hint });
       return shareData;
     }
 
@@ -196,15 +181,20 @@ Page({
     this.setData({ loading: true, loadError: "" });
     try {
       const state = await getPublicLottery();
+      // 服务端直接下发活动配置、不做时间窗过滤，落地页必须自己判断 startAt/endAt，
+      // 否则未开始或已结束时访客照样看到完整奖品列表。
+      const notice = campaignNotice(state.campaign);
       this.setData({
         campaign: state.campaign || {},
         prizes: state.prizes || [],
-        campaignEnabled: campaignEnabled(state),
+        campaignEnabled: !notice,
+        campaignNotice: notice,
         loadError: ""
       });
     } catch (error) {
       this.setData({
         campaignEnabled: false,
+        campaignNotice: null,
         loadError: (error && error.message) || "活动信息暂时没有加载出来"
       });
     } finally {
