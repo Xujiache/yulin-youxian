@@ -96,7 +96,11 @@ function cleanParams(params: Record<string, any>): Record<string, any> {
     if (value == null) continue
     if (typeof value === 'string') {
       const trimmed = value.trim()
-      if (trimmed === '' || trimmed.toLowerCase() === 'null' || trimmed.toLowerCase() === 'undefined') {
+      if (
+        trimmed === '' ||
+        trimmed.toLowerCase() === 'null' ||
+        trimmed.toLowerCase() === 'undefined'
+      ) {
         continue
       }
     }

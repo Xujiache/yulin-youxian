@@ -1,0 +1,15 @@
+# 自动审查日志
+
+由 scripts/auto-review.sh 生成。每一轮：拉取远端 -> 三端全量检查 ->
+eslint 自动修复 -> 记录本文件 -> 提交推送。最新一轮在最上面。
+
+## 第 1 轮 · 2026-08-13 17:37:50 UTC
+- 拉取远端：有新提交，本轮将连同审查
+- 后端 mvn clean test：通过，22s
+- 后台 eslint --fix：自动修复了 1 个文件
+- 后台 eslint 复查：通过，9s
+- 后台 vite build + vue-tsc：通过，32s
+- 骑手端 testDebugUnitTest + lintDebug：通过，31s
+- 密钥与归档扫描：通过，1s
+- 结论：发现问题并已自动修复（eslint 自动修复 1 个文件）
+
