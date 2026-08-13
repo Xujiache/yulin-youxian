@@ -180,7 +180,8 @@
       const url = URL.createObjectURL(blob)
       const link = document.createElement('a')
       link.href = url
-      link.download = result.filename || `订单明细_${exportRange.value[0]}_${exportRange.value[1]}.csv`
+      link.download =
+        result.filename || `订单明细_${exportRange.value[0]}_${exportRange.value[1]}.csv`
       link.click()
       URL.revokeObjectURL(url)
       ElMessage.success('表格已导出')

@@ -3,7 +3,9 @@
     <div class="fresh-page__head">
       <div>
         <h1 class="fresh-page__title">数据备份</h1>
-        <p class="fresh-page__desc">系统会在数据变更后自动备份，也可以手动创建或恢复完整数据快照。</p>
+        <p class="fresh-page__desc"
+          >系统会在数据变更后自动备份，也可以手动创建或恢复完整数据快照。</p
+        >
       </div>
       <div class="backup-actions">
         <ElButton :loading="loading" @click="loadBackups">刷新列表</ElButton>
@@ -24,7 +26,11 @@
         <ElTableColumn prop="fileName" label="备份文件" min-width="290" />
         <ElTableColumn prop="type" label="类型" width="120">
           <template #default="{ row }">
-            <ElTag :type="row.type === 'PRE_RESTORE' ? 'warning' : row.type === 'MANUAL' ? 'success' : 'info'">
+            <ElTag
+              :type="
+                row.type === 'PRE_RESTORE' ? 'warning' : row.type === 'MANUAL' ? 'success' : 'info'
+              "
+            >
               {{ typeLabel(row.type) }}
             </ElTag>
           </template>

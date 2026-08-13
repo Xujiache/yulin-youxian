@@ -17,7 +17,12 @@
         <ElTable :data="banners" border empty-text="暂无轮播图">
           <ElTableColumn label="排序" width="100">
             <template #default="{ row }">
-              <ElInputNumber v-model="row.sortOrder" :min="0" :controls="false" class="sort-input" />
+              <ElInputNumber
+                v-model="row.sortOrder"
+                :min="0"
+                :controls="false"
+                class="sort-input"
+              />
             </template>
           </ElTableColumn>
 
@@ -87,12 +92,7 @@
 
 <script setup lang="ts">
   import { ElMessage } from 'element-plus'
-  import {
-    getBanners,
-    updateBanners,
-    uploadBannerImage,
-    type Banner
-  } from '@/api/admin'
+  import { getBanners, updateBanners, uploadBannerImage, type Banner } from '@/api/admin'
   import { resolveFreshAssetUrl } from '@/utils/fresh-assets'
 
   defineOptions({ name: 'FreshBanners' })

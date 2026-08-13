@@ -41,7 +41,12 @@
             <ElOption label="上架中" value="on-sale" />
             <ElOption label="已下架" value="off-sale" />
           </ElSelect>
-          <ElSelect v-model="query.recommended" clearable placeholder="首页推荐" style="width: 130px">
+          <ElSelect
+            v-model="query.recommended"
+            clearable
+            placeholder="首页推荐"
+            style="width: 130px"
+          >
             <ElOption label="仅看推荐" value="recommended" />
             <ElOption label="普通商品" value="normal" />
           </ElSelect>
@@ -53,9 +58,23 @@
         </div>
         <div class="fresh-toolbar__left fresh-toolbar__filters">
           <span class="filter-label">价格（元）</span>
-          <ElInputNumber v-model="query.minPrice" :min="0" :precision="2" controls-position="right" placeholder="最低" style="width: 120px" />
+          <ElInputNumber
+            v-model="query.minPrice"
+            :min="0"
+            :precision="2"
+            controls-position="right"
+            placeholder="最低"
+            style="width: 120px"
+          />
           <span class="filter-separator">至</span>
-          <ElInputNumber v-model="query.maxPrice" :min="0" :precision="2" controls-position="right" placeholder="最高" style="width: 120px" />
+          <ElInputNumber
+            v-model="query.maxPrice"
+            :min="0"
+            :precision="2"
+            controls-position="right"
+            placeholder="最高"
+            style="width: 120px"
+          />
           <ElSelect v-model="query.sort" style="width: 160px">
             <ElOption label="默认排序" value="default" />
             <ElOption label="价格从低到高" value="price-asc" />
@@ -64,7 +83,9 @@
             <ElOption label="库存从高到低" value="stock-desc" />
             <ElOption label="名称 A-Z" value="name-asc" />
           </ElSelect>
-          <span class="filter-result">匹配 {{ filteredProducts.length }} / {{ products.length }} 件</span>
+          <span class="filter-result"
+            >匹配 {{ filteredProducts.length }} / {{ products.length }} 件</span
+          >
           <ElButton @click="resetFilters">重置筛选</ElButton>
           <ElButton :loading="loading" @click="loadProducts">刷新数据</ElButton>
         </div>
@@ -259,7 +280,8 @@
     const rows = products.value.filter((item) => {
       const stock = Number(item.stockQty || 0)
       const productPrice = Number(item.minUnitPrice ?? item.unitPrice ?? 0)
-      const text = `${item.name || ''} ${item.subtitle || ''} ${item.badge || ''}`.toLocaleLowerCase()
+      const text =
+        `${item.name || ''} ${item.subtitle || ''} ${item.badge || ''}`.toLocaleLowerCase()
       if (query.categoryId && item.categoryId !== query.categoryId) return false
       if (keyword && !text.includes(keyword)) return false
       if (query.status === 'on-sale' && item.status !== 1) return false
@@ -279,10 +301,15 @@
       const rightPrice = Number(right.minUnitPrice ?? right.unitPrice ?? 0)
       if (query.sort === 'price-asc') return leftPrice - rightPrice
       if (query.sort === 'price-desc') return rightPrice - leftPrice
-      if (query.sort === 'stock-asc') return Number(left.stockQty || 0) - Number(right.stockQty || 0)
-      if (query.sort === 'stock-desc') return Number(right.stockQty || 0) - Number(left.stockQty || 0)
+      if (query.sort === 'stock-asc')
+        return Number(left.stockQty || 0) - Number(right.stockQty || 0)
+      if (query.sort === 'stock-desc')
+        return Number(right.stockQty || 0) - Number(left.stockQty || 0)
       if (query.sort === 'name-asc') return left.name.localeCompare(right.name, 'zh-CN')
-      return Number(left.sortOrder || 0) - Number(right.sortOrder || 0) || Number(left.id || 0) - Number(right.id || 0)
+      return (
+        Number(left.sortOrder || 0) - Number(right.sortOrder || 0) ||
+        Number(left.id || 0) - Number(right.id || 0)
+      )
     })
   })
 

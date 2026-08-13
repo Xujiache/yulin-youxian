@@ -82,7 +82,9 @@
                     <ElTableColumn prop="specificationText" label="规格" min-width="140" />
                     <ElTableColumn label="需备数量" width="110" align="right">
                       <template #default="spec">
-                        <strong class="spec-quantity">{{ spec.row.quantity }}{{ spec.row.saleUnit || row.saleUnit }}</strong>
+                        <strong class="spec-quantity"
+                          >{{ spec.row.quantity }}{{ spec.row.saleUnit || row.saleUnit }}</strong
+                        >
                       </template>
                     </ElTableColumn>
                   </ElTable>
@@ -136,7 +138,9 @@
     items.value.forEach((item) => (item.orderNos || []).forEach((orderNo) => orderNos.add(orderNo)))
     return orderNos.size
   })
-  const totalAmount = computed(() => items.value.reduce((sum, item) => sum + Number(item.amount || 0), 0))
+  const totalAmount = computed(() =>
+    items.value.reduce((sum, item) => sum + Number(item.amount || 0), 0)
+  )
 
   const loadData = async () => {
     loading.value = true

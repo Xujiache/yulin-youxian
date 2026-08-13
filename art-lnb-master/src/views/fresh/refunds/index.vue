@@ -3,7 +3,9 @@
     <div class="fresh-page__head">
       <div>
         <h1 class="fresh-page__title">售后退款</h1>
-        <p class="fresh-page__desc">审核用户申请、调整待审核金额，或按账号 ID 和订单 ID 主动发起退款。</p>
+        <p class="fresh-page__desc"
+          >审核用户申请、调整待审核金额，或按账号 ID 和订单 ID 主动发起退款。</p
+        >
       </div>
       <div class="head-actions">
         <ElButton type="primary" plain @click="openCreateRefund">主动退款</ElButton>
@@ -14,8 +16,18 @@
     <ElCard class="fresh-card" shadow="never">
       <div class="fresh-toolbar">
         <div class="fresh-toolbar__left">
-          <ElInput v-model.trim="filters.accountId" clearable placeholder="账号 ID" style="width: 180px" />
-          <ElInput v-model.trim="filters.orderId" clearable placeholder="订单 ID" style="width: 180px" />
+          <ElInput
+            v-model.trim="filters.accountId"
+            clearable
+            placeholder="账号 ID"
+            style="width: 180px"
+          />
+          <ElInput
+            v-model.trim="filters.orderId"
+            clearable
+            placeholder="订单 ID"
+            style="width: 180px"
+          />
           <ElButton type="primary" plain @click="loadRefunds">查询</ElButton>
           <ElButton @click="resetFilters">重置</ElButton>
         </div>
@@ -43,7 +55,9 @@
           <template #default="{ row }">
             <div class="amount-cell">
               <span class="money">{{ money(row.refundAmount) }}</span>
-              <ElButton v-if="canEditAmount(row)" link type="primary" @click="openAmount(row)">修改</ElButton>
+              <ElButton v-if="canEditAmount(row)" link type="primary" @click="openAmount(row)"
+                >修改</ElButton
+              >
             </div>
           </template>
         </ElTableColumn>
@@ -74,8 +88,17 @@
         </ElTableColumn>
         <ElTableColumn label="操作" width="170" fixed="right">
           <template #default="{ row }">
-            <ElButton size="small" type="success" :disabled="!canReview(row)" @click="approve(row)">通过</ElButton>
-            <ElButton size="small" type="danger" plain :disabled="!canReview(row)" @click="openReject(row)">拒绝</ElButton>
+            <ElButton size="small" type="success" :disabled="!canReview(row)" @click="approve(row)"
+              >通过</ElButton
+            >
+            <ElButton
+              size="small"
+              type="danger"
+              plain
+              :disabled="!canReview(row)"
+              @click="openReject(row)"
+              >拒绝</ElButton
+            >
           </template>
         </ElTableColumn>
       </ElTable>
@@ -99,7 +122,9 @@
         <ElFormItem label="订单 ID" required>
           <div class="inline-field">
             <ElInput v-model.trim="createForm.orderId" placeholder="输入该账号的订单 ID" />
-            <ElButton :disabled="!matchedCustomer" :loading="verifyingOrder" @click="verifyOrder">验证订单</ElButton>
+            <ElButton :disabled="!matchedCustomer" :loading="verifyingOrder" @click="verifyOrder"
+              >验证订单</ElButton
+            >
           </div>
         </ElFormItem>
         <ElAlert
@@ -131,7 +156,9 @@
       </ElForm>
       <template #footer>
         <ElButton @click="createVisible = false">取消</ElButton>
-        <ElButton type="primary" :loading="submitting" @click="submitAdminRefund">确认并发起退款</ElButton>
+        <ElButton type="primary" :loading="submitting" @click="submitAdminRefund"
+          >确认并发起退款</ElButton
+        >
       </template>
     </ElDialog>
 
@@ -141,7 +168,13 @@
           <ElInput :model-value="currentRefund?.refundNo || ''" disabled />
         </ElFormItem>
         <ElFormItem label="退款金额（元）" required>
-          <ElInputNumber v-model="amountYuan" :min="0.01" :precision="2" :step="1" class="form-full" />
+          <ElInputNumber
+            v-model="amountYuan"
+            :min="0.01"
+            :precision="2"
+            :step="1"
+            class="form-full"
+          />
         </ElFormItem>
       </ElForm>
       <template #footer>
@@ -253,11 +286,15 @@
 
   const approve = async (row: Refund) => {
     try {
-      await ElMessageBox.confirm(`确认按 ${money(row.refundAmount)} 通过退款「${row.refundNo}」？`, '审核退款', {
-        type: 'warning',
-        confirmButtonText: '通过退款',
-        cancelButtonText: '取消'
-      })
+      await ElMessageBox.confirm(
+        `确认按 ${money(row.refundAmount)} 通过退款「${row.refundNo}」？`,
+        '审核退款',
+        {
+          type: 'warning',
+          confirmButtonText: '通过退款',
+          cancelButtonText: '取消'
+        }
+      )
     } catch {
       return
     }
@@ -362,7 +399,10 @@
         return
       }
       verifiedOrder.value = order
-      const remaining = Math.max(Number(order.paidAmount || 0) - Number(order.refundedAmount || 0), 0)
+      const remaining = Math.max(
+        Number(order.paidAmount || 0) - Number(order.refundedAmount || 0),
+        0
+      )
       createForm.refundAmountYuan = centToYuan(remaining)
     } catch (error) {
       ElMessage.error(error instanceof Error ? error.message : '订单验证失败')

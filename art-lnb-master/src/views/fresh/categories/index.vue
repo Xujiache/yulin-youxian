@@ -47,7 +47,12 @@
         </ElFormItem>
         <ElFormItem label="分类图标">
           <div class="upload-row">
-            <ElImage v-if="form.iconUrl" class="upload-preview" :src="assetUrl(form.iconUrl)" fit="contain" />
+            <ElImage
+              v-if="form.iconUrl"
+              class="upload-preview"
+              :src="assetUrl(form.iconUrl)"
+              fit="contain"
+            />
             <div v-else class="upload-preview upload-preview--empty">待上传</div>
             <ElUpload
               accept=".jpg,.jpeg,.png,.webp"

@@ -87,7 +87,11 @@
                 </div>
               </ElFormItem>
               <ElFormItem label="商品标签">
-                <ElInput v-model.trim="form.badge" maxlength="12" placeholder="热销、新品、今日到店" />
+                <ElInput
+                  v-model.trim="form.badge"
+                  maxlength="12"
+                  placeholder="热销、新品、今日到店"
+                />
               </ElFormItem>
               <ElFormItem label="小程序排序">
                 <ElInputNumber
@@ -208,7 +212,11 @@
               </div>
 
               <div v-if="form.specGroups.length" class="spec-group-list">
-                <div v-for="(group, groupIndex) in form.specGroups" :key="group.id" class="spec-group">
+                <div
+                  v-for="(group, groupIndex) in form.specGroups"
+                  :key="group.id"
+                  class="spec-group"
+                >
                   <div class="spec-group__meta">
                     <div class="spec-order-actions">
                       <ElButton
@@ -245,11 +253,7 @@
                       :key="option.id"
                       class="spec-option"
                     >
-                      <ElInput
-                        v-model.trim="option.name"
-                        maxlength="16"
-                        @change="regenerateSkus"
-                      />
+                      <ElInput v-model.trim="option.name" maxlength="16" @change="regenerateSkus" />
                       <div class="spec-option__actions">
                         <ElButton
                           text
@@ -502,7 +506,9 @@
                     :step="0.1"
                     controls-position="right"
                     style="width: 130px"
-                    @update:model-value="(value) => (row.unitPrice = yuanToCent(Number(value || 0)))"
+                    @update:model-value="
+                      (value) => (row.unitPrice = yuanToCent(Number(value || 0)))
+                    "
                   />
                 </template>
               </ElTableColumn>
@@ -593,12 +599,20 @@
           <div class="save-checklist">
             <strong>保存检查</strong>
             <div :class="{ complete: Boolean(form.categoryId) }">
-              <ArtSvgIcon :icon="form.categoryId ? 'ri:checkbox-circle-fill' : 'ri:checkbox-blank-circle-line'" />
+              <ArtSvgIcon
+                :icon="
+                  form.categoryId ? 'ri:checkbox-circle-fill' : 'ri:checkbox-blank-circle-line'
+                "
+              />
               已选择商品分类
             </div>
             <div :class="{ complete: Boolean(form.name && form.imageUrl) }">
               <ArtSvgIcon
-                :icon="form.name && form.imageUrl ? 'ri:checkbox-circle-fill' : 'ri:checkbox-blank-circle-line'"
+                :icon="
+                  form.name && form.imageUrl
+                    ? 'ri:checkbox-circle-fill'
+                    : 'ri:checkbox-blank-circle-line'
+                "
               />
               商品名称和主图
             </div>
@@ -630,7 +644,9 @@
     <div class="editor-footer">
       <div>
         <strong>{{ dirty ? '有尚未保存的修改' : '当前内容已同步' }}</strong>
-        <span>{{ form.skuEnabled ? `${skuStats.total} 个 SKU 将随商品一起保存` : '当前使用单规格销售' }}</span>
+        <span>{{
+          form.skuEnabled ? `${skuStats.total} 个 SKU 将随商品一起保存` : '当前使用单规格销售'
+        }}</span>
       </div>
       <div class="editor-footer__actions">
         <ElButton @click="goBack">取消</ElButton>
@@ -641,12 +657,7 @@
 </template>
 
 <script setup lang="ts">
-  import {
-    ElMessage,
-    ElMessageBox,
-    type ElTable,
-    type UploadRequestOptions
-  } from 'element-plus'
+  import { ElMessage, ElMessageBox, type ElTable, type UploadRequestOptions } from 'element-plus'
   import {
     createProduct,
     getCategories,
@@ -746,11 +757,11 @@
   const isSkuComplete = (sku: ProductSku) =>
     Boolean(
       sku.specificationText &&
-        sku.unitPrice > 0 &&
-        Number(sku.stockQty) >= 0 &&
-        sku.saleUnit &&
-        Number(sku.minPurchaseQty) > 0 &&
-        Number(sku.stepQty) > 0
+      sku.unitPrice > 0 &&
+      Number(sku.stockQty) >= 0 &&
+      sku.saleUnit &&
+      Number(sku.minPurchaseQty) > 0 &&
+      Number(sku.stepQty) > 0
     )
 
   const skuStats = computed(() => ({
@@ -761,7 +772,9 @@
   }))
 
   const defaultSkuKey = computed(
-    () => form.skus.find((sku) => Boolean(sku.defaultSku)) && skuRowKey(form.skus.find((sku) => Boolean(sku.defaultSku))!)
+    () =>
+      form.skus.find((sku) => Boolean(sku.defaultSku)) &&
+      skuRowKey(form.skus.find((sku) => Boolean(sku.defaultSku))!)
   )
 
   const summaryStock = computed(() =>
@@ -806,7 +819,10 @@
             ...group,
             options: (group.options || []).map((option) => ({ ...option }))
           })),
-          skus: (product.skus || []).map((sku) => ({ ...sku, optionValueIds: [...sku.optionValueIds] }))
+          skus: (product.skus || []).map((sku) => ({
+            ...sku,
+            optionValueIds: [...sku.optionValueIds]
+          }))
         })
       } else {
         Object.assign(form, emptyForm(), { categoryId: categories.value[0]?.id || null })
@@ -1141,15 +1157,18 @@
     }
     if (!form.specGroups.length) return '请至少添加一个规格维度'
     if (form.specGroups.some((group) => !group.name.trim())) return '请填写完整的规格名称'
-    if (form.specGroups.some((group) => !group.options.length)) return '每个规格维度至少需要一个规格值'
+    if (form.specGroups.some((group) => !group.options.length))
+      return '每个规格维度至少需要一个规格值'
     if (expectedCombinationCount.value > 200) return '规格组合不能超过 200 个'
     if (form.skus.length !== expectedCombinationCount.value) return '请重新生成完整的 SKU 组合'
     if (skuStats.value.incomplete > 0) return `还有 ${skuStats.value.incomplete} 个 SKU 信息不完整`
     if (!form.skus.some((sku) => sku.defaultSku)) return '请设置默认规格'
     const codes = form.skus.map((sku) => sku.skuCode.trim()).filter(Boolean)
-    if (new Set(codes.map((code) => code.toLowerCase())).size !== codes.length) return 'SKU 编码不能重复'
+    if (new Set(codes.map((code) => code.toLowerCase())).size !== codes.length)
+      return 'SKU 编码不能重复'
     const barcodes = form.skus.map((sku) => sku.barcode.trim()).filter(Boolean)
-    if (new Set(barcodes.map((code) => code.toLowerCase())).size !== barcodes.length) return 'SKU 条码不能重复'
+    if (new Set(barcodes.map((code) => code.toLowerCase())).size !== barcodes.length)
+      return 'SKU 条码不能重复'
     return ''
   }
 
