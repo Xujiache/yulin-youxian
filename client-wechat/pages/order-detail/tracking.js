@@ -1,6 +1,6 @@
 // 配送追踪响应的归一化（契约见 docs/rider/04-API契约.md §三）
 // 后端任何一层字段缺失都不能让页面崩，所以这里统一做兜底，页面只消费归一化后的结构。
-const { formatEtaText, formatRemaining, formatDistance } = require("../../utils/delivery-format");
+const { formatEtaText, formatDistance } = require("../../utils/delivery-format");
 const { normalizeAssetUrl } = require("../../api/normalize");
 
 const TIMELINE_TEMPLATE = [
@@ -39,6 +39,7 @@ const EMPTY_DELIVERY = {
   remainingText: "",
   distanceText: "",
   stopsAheadText: "",
+  locationUpdatedText: "",
   deliveryPhotos: [],
   noticeText: "",
   phoneWarningText: "",
@@ -48,6 +49,8 @@ const EMPTY_DELIVERY = {
   rider: null,
   destination: null,
   store: null,
+  recentTrail: [],
+  remainingRoutePoints: [],
   showMap: false,
   timeline: [],
   subscribeTemplateIds: [],
@@ -55,6 +58,10 @@ const EMPTY_DELIVERY = {
   rating: null,
   pollingIntervalMs: 0
 };
+
+const ACTIVE_ORDER_STATUSES = ["备货中", "配送中"];
+const DEPARTED_TASK_STATUSES = ["DELIVERING", "ARRIVED"];
+const TRAIL_MAX_POINTS = 20;
 
 function toFiniteNumber(value) {
   if (value === null || value === undefined || value === "") {
@@ -87,8 +94,12 @@ function pollingIntervalMs(raw, fallback = 0) {
   );
 }
 
+function isActiveDeliveryOrder(orderStatus) {
+  return ACTIVE_ORDER_STATUSES.includes(String(orderStatus || "").trim());
+}
+
 function shouldContinueUnavailableTracking(orderStatus, raw) {
-  return String(orderStatus || "").trim() === "配送中"
+  return isActiveDeliveryOrder(orderStatus)
     && Boolean(raw && typeof raw === "object" && raw.hasDelivery === false);
 }
 
@@ -252,6 +263,91 @@ function normalizePhotos(value) {
     .map((url) => normalizeAssetUrl(url.trim()));
 }
 
+function remainingMinutesText(seconds) {
+  const value = toFiniteNumber(seconds);
+  if (value === null || value <= 0) {
+    return "";
+  }
+  return `约需 ${Math.max(1, Math.ceil(value / 60))} 分钟`;
+}
+
+function mapLatLng(point) {
+  return { latitude: point.lat, longitude: point.lng };
+}
+
+function dedupeTrailPoints(list, maxPoints = TRAIL_MAX_POINTS) {
+  const cap = Math.max(2, toFiniteNumber(maxPoints) || TRAIL_MAX_POINTS);
+  const deduped = [];
+  (Array.isArray(list) ? list : []).forEach((item) => {
+    const point = toPoint(item);
+    if (!point) {
+      return;
+    }
+    const last = deduped[deduped.length - 1];
+    if (last && last.lat === point.lat && last.lng === point.lng) {
+      return;
+    }
+    deduped.push(point);
+  });
+  if (deduped.length <= cap) {
+    return deduped;
+  }
+  return deduped.slice(deduped.length - cap);
+}
+
+function remainingRoutePoints(rawRoute, riderPoint, destination) {
+  const points = [];
+  const source = rawRoute && typeof rawRoute === "object" ? rawRoute : null;
+  (source && Array.isArray(source.points) ? source.points : []).forEach((item) => {
+    const point = toPoint(item);
+    if (point) {
+      points.push(point);
+    }
+  });
+  if (points.length >= 2) {
+    return points;
+  }
+  if (riderPoint && destination) {
+    return [riderPoint, destination];
+  }
+  return [];
+}
+
+function buildMapPolylines(trailPoints, remainingPoints) {
+  const lines = [];
+  if (Array.isArray(trailPoints) && trailPoints.length >= 2) {
+    lines.push({
+      points: trailPoints.map(mapLatLng),
+      color: "#006D37",
+      width: 6,
+      dottedLine: false
+    });
+  }
+  if (Array.isArray(remainingPoints) && remainingPoints.length >= 2) {
+    lines.push({
+      points: remainingPoints.map(mapLatLng),
+      color: "#27AE60AA",
+      width: 5,
+      dottedLine: true
+    });
+  }
+  return lines;
+}
+
+function waitingText(terminal, rider, hasRiderPoint, taskStatus) {
+  if (terminal || hasRiderPoint || (rider && rider.locationRejected)) {
+    return "";
+  }
+  const status = String(taskStatus || "").toUpperCase();
+  if (status === "PICKED_UP") {
+    return "骑手已取货，正在确认发车";
+  }
+  if (DEPARTED_TASK_STATUSES.includes(status)) {
+    return "";
+  }
+  return "门店正在为您备货";
+}
+
 function stopsAheadText(value) {
   const stops = toFiniteNumber(value);
   if (stops === null || stops < 0) {
@@ -285,6 +381,11 @@ function normalizeTracking(raw, fallbackDestination) {
   const eta = raw.eta && typeof raw.eta === "object" ? raw.eta : null;
   const remainingSeconds = eta ? toFiniteNumber(eta.remainingSeconds) : null;
   const hasRiderPoint = Boolean(rider && rider.point);
+  const departed = DEPARTED_TASK_STATUSES.includes(String(raw.taskStatus || "").toUpperCase());
+  const trail = !terminal && departed ? dedupeTrailPoints(raw.recentTrail) : [];
+  const remainingPoints = !terminal && hasRiderPoint
+    ? remainingRoutePoints(raw.remainingRoute, rider.point, destination)
+    : [];
   const normalizedNotice = noticeText(raw.notice);
   const degradedNotice = noticeText(
     raw.phoneNotice
@@ -298,25 +399,27 @@ function normalizeTracking(raw, fallbackDestination) {
     terminal,
     statusText: raw.taskStatusText || "",
     etaText: terminal ? "" : formatEtaText(eta),
-    remainingText:
-      !terminal && remainingSeconds !== null && remainingSeconds > 0
-        ? `预计还需 ${formatRemaining(remainingSeconds)}`
-        : "",
+    remainingText: terminal ? "" : remainingMinutesText(remainingSeconds),
     distanceText: hasRiderPoint ? formatDistance(raw.distanceMeters) : "",
-    stopsAheadText: hasRiderPoint ? stopsAheadText(raw.stopsAhead) : "",
-    // 放门口的单，顾客最关心的就是「到底放哪了」。服务端只在真正送达后才给。
+    stopsAheadText: !terminal ? stopsAheadText(raw.stopsAhead) : "",
+    locationUpdatedText: hasRiderPoint && rider.locatedAtText ? `定位 ${rider.locatedAtText} 更新` : "",
     deliveryPhotos: normalizePhotos(raw.deliveryPhotos),
     noticeText: normalizedNotice,
     phoneWarningText: rider && rider.phoneDegraded
       ? degradedNotice || "骑手隐私号暂不可用，联系骑手将直接拨号，请勿保存号码。"
       : "",
-    // 骑手未取货：只给时间轴，不给地图（骑手还在店里，暴露位置无意义且涉及隐私）
-    waitingText: !terminal && !hasRiderPoint && !(rider && rider.locationRejected) ? "门店正在为您备货" : "",
-    staleText: !terminal && rider && (rider.locationRejected || (hasRiderPoint && !rider.fresh)) ? "骑手位置更新中" : "",
+    waitingText: waitingText(terminal, rider, hasRiderPoint, raw.taskStatus),
+    staleText: !terminal && rider && (
+      rider.locationRejected
+      || (hasRiderPoint && !rider.fresh)
+      || (departed && !hasRiderPoint)
+    ) ? "骑手位置更新中" : "",
     hasRider: Boolean(rider),
     rider,
     destination,
     store,
+    recentTrail: trail,
+    remainingRoutePoints: remainingPoints,
     showMap: Boolean(!terminal && hasRiderPoint && destination),
     timeline: buildTimeline(raw.timeline),
     subscribeTemplateIds: pickTemplateIds(raw),
@@ -330,10 +433,14 @@ module.exports = {
   EMPTY_DELIVERY,
   RATING_TAGS,
   TIMELINE_TEMPLATE,
+  buildMapPolylines,
+  dedupeTrailPoints,
+  isActiveDeliveryOrder,
   isTerminalStatus,
   markerAnimationDuration,
   normalizeTracking,
   pollingIntervalMs,
+  remainingRoutePoints,
   roughDistanceMeters,
   shouldContinueUnavailableTracking,
   trackingPollDelayMs,

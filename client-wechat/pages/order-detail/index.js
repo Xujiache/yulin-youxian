@@ -26,8 +26,10 @@ const {
   RATING_TAGS,
   markerAnimationDuration,
   normalizeTracking,
+  isActiveDeliveryOrder,
   shouldContinueUnavailableTracking,
-  trackingPollDelayMs
+  trackingPollDelayMs,
+  buildMapPolylines
 } = require("./tracking");
 const {
   clearLotterySession,
@@ -58,6 +60,7 @@ const DEFAULT_CONTACT_PHONE = "400-800-1234";
 const DELIVERING_STATUS = "配送中";
 const COMPLETED_STATUS = "已完成";
 const TRACKING_INTERVAL = 5000;
+const TRACKING_PRE_DEPART_INTERVAL = 12000;
 const TRACKING_BACKOFF_INTERVAL = 15000;
 const TRACKING_FAILURE_LIMIT = 3;
 // 略小于轮询间隔，避免上一次动画没跑完就被下一次打断
@@ -272,22 +275,17 @@ function buildMarkers(delivery, riderPoint) {
   return markers;
 }
 
-// 顾客侧不返回历史轨迹，只画骑手到目的地的一段虚线，点数很少不会掉帧
-function buildPolyline(from, to) {
-  if (!from || !to) {
+// 短轨迹实线 + 到本单的剩余路线虚线；没有规划线时退回骑手到目的地的虚线
+function buildPolyline(delivery, riderPoint) {
+  if (!delivery) {
     return [];
   }
-  return [
-    {
-      points: [
-        { latitude: from.lat, longitude: from.lng },
-        { latitude: to.lat, longitude: to.lng }
-      ],
-      color: "#27AE60AA",
-      width: 5,
-      dottedLine: true
-    }
-  ];
+  return buildMapPolylines(
+    delivery.recentTrail,
+    delivery.remainingRoutePoints && delivery.remainingRoutePoints.length >= 2
+      ? delivery.remainingRoutePoints
+      : (riderPoint && delivery.destination ? [riderPoint, delivery.destination] : [])
+  );
 }
 
 // WXML 表达式不支持 indexOf，选中态在 js 侧算好
@@ -398,6 +396,7 @@ Page({
     this._trackingToken = 0;
     this._trackingFailures = 0;
     this._trackingIntervalMs = TRACKING_INTERVAL;
+    this._lastTaskStatus = "";
     this._riderCommitted = null;
     this._riderAnimationActive = false;
     this._riderAnimationSequence = 0;
@@ -608,10 +607,10 @@ Page({
 
   /* ==================== 配送可视化（docs/rider/08-小程序配送可视化.md） ==================== */
 
-  // 配送中才轮询；已完成只拉一次拿时间轴与评价状态；其它状态直接清空配送卡片
+  // 备货中和配送中都轮询，这样发车后订单状态能在当前页自动变成配送中
   syncDeliverySection() {
     const status = String((this.data.order && this.data.order.status) || "").trim();
-    if (status === DELIVERING_STATUS) {
+    if (isActiveDeliveryOrder(status)) {
       this.startTracking();
       return;
     }
@@ -645,6 +644,7 @@ Page({
     }
     this._trackingFailures = 0;
     this._trackingIntervalMs = TRACKING_INTERVAL;
+    this._lastTaskStatus = "";
     this._riderCommitted = null;
     this.cancelRiderAnimation();
     this._mapFitted = false;
@@ -679,7 +679,6 @@ Page({
           return;
         }
         this._trackingFailures = 0;
-        this._trackingIntervalMs = TRACKING_INTERVAL;
         this.applyTracking(raw);
         this.scheduleTracking(token, this._trackingIntervalMs);
       },
@@ -712,12 +711,15 @@ Page({
 
   applyTracking(raw) {
     const address = this.data.address || {};
-    const delivery = normalizeTracking(raw, { lat: address.latitude, lng: address.longitude });
+    let delivery = normalizeTracking(raw, { lat: address.latitude, lng: address.longitude });
     const status = String((this.data.order && this.data.order.status) || "").trim();
+    const fallbackInterval = status === DELIVERING_STATUS
+      ? TRACKING_INTERVAL
+      : TRACKING_PRE_DEPART_INTERVAL;
     const backendInterval = trackingPollDelayMs(
       status,
       raw,
-      TRACKING_INTERVAL,
+      fallbackInterval,
       TRACKING_BACKOFF_INTERVAL
     );
     this._trackingIntervalMs = backendInterval;
@@ -732,7 +734,14 @@ Page({
       this.resetDelivery();
       return;
     }
-    // 后端记录成功后才保持开启态，避免 tracking 写入延迟导致按钮回跳。
+    // 定位短暂丢失时保留上一帧骑手点，避免地图闪没
+    if (!delivery.showMap && this._riderCommitted && !delivery.terminal && delivery.hasRider) {
+      delivery = {
+        ...delivery,
+        showMap: Boolean(delivery.destination),
+        staleText: delivery.staleText || "骑手位置更新中"
+      };
+    }
     if (this._subscribeAccepted) {
       delivery.subscribed = true;
     }
@@ -744,6 +753,10 @@ Page({
         typeof wx.requestSubscribeMessage === "function",
       canRate: status === COMPLETED_STATUS && !delivery.rating.rated
     };
+    const riderPoint = (delivery.rider && delivery.rider.point)
+      || (this._riderCommitted
+        ? { lat: this._riderCommitted.lat, lng: this._riderCommitted.lng }
+        : null);
     if (!delivery.showMap) {
       nextData.markers = [];
       nextData.polyline = [];
@@ -751,12 +764,14 @@ Page({
       this._riderCommitted = null;
       this.cancelRiderAnimation();
       this._mapFitted = false;
-    } else if (!this._riderCommitted) {
-      // 首帧：markers 和卡片一起下发，避免地图先渲染一帧空图层
-      const point = delivery.rider.point;
-      nextData.markers = buildMarkers(delivery, point);
-      nextData.polyline = buildPolyline(point, delivery.destination);
-      this._riderCommitted = { lat: point.lat, lng: point.lng, fresh: delivery.rider.fresh };
+    } else if (!this._riderCommitted && riderPoint) {
+      nextData.markers = buildMarkers(delivery, riderPoint);
+      nextData.polyline = buildPolyline(delivery, riderPoint);
+      this._riderCommitted = {
+        lat: riderPoint.lat,
+        lng: riderPoint.lng,
+        fresh: Boolean(delivery.rider && delivery.rider.fresh)
+      };
     }
     this.setData(nextData, () => {
       if (delivery.showMap) {
@@ -766,10 +781,15 @@ Page({
       }
       this.focusDeliveryCard();
     });
+    const taskStatus = raw && raw.taskStatus ? String(raw.taskStatus) : "";
     if (delivery.terminal) {
       this.stopTracking();
-      // 送达瞬间同步一次订单，让状态条和评价入口跟着更新
-      if (status === DELIVERING_STATUS) {
+      this.refreshOrder();
+      return;
+    }
+    if (status !== DELIVERING_STATUS || this._lastTaskStatus !== taskStatus) {
+      this._lastTaskStatus = taskStatus;
+      if (status !== DELIVERING_STATUS) {
         this.refreshOrder();
       }
     }
@@ -809,6 +829,7 @@ Page({
       return;
     }
     if (committed.lat === point.lat && committed.lng === point.lng) {
+      this.setData({ polyline: buildPolyline(delivery, point) });
       return;
     }
     if (this._riderAnimationActive) {
@@ -871,7 +892,7 @@ Page({
     this._riderCommitted = { lat: point.lat, lng: point.lng, fresh: delivery.rider.fresh };
     this.setData({
       markers: buildMarkers(delivery, point),
-      polyline: buildPolyline(point, delivery.destination)
+      polyline: buildPolyline(delivery, point)
     });
   },
 

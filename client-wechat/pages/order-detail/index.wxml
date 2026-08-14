@@ -36,6 +36,7 @@
         <text class="delivery-status">{{delivery.statusText || statusConfig.title}}</text>
         <text wx:if="{{delivery.etaText}}" class="delivery-eta">{{delivery.etaText}}</text>
         <text wx:if="{{delivery.remainingText}}" class="delivery-remaining">{{delivery.remainingText}}</text>
+        <text wx:if="{{delivery.locationUpdatedText}}" class="delivery-located">{{delivery.locationUpdatedText}}</text>
       </view>
       <view wx:if="{{delivery.showMap}}" class="delivery-fold" catchtap="toggleDeliveryMap">
         {{mapExpanded ? '收起地图' : '展开地图'}}
@@ -92,7 +93,7 @@
       </view>
     </view>
 
-    <view wx:if="{{delivery.stopsAheadText || delivery.distanceText}}" class="delivery-progress-row">
+    <view wx:if="{{delivery.stopsAheadText || delivery.distanceText || delivery.locationUpdatedText}}" class="delivery-progress-row">
       <text class="progress-stops">{{delivery.stopsAheadText}}</text>
       <text class="progress-distance">{{delivery.distanceText}}</text>
     </view>

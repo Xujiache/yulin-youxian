@@ -9,7 +9,11 @@ const {
   normalizeTracking,
   pollingIntervalMs,
   shouldContinueUnavailableTracking,
-  trackingPollDelayMs
+  trackingPollDelayMs,
+  isActiveDeliveryOrder,
+  dedupeTrailPoints,
+  remainingRoutePoints,
+  buildMapPolylines
 } = require("../pages/order-detail/tracking");
 const { normalizeAssetUrl } = require("../api/normalize");
 const { homeNavigationPlan } = require("../utils/navigation");
@@ -47,6 +51,7 @@ test("tracking keeps probing a delivering order without a delivery task", () => 
   assert.equal(normalizeTracking(raw).available, false);
   assert.equal(pollingIntervalMs(raw), 7000);
   assert.equal(shouldContinueUnavailableTracking("配送中", raw), true);
+  assert.equal(shouldContinueUnavailableTracking("备货中", raw), true);
   assert.equal(trackingPollDelayMs("配送中", raw, 5000, 15000), 15000);
   assert.equal(shouldContinueUnavailableTracking("已完成", raw), false);
   assert.equal(trackingPollDelayMs("已完成", raw, 5000, 15000), 7000);
@@ -77,6 +82,94 @@ test("tracking exposes degraded phone warning with transition fields", () => {
   assert.equal(delivery.rider.phoneDegraded, true);
   assert.equal(delivery.noticeText, "隐私号服务暂时降级");
   assert.equal(delivery.phoneWarningText, "隐私号服务暂时降级");
+});
+
+test("active orders keep polling through preparing and delivering", () => {
+  assert.equal(isActiveDeliveryOrder("备货中"), true);
+  assert.equal(isActiveDeliveryOrder("配送中"), true);
+  assert.equal(isActiveDeliveryOrder("已完成"), false);
+  assert.equal(isActiveDeliveryOrder("待支付"), false);
+});
+
+test("tracking shows queue and eta without a live rider point", () => {
+  const delivery = normalizeTracking({
+    hasDelivery: true,
+    taskStatus: "PICKED_UP",
+    taskStatusText: "骑手已取货",
+    stopsAhead: 2,
+    eta: { remainingSeconds: 180, displayText: "预计 15:45-15:55 送达" },
+    rider: { name: "张师傅" },
+    destination: { lat: 30.13, lng: 120.77 }
+  });
+
+  assert.equal(delivery.stopsAheadText, "骑手还有 2 单送达你");
+  assert.equal(delivery.remainingText, "约需 3 分钟");
+  assert.equal(delivery.waitingText, "骑手已取货，正在确认发车");
+  assert.equal(delivery.showMap, false);
+  assert.equal(delivery.staleText, "");
+});
+
+test("tracking keeps a stale rider frame after GPS drops", () => {
+  const delivery = normalizeTracking({
+    hasDelivery: true,
+    taskStatus: "DELIVERING",
+    taskStatusText: "骑手正在配送",
+    stopsAhead: 0,
+    rider: {
+      name: "张师傅",
+      location: { lat: 30.12, lng: 120.76 },
+      locatedAt: "2026-08-11T15:39:50",
+      locationFresh: false
+    },
+    destination: { lat: 30.13, lng: 120.77 }
+  });
+
+  assert.equal(delivery.showMap, true);
+  assert.equal(delivery.staleText, "骑手位置更新中");
+  assert.equal(delivery.locationUpdatedText, "定位 15:39 更新");
+  assert.equal(delivery.stopsAheadText, "你是骑手的下一单");
+});
+
+test("tracking trail is deduped and truncated, remaining route falls back to rider-destination", () => {
+  const trail = dedupeTrailPoints([
+    { lat: 30.12, lng: 120.76, at: "2026-08-11T15:38:00" },
+    { lat: 30.12, lng: 120.76, at: "2026-08-11T15:38:05" },
+    { lat: 30.121, lng: 120.761 },
+    { lat: 30.122, lng: 120.762 }
+  ], 2);
+  assert.equal(trail.length, 2);
+  assert.equal(trail[0].lat, 30.121);
+  assert.equal(trail[1].lat, 30.122);
+
+  const fallback = remainingRoutePoints(null, { lat: 30.12, lng: 120.76 }, { lat: 30.13, lng: 120.77 });
+  assert.deepEqual(fallback, [
+    { lat: 30.12, lng: 120.76 },
+    { lat: 30.13, lng: 120.77 }
+  ]);
+  assert.equal(remainingRoutePoints({ points: [] }, null, { lat: 30.13, lng: 120.77 }).length, 0);
+
+  const lines = buildMapPolylines(
+    [{ lat: 30.12, lng: 120.76 }, { lat: 30.121, lng: 120.761 }],
+    [{ lat: 30.121, lng: 120.761 }, { lat: 30.13, lng: 120.77 }]
+  );
+  assert.equal(lines.length, 2);
+  assert.equal(lines[0].dottedLine, false);
+  assert.equal(lines[1].dottedLine, true);
+});
+
+test("terminal tracking stops showing rider, trail and remaining minutes", () => {
+  const delivery = normalizeTracking({
+    hasDelivery: true,
+    taskStatus: "DELIVERED",
+    polling: { intervalSeconds: 5, stopWhenDone: true },
+    rider: null,
+    stopsAhead: 0,
+    eta: { remainingSeconds: 0 }
+  });
+  assert.equal(delivery.terminal, true);
+  assert.equal(delivery.showMap, false);
+  assert.equal(delivery.stopsAheadText, "");
+  assert.equal(delivery.remainingText, "");
 });
 
 test("payment confirmation recognizes paid status and invalidated token", async () => {
