@@ -23,7 +23,11 @@ public final class DeliveryTestDatabase {
             "V12__harden_rider_idempotency.sql",
             "V13__harden_marketing_lottery.sql",
             "V14__record_route_plan_failure.sql",
-            "V15__slot_based_dispatch.sql"
+            "V15__slot_based_dispatch.sql",
+            "V16__store_coords_xingjing_police.sql",
+            "V17__store_coords_xingjing_market.sql",
+            "V18__store_coords_operator_pin.sql",
+            "V19__customer_live_tracking.sql"
     );
 
     private DeliveryTestDatabase() {

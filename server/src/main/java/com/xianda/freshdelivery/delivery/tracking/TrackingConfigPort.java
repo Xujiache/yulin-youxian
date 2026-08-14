@@ -14,6 +14,12 @@ public interface TrackingConfigPort {
     String STORE_LNG = "store.lng";
     String ETA_DISPLAY_AS_RANGE = "eta.display_as_range";
     String ETA_RANGE_SPAN_MINUTES = "eta.range_span_minutes";
+    String ETA_EBIKE_SPEED_KMH = "eta.ebike_speed_kmh";
+    String ETA_DEFAULT_HANDOFF_SECONDS = "eta.default_handoff_seconds";
+    String ETA_LIVE_RECOMPUTE_INTERVAL_SECONDS = "eta.live_recompute_interval_seconds";
+    String DETOUR_FACTOR = "routing.detour_factor";
+    String CUSTOMER_TRAIL_SECONDS = "tracking.customer_trail_seconds";
+    String CUSTOMER_TRAIL_MAX_POINTS = "tracking.customer_trail_max_points";
     String PRIVACY_NUMBER_ENABLED = "privacy.number_enabled";
     String MAX_CONCURRENT_TASK = "dispatch.max_tasks_per_wave";
     String REQUIRE_VERIFY_CODE = "delivery.require_verify_code";

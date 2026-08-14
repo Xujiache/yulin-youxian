@@ -183,7 +183,8 @@ class LocationIngestServiceTests {
                 jdbcTemplate, RIDER_ID, NOW.plusDays(30), STORE_LAT + 0.01, STORE_LNG + 0.01);
 
         LocationBatchResponse response = ingestService.ingest(RIDER_ID, batch(
-                point(NOW.plusSeconds(1), STORE_LAT + 0.02, STORE_LNG, 12, "RIDING"),
+                point(NOW.plusSeconds(LocationIngestService.MAX_FUTURE_SKEW_SECONDS + 1L),
+                        STORE_LAT + 0.02, STORE_LNG, 12, "RIDING"),
                 point(NOW.minusSeconds(5), STORE_LAT, STORE_LNG, 12, "RIDING"))).response();
 
         assertEquals(1, response.accepted());

@@ -1,6 +1,7 @@
 package com.xianda.freshdelivery.delivery.exception;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -102,11 +103,13 @@ class EvidenceServiceTests {
         EvidenceDto dto = evidenceService.upload(riderId, png, "DELIVERED", taskId, null,
                 30.1234567d, 120.7654321d, "2026-08-11T16:19:30");
         assertNotNull(dto.id());
-        assertTrue(dto.fileUrl().startsWith("/uploads/delivery/202608/"), dto.fileUrl());
-        assertTrue(dto.fileUrl().endsWith(".png"), dto.fileUrl());
+        assertTrue(pathOnly(dto.fileUrl()).startsWith("/uploads/delivery/202608/"), dto.fileUrl());
+        assertTrue(pathOnly(dto.fileUrl()).endsWith(".png"), dto.fileUrl());
+        assertTrue(dto.fileUrl().contains("?e="), dto.fileUrl());
         assertEquals("DELIVERED", dto.evidenceType());
 
-        Path stored = storageRoot.resolve("202608").resolve(dto.fileUrl().substring(dto.fileUrl().lastIndexOf('/') + 1));
+        Path stored = storageRoot.resolve("202608").resolve(
+                pathOnly(dto.fileUrl()).substring(pathOnly(dto.fileUrl()).lastIndexOf('/') + 1));
         assertTrue(Files.exists(stored));
         BufferedImage rendered = ImageIO.read(stored.toFile());
         assertNotNull(rendered);
@@ -150,7 +153,7 @@ class EvidenceServiceTests {
         EvidenceDto dto = evidenceService.upload(riderId, jpeg, null, null, null, null, null, null);
         assertEquals("EXCEPTION", dto.evidenceType());
         assertEquals("2026-08-11T16:20:00", dto.capturedAt());
-        assertTrue(dto.fileUrl().endsWith(".jpg"));
+        assertTrue(pathOnly(dto.fileUrl()).endsWith(".jpg"));
         DeliveryEvidence saved = evidenceDao.findById(dto.id()).orElseThrow();
         assertNull(saved.taskId());
         assertTrue(saved.watermarkText().contains("2026-08-11 16:20:00"));
@@ -161,7 +164,7 @@ class EvidenceServiceTests {
         byte[] webp = webpBytes();
         MockMultipartFile file = new MockMultipartFile("file", "photo.webp", "image/webp", webp);
         EvidenceDto dto = evidenceService.upload(riderId, file, "EXCEPTION", taskId, null, null, null, null);
-        assertTrue(dto.fileUrl().endsWith(".webp"), dto.fileUrl());
+        assertTrue(pathOnly(dto.fileUrl()).endsWith(".webp"), dto.fileUrl());
         DeliveryEvidence saved = evidenceDao.findById(dto.id()).orElseThrow();
         assertEquals(webp.length, saved.fileSize().intValue());
         assertNotNull(saved.watermarkText());
@@ -175,6 +178,25 @@ class EvidenceServiceTests {
         assertNull(ImageFormats.sniff("GIF89a0000000000".getBytes(StandardCharsets.US_ASCII)));
         assertNull(ImageFormats.sniff(new byte[]{1, 2, 3}));
         assertNull(ImageFormats.sniff(null));
+    }
+
+    @Test
+    void searchReturnsSignedFileUrlWhileDatabaseKeepsTheBarePath() throws IOException {
+        MockMultipartFile jpeg = new MockMultipartFile("file", "photo.jpg", "image/jpeg", jpegBytes(32, 32));
+        EvidenceDto uploaded = evidenceService.upload(riderId, jpeg, "DELIVERED", taskId, null, null, null, null);
+        DeliveryEvidence saved = evidenceDao.findById(uploaded.id()).orElseThrow();
+        assertTrue(saved.fileUrl().startsWith("/uploads/delivery/202608/"));
+        assertFalse(saved.fileUrl().contains("?"));
+
+        var found = evidenceService.search(taskId, "DELIVERED", null, 20);
+        assertEquals(1, found.size());
+        assertTrue(found.get(0).fileUrl().startsWith(saved.fileUrl() + "?"), found.get(0).fileUrl());
+        assertTrue(found.get(0).fileUrl().contains("s="), found.get(0).fileUrl());
+    }
+
+    private static String pathOnly(String fileUrl) {
+        int query = fileUrl.indexOf('?');
+        return query < 0 ? fileUrl : fileUrl.substring(0, query);
     }
 
     private static byte[] pngBytes(int width, int height) throws IOException {

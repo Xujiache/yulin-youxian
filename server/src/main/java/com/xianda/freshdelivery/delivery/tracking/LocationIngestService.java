@@ -28,7 +28,7 @@ public class LocationIngestService {
     public static final String COMMAND_MARK_ARRIVED = "MARK_ARRIVED";
 
     public static final int MAX_BATCH_POINTS = 100;
-    public static final int MAX_FUTURE_SKEW_SECONDS = 0;
+    public static final int MAX_FUTURE_SKEW_SECONDS = 120;
     public static final int MAX_POINT_AGE_HOURS = 24;
 
     private static final String MOTION_STILL = "STILL";

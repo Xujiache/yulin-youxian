@@ -54,6 +54,30 @@ public class TrackingTaskDao {
                 .findFirst();
     }
 
+    public List<RemainingStopRow> remainingStopsUntil(long waveId, long taskId) {
+        return jdbcTemplate.query("""
+                        SELECT s.seq_no, t.id AS task_id,
+                               COALESCE(s.lat, t.address_lat) AS lat,
+                               COALESCE(s.lng, t.address_lng) AS lng,
+                               t.status
+                        FROM delivery_wave_stop s
+                        JOIN delivery_task t ON t.id = s.task_id
+                        WHERE s.wave_id = ?
+                          AND s.seq_no <= COALESCE(
+                              (SELECT self.seq_no FROM delivery_wave_stop self
+                                WHERE self.wave_id = ? AND self.task_id = ?), 0)
+                          AND t.status NOT IN ('DELIVERED', 'RETURNED', 'CANCELLED')
+                        ORDER BY s.seq_no, t.id
+                        """,
+                (resultSet, rowNum) -> new RemainingStopRow(
+                        resultSet.getInt("seq_no"),
+                        resultSet.getLong("task_id"),
+                        doubleOrNull(resultSet, "lat"),
+                        doubleOrNull(resultSet, "lng"),
+                        resultSet.getString("status")),
+                waveId, waveId, taskId);
+    }
+
     public int stopsAhead(long waveId, long taskId) {
         Integer count = jdbcTemplate.queryForObject("""
                         SELECT COUNT(*)
@@ -283,5 +307,14 @@ public class TrackingTaskDao {
     }
 
     public record CurrentAssignmentRow(Long taskId, Long waveId) {
+    }
+
+    public record RemainingStopRow(
+            int seqNo,
+            long taskId,
+            Double lat,
+            Double lng,
+            String status
+    ) {
     }
 }

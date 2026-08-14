@@ -2,10 +2,12 @@ package com.xianda.freshdelivery.delivery.task;
 
 import com.xianda.freshdelivery.delivery.common.ColdChainLevel;
 import com.xianda.freshdelivery.delivery.common.DeliveryTaskStatus;
+import com.xianda.freshdelivery.delivery.common.EvidenceUrlSigner;
 import com.xianda.freshdelivery.delivery.common.GeoPoint;
 import com.xianda.freshdelivery.delivery.domain.DeliveryTask;
 import com.xianda.freshdelivery.delivery.domain.DeliveryTaskEvent;
 import com.xianda.freshdelivery.delivery.dto.DeliveryTaskBriefDto;
+import com.xianda.freshdelivery.delivery.dto.EvidenceDto;
 import com.xianda.freshdelivery.delivery.dto.GeoPointDto;
 import com.xianda.freshdelivery.delivery.dto.TaskCardDto;
 import com.xianda.freshdelivery.delivery.dto.TaskDetailDto;
@@ -25,17 +27,20 @@ public class DeliveryTaskAssembler {
     private final DeliveryWaveStopDao waveStopDao;
     private final DeliveryTaskSupportDao supportDao;
     private final DeliveryConfigPort configPort;
+    private final EvidenceUrlSigner evidenceUrlSigner;
 
     public DeliveryTaskAssembler(
             DeliveryTaskDao taskDao,
             DeliveryWaveStopDao waveStopDao,
             DeliveryTaskSupportDao supportDao,
-            DeliveryConfigPort configPort
+            DeliveryConfigPort configPort,
+            EvidenceUrlSigner evidenceUrlSigner
     ) {
         this.taskDao = taskDao;
         this.waveStopDao = waveStopDao;
         this.supportDao = supportDao;
         this.configPort = configPort;
+        this.evidenceUrlSigner = evidenceUrlSigner;
     }
 
     public TaskCardDto toCard(DeliveryTask task) {
@@ -107,8 +112,22 @@ public class DeliveryTaskAssembler {
                 toCard(task),
                 items == null ? List.of() : items,
                 events == null ? List.of() : events.stream().map(DeliveryTaskAssembler::toEventDto).toList(),
-                supportDao.evidences(task.id())
+                signedEvidences(task.id())
         );
+    }
+
+    /**
+     * 管理后台用 {@code <img>} 展示凭证，带不了 Authorization。
+     * 库里存相对路径，这里签发限时票据，和顾客端看送达照片走同一套闸门。
+     */
+    private List<EvidenceDto> signedEvidences(long taskId) {
+        return supportDao.evidences(taskId).stream()
+                .map(item -> new EvidenceDto(
+                        item.id(),
+                        evidenceUrlSigner.sign(item.fileUrl()),
+                        item.evidenceType(),
+                        item.capturedAt()))
+                .toList();
     }
 
     static TaskDetailDto.TaskEventDto toEventDto(DeliveryTaskEvent event) {

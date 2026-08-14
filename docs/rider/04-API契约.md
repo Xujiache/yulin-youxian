@@ -640,10 +640,24 @@
     "lowerAt": "2026-08-11T15:45:00",
     "upperAt": "2026-08-11T15:55:00",
     "remainingSeconds": 900,
-    "isRange": true
+    "isRange": true,
+    "source": "LIVE",                 // LIVE=按最新点重算；失败时 SNAPSHOT=回退 eta_at 区间
+    "updatedAt": "2026-08-11T15:39:50"
   },
   "distanceMeters": 850,
-  "stopsAhead": 1,                        // 骑手在你前面还有几单，透明化能显著降低焦虑
+  "stopsAhead": 1,                        // 骑手在你前面还有几单；定位暂时不可用时也会下发
+  "recentTrail": [                        // 仅发车后返回：最近 180 秒清洗点，最多 20 个
+    { "lat": 30.1195000, "lng": 120.7595000, "at": "2026-08-11T15:38:40" },
+    { "lat": 30.1200000, "lng": 120.7600000, "at": "2026-08-11T15:39:50" }
+  ],
+  "remainingRoute": {                     // 到本单的剩余路线几何，不含前序顾客姓名/地址/marker
+    "polyline": "encoded",
+    "distanceMeters": 850,
+    "points": [
+      { "lat": 30.1200000, "lng": 120.7600000 },
+      { "lat": 30.1234567, "lng": 120.7654321 }
+    ]
+  },
   "polling": { "intervalSeconds": 5, "stopWhenDone": true },
   "subscribeTemplateIds": ["tmpl_xxx", "tmpl_yyy"],  // 可下发的订阅消息模板；为空或缺失时小程序隐藏「送达时提醒我」按钮
   "notice": null                          // 异常时如「骑手正在联系您」
@@ -654,10 +668,13 @@
 
 **脱敏与失效规则（强制）**：
 
-- `rider.location` 只返回**当前**位置，不返回任何历史轨迹。
-- 任务进入 `DELIVERED` / `RETURNED` / `CANCELLED` 后，`rider` 字段整体置 `null`，`polling.stopWhenDone = true`。
+- `rider.location`、`recentTrail`、`remainingRoute` 只在骑手**确认发车**（`departedAt` 非空 / `DELIVERING`）后返回。已取货未发车只给骑手卡片，不给坐标。
+- `recentTrail` 仅含当前骑手、当前波次、发车之后、最近 180 秒（`tracking.customer_trail_seconds`）的清洗点，最多 20 个；不是完整班次历史，也不含其他顾客地址。
+- `remainingRoute` 只下发到**本单**的路线几何（折线点），不下发前序订单的姓名、地址或 marker。高德 Web 服务 Key 未配置时客户端用骑手到顾客的虚线兜底。
+- 动态 ETA（`eta.source=LIVE`）以骑手最新点为起点，只累加未完成站点直到本单；失败时回退 `eta_at / eta_lower_at / eta_upper_at`（`SNAPSHOT`）。
+- 任务进入 `DELIVERED` / `RETURNED` / `CANCELLED` 后，`rider`、`recentTrail`、`remainingRoute` 整体置 `null`，`polling.stopWhenDone = true`。
 - 只有订单归属用户本人可查，其他人返回 404（复用现有 `CurrentUserContext` 校验模式）。
-- 任务未到 `PICKED_UP` 之前不返回骑手位置（骑手还在店里，暴露无意义且涉及骑手隐私）。
+- 发车后 `polling.intervalSeconds = 5`；发车前为 12 秒，便于备货中页面自动同步到配送中。
 
 ### `POST /api/wx/delivery/orders/{orderId}/subscribe`
 
@@ -680,7 +697,7 @@
 | 需求 | 方案 |
 | --- | --- |
 | 管理后台订单列表/详情展示配送信息 | 新增 `GET /api/admin/delivery/tasks/by-orders`（归 A2），前端对当前可见订单行批量查询并合并渲染 |
-| 小程序判断是否展示配送地图 | **不改 `OrderDetailDto`**。订单状态为 `配送中`/`已完成` 时直接调 tracking 接口，`hasDelivery=false` 则回退现有静态文案 |
+| 小程序判断是否展示配送地图 | **不改 `OrderDetailDto`**。订单状态为 `备货中`/`配送中`/`已完成` 时直接调 tracking 接口，`hasDelivery=false` 则回退现有静态文案 |
 | 派单入口 | 既有 `POST /api/admin/orders/{id}/deliver` **保持原样**。管理后台前端读 `dispatch.enabled` 配置切换：启用时「配送」按钮改调 `pick-ready`，未启用时走老接口 |
 | 订单状态同步 | `OrderStatusBridge`（A2）调用既有 Service 的公开方法完成 `备货中→配送中→已完成` 流转，不改其内部逻辑 |
 

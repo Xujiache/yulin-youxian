@@ -63,6 +63,8 @@ public record DeliveryBoardDto(
             String deliveryInstruction,
             List<String> highlightNotes,
             String slotLabel,
+            /** 配送日 yyyy-MM-dd，与 slotLabel 一起标识「哪一天的哪个时段」 */
+            String deliveryDate,
             String promisedAt,
             String etaAt,
             Integer remainingSeconds,

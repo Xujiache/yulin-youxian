@@ -29,6 +29,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class WxTrackingService {
     public static final int POLLING_INTERVAL_SECONDS = 5;
+    public static final int PRE_DEPART_POLLING_SECONDS = 12;
     public static final String STORE_NAME = "禹邻优鲜";
     /**
      * 顾客可订阅的一次性消息模板（04 §3，字段名冻结为 subscribeTemplateIds）。
@@ -51,6 +52,7 @@ public class WxTrackingService {
     private final Clock clock;
     private final List<String> subscribeTemplateIds;
     private final EvidenceUrlSigner evidenceUrlSigner;
+    private final CustomerLiveEtaService liveEtaService;
 
     @Autowired
     public WxTrackingService(
@@ -60,10 +62,11 @@ public class WxTrackingService {
             TrackingOrderAccessPort orderAccessPort,
             DeliveryEventStream eventStream,
             TrackingPorts ports,
-            EvidenceUrlSigner evidenceUrlSigner
+            EvidenceUrlSigner evidenceUrlSigner,
+            CustomerLiveEtaService liveEtaService
     ) {
         this(taskDao, riderDao, locationQueryService, orderAccessPort, eventStream, ports,
-                Clock.system(TrackingTimes.STORE_ZONE), SUBSCRIBE_TEMPLATE_IDS, evidenceUrlSigner);
+                Clock.system(TrackingTimes.STORE_ZONE), SUBSCRIBE_TEMPLATE_IDS, evidenceUrlSigner, liveEtaService);
     }
 
     public WxTrackingService(
@@ -77,7 +80,7 @@ public class WxTrackingService {
             EvidenceUrlSigner evidenceUrlSigner
     ) {
         this(taskDao, riderDao, locationQueryService, orderAccessPort, eventStream, ports, clock,
-                SUBSCRIBE_TEMPLATE_IDS, evidenceUrlSigner);
+                SUBSCRIBE_TEMPLATE_IDS, evidenceUrlSigner, null);
     }
 
     WxTrackingService(
@@ -91,6 +94,22 @@ public class WxTrackingService {
             List<String> subscribeTemplateIds,
             EvidenceUrlSigner evidenceUrlSigner
     ) {
+        this(taskDao, riderDao, locationQueryService, orderAccessPort, eventStream, ports, clock,
+                subscribeTemplateIds, evidenceUrlSigner, null);
+    }
+
+    WxTrackingService(
+            TrackingTaskDao taskDao,
+            TrackingRiderDao riderDao,
+            LocationQueryService locationQueryService,
+            TrackingOrderAccessPort orderAccessPort,
+            DeliveryEventStream eventStream,
+            TrackingPorts ports,
+            Clock clock,
+            List<String> subscribeTemplateIds,
+            EvidenceUrlSigner evidenceUrlSigner,
+            CustomerLiveEtaService liveEtaService
+    ) {
         this.evidenceUrlSigner = evidenceUrlSigner;
         this.taskDao = taskDao;
         this.riderDao = riderDao;
@@ -99,6 +118,7 @@ public class WxTrackingService {
         this.eventStream = eventStream;
         this.ports = ports;
         this.clock = clock;
+        this.liveEtaService = liveEtaService;
         this.subscribeTemplateIds = subscribeTemplateIds == null
                 ? List.of()
                 : subscribeTemplateIds.stream()
@@ -114,15 +134,27 @@ public class WxTrackingService {
         TrackingTaskDao.WxTaskRow task = taskDao.findByOrderId(orderId).orElse(null);
         if (task == null) {
             return new WxTrackingDto(false, null, null, List.of(), null, null, storeDto(), null,
-                    null, null, new WxTrackingDto.PollingDto(POLLING_INTERVAL_SECONDS, false),
-                    subscribeTemplateIds, null, null, List.of());
+                    null, null, new WxTrackingDto.PollingDto(PRE_DEPART_POLLING_SECONDS, false),
+                    subscribeTemplateIds, null, null, List.of(), null, null);
         }
         DeliveryTaskStatus status = statusOf(task.status());
         boolean terminal = status != null && status.isTerminal();
-        boolean locationVisible = !terminal && task.pickedUpAt() != null;
+        boolean locationVisible = !terminal && task.departedAt() != null;
 
         WxTrackingDto.TrackingRiderDto rider = terminal ? null : riderCard(task, locationVisible, now);
-        Integer distanceMeters = distanceMeters(rider, task);
+        CustomerLiveEtaService.LiveEstimate live = locationVisible && liveEtaService != null && rider != null
+                ? liveEtaService.estimate(task, latestForLiveEta(task.riderId()), now).orElse(null)
+                : null;
+        Integer distanceMeters = live != null
+                ? Integer.valueOf(live.distanceMeters())
+                : haversineDistanceMeters(rider, task);
+        List<WxTrackingDto.TrailPointDto> recentTrail = locationVisible
+                ? recentTrail(task, now)
+                : null;
+        WxTrackingDto.RemainingRouteDto remainingRoute = locationVisible && live != null
+                ? live.remainingRoute()
+                : null;
+        int intervalSeconds = locationVisible ? POLLING_INTERVAL_SECONDS : PRE_DEPART_POLLING_SECONDS;
 
         return new WxTrackingDto(
                 true,
@@ -132,14 +164,16 @@ public class WxTrackingService {
                 rider,
                 geoPoint(task.addressLat(), task.addressLng()),
                 storeDto(),
-                eta(task, now),
+                eta(task, now, live),
                 distanceMeters,
                 stopsAhead(task),
-                new WxTrackingDto.PollingDto(POLLING_INTERVAL_SECONDS, true),
+                new WxTrackingDto.PollingDto(intervalSeconds, true),
                 subscribeTemplateIds,
                 rating(task),
                 notice(task, status),
-                deliveryPhotos(task, status)
+                deliveryPhotos(task, status),
+                recentTrail,
+                remainingRoute
         );
     }
 
@@ -348,7 +382,7 @@ public class WxTrackingService {
         );
     }
 
-    private Integer distanceMeters(WxTrackingDto.TrackingRiderDto rider, TrackingTaskDao.WxTaskRow task) {
+    private Integer haversineDistanceMeters(WxTrackingDto.TrackingRiderDto rider, TrackingTaskDao.WxTaskRow task) {
         if (rider == null || rider.location() == null || task.addressLat() == null || task.addressLng() == null) {
             return null;
         }
@@ -371,22 +405,28 @@ public class WxTrackingService {
         return new WxTrackingDto.TimelineNodeDto(code, label, TrackingTimes.format(at), at != null);
     }
 
-    private WxTrackingDto.EtaDto eta(TrackingTaskDao.WxTaskRow task, LocalDateTime now) {
+    private WxTrackingDto.EtaDto eta(
+            TrackingTaskDao.WxTaskRow task,
+            LocalDateTime now,
+            CustomerLiveEtaService.LiveEstimate live
+    ) {
         LocalDateTime lower = task.etaLowerAt();
         LocalDateTime upper = task.etaUpperAt();
         LocalDateTime point = task.etaAt() == null ? task.promisedAt() : task.etaAt();
-        if (lower == null && upper == null && point == null) {
+        if (lower == null && upper == null && point == null && live == null) {
             return null;
         }
         boolean displayAsRange = ports.config().getBool(TrackingConfigPort.ETA_DISPLAY_AS_RANGE);
         boolean isRange = displayAsRange && lower != null && upper != null;
         LocalDateTime reference = point != null ? point : (upper != null ? upper : lower);
-        Integer remainingSeconds = reference == null
-                ? null
-                : (int) Duration.between(now, reference).getSeconds();
+        Integer remainingSeconds = live != null
+                ? Integer.valueOf(live.remainingSeconds())
+                : (reference == null ? null : (int) Duration.between(now, reference).getSeconds());
         String displayText;
         if (isRange) {
             displayText = "预计 " + CLOCK_TEXT.format(lower) + "-" + CLOCK_TEXT.format(upper) + " 送达";
+        } else if (live != null && live.etaAt() != null) {
+            displayText = "预计 " + CLOCK_TEXT.format(live.etaAt()) + " 送达";
         } else if (reference != null) {
             displayText = "预计 " + CLOCK_TEXT.format(reference) + " 送达";
         } else {
@@ -397,8 +437,34 @@ public class WxTrackingService {
                 TrackingTimes.format(lower),
                 TrackingTimes.format(upper),
                 remainingSeconds,
-                isRange
+                isRange,
+                live != null ? CustomerLiveEtaService.SOURCE_LIVE : CustomerLiveEtaService.SOURCE_SNAPSHOT,
+                TrackingTimes.format(live != null ? now : null)
         );
+    }
+
+    private List<WxTrackingDto.TrailPointDto> recentTrail(TrackingTaskDao.WxTaskRow task, LocalDateTime now) {
+        if (task.riderId() == null || task.waveId() == null || task.departedAt() == null) {
+            return List.of();
+        }
+        int windowSeconds = ports.config().getInt(TrackingConfigPort.CUSTOMER_TRAIL_SECONDS);
+        int maxPoints = ports.config().getInt(TrackingConfigPort.CUSTOMER_TRAIL_MAX_POINTS);
+        if (windowSeconds <= 0 || maxPoints <= 0) {
+            return List.of();
+        }
+        return locationQueryService.customerRecentTrail(
+                        task.riderId(), task.waveId(), task.departedAt(), now, windowSeconds, maxPoints)
+                .stream()
+                .map(point -> new WxTrackingDto.TrailPointDto(
+                        point.lat(), point.lng(), TrackingTimes.format(point.locatedAt())))
+                .toList();
+    }
+
+    private TrackingLocationDao.LatestRow latestForLiveEta(Long riderId) {
+        if (riderId == null) {
+            return null;
+        }
+        return locationQueryService.currentPosition(riderId).orElse(null);
     }
 
     private Integer stopsAhead(TrackingTaskDao.WxTaskRow task) {

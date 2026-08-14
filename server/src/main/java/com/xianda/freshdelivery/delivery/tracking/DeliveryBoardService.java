@@ -296,6 +296,7 @@ public class DeliveryBoardService {
                 task.deliveryInstruction(),
                 highlightNotes(task),
                 task.slotLabel(),
+                task.deliveryDate() == null ? null : task.deliveryDate().toString(),
                 TrackingTimes.format(task.promisedAt()),
                 TrackingTimes.format(task.etaAt()),
                 remainingSeconds,

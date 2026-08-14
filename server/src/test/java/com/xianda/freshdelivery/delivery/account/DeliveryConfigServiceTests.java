@@ -94,14 +94,15 @@ class DeliveryConfigServiceTests {
     @Test
     void listsItemsWithFormMetadataAndCategoryGrouping() {
         List<DeliveryConfigItemDto> etaItems = deliveryConfigService.list("ETA");
-        assertEquals(8, etaItems.size());
+        assertEquals(9, etaItems.size());
         assertTrue(etaItems.stream().allMatch(item -> item.displayName() != null && !item.displayName().isBlank()));
 
         Map<String, List<DeliveryConfigItemDto>> grouped = deliveryConfigService.listGroupedByCategory();
         assertEquals(14, grouped.size());
         // V11 seeds three operator-visible settings; amap.web_key remains write-only.
         // V15 adds dispatch.mode.
-        assertEquals(77, grouped.values().stream().mapToInt(List::size).sum());
+        // V19 adds customer trail window/max points and live ETA throttle.
+        assertEquals(80, grouped.values().stream().mapToInt(List::size).sum());
         assertEquals(4, grouped.get("STORE").size());
         assertEquals(4, grouped.get("FATIGUE").size());
     }

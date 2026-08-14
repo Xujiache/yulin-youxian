@@ -95,10 +95,33 @@ class TrackingLocationDaoTests {
         assertTrue(sampled.size() <= 1000);
     }
 
+    @Test
+    void customerTrailKeepsOnlyRecentCleanedPointsForTheCurrentWave() {
+        locationDao.insertPoints(List.of(
+                point(NOW.minusSeconds(200), 30.10, 501L, true),
+                point(NOW.minusSeconds(90), 30.11, 501L, true),
+                point(NOW.minusSeconds(60), 30.12, 501L, false),
+                point(NOW.minusSeconds(30), 30.13, 501L, true),
+                point(NOW.minusSeconds(20), 30.14, 999L, true),
+                point(NOW.minusSeconds(10), 30.15, 501L, true)
+        ));
+
+        List<TrackingLocationDao.HistoryPoint> trail = locationDao.customerTrail(
+                1L, 501L, NOW.minusSeconds(180), NOW, 20);
+
+        assertEquals(List.of(30.11, 30.13, 30.15), trail.stream().map(TrackingLocationDao.HistoryPoint::lat).toList());
+        assertEquals(NOW.minusSeconds(90), trail.get(0).locatedAt());
+        assertEquals(NOW.minusSeconds(10), trail.get(2).locatedAt());
+    }
+
     private TrackingLocationDao.PointRow point(LocalDateTime locatedAt, double lat) {
+        return point(locatedAt, lat, null, true);
+    }
+
+    private TrackingLocationDao.PointRow point(LocalDateTime locatedAt, double lat, Long waveId, boolean cleaned) {
         return new TrackingLocationDao.PointRow(
-                1L, null, null, lat, 120.70, 10, 4.2, 178.5, 15.2,
-                "GPS", 68, "5G", "RIDING", true, locatedAt, NOW, "batch-1");
+                1L, null, waveId, lat, 120.70, 10, 4.2, 178.5, 15.2,
+                "GPS", 68, "5G", "RIDING", cleaned, locatedAt, NOW, "batch-1");
     }
 
     private TrackingLocationDao.LatestRow latest(LocalDateTime locatedAt, double lat) {

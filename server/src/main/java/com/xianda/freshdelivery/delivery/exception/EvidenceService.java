@@ -3,6 +3,7 @@ package com.xianda.freshdelivery.delivery.exception;
 import com.xianda.freshdelivery.delivery.account.DeliveryTimes;
 import com.xianda.freshdelivery.delivery.common.DeliveryErrorCode;
 import com.xianda.freshdelivery.delivery.common.DeliveryException;
+import com.xianda.freshdelivery.delivery.common.EvidenceUrlSigner;
 import com.xianda.freshdelivery.delivery.domain.DeliveryEvidence;
 import com.xianda.freshdelivery.delivery.dto.EvidenceDto;
 import com.xianda.freshdelivery.delivery.task.TaskUnitOfWork;
@@ -42,15 +43,17 @@ public class EvidenceService {
     private final String storageRoot;
     private final Clock clock;
     private final TaskUnitOfWork unitOfWork;
+    private final EvidenceUrlSigner urlSigner;
 
     @Autowired
     public EvidenceService(ExceptionEvidenceDao evidenceDao,
                            ExceptionTaskQueryDao taskQueryDao,
                            ImageWatermarker watermarker,
                            @Value("${delivery.upload.delivery-path:data/uploads/delivery}") String storageRoot,
-                           TaskUnitOfWork unitOfWork) {
+                           TaskUnitOfWork unitOfWork,
+                           EvidenceUrlSigner urlSigner) {
         this(evidenceDao, taskQueryDao, watermarker, storageRoot,
-                Clock.system(DeliveryTimes.STORE_ZONE), unitOfWork);
+                Clock.system(DeliveryTimes.STORE_ZONE), unitOfWork, urlSigner);
     }
 
     public EvidenceService(ExceptionEvidenceDao evidenceDao,
@@ -58,7 +61,7 @@ public class EvidenceService {
                            ImageWatermarker watermarker,
                            String storageRoot) {
         this(evidenceDao, taskQueryDao, watermarker, storageRoot,
-                Clock.system(DeliveryTimes.STORE_ZONE), TaskUnitOfWork.direct());
+                Clock.system(DeliveryTimes.STORE_ZONE), TaskUnitOfWork.direct(), testSigner());
     }
 
     public EvidenceService(ExceptionEvidenceDao evidenceDao,
@@ -66,7 +69,7 @@ public class EvidenceService {
                            ImageWatermarker watermarker,
                            String storageRoot,
                            Clock clock) {
-        this(evidenceDao, taskQueryDao, watermarker, storageRoot, clock, TaskUnitOfWork.direct());
+        this(evidenceDao, taskQueryDao, watermarker, storageRoot, clock, TaskUnitOfWork.direct(), testSigner());
     }
 
     EvidenceService(ExceptionEvidenceDao evidenceDao,
@@ -74,10 +77,12 @@ public class EvidenceService {
                     ImageWatermarker watermarker,
                     String storageRoot,
                     Clock clock,
-                    TaskUnitOfWork unitOfWork) {
+                    TaskUnitOfWork unitOfWork,
+                    EvidenceUrlSigner urlSigner) {
         this.evidenceDao = evidenceDao;
         this.taskQueryDao = taskQueryDao;
         this.watermarker = watermarker;
+        this.urlSigner = urlSigner;
         this.storageRoot = storageRoot;
         this.clock = clock;
         this.unitOfWork = unitOfWork;
@@ -146,7 +151,7 @@ public class EvidenceService {
             }
             throw exception;
         }
-        return new EvidenceDto(id, evidence.fileUrl(), evidence.evidenceType(), DeliveryTimes.format(shotAt));
+        return toSignedDto(id, evidence.fileUrl(), evidence.evidenceType(), DeliveryTimes.format(shotAt));
     }
 
     private Long validateBinding(
@@ -188,9 +193,17 @@ public class EvidenceService {
 
     public List<EvidenceDto> search(Long taskId, String evidenceType, Long exceptionId, int limit) {
         return evidenceDao.search(taskId, evidenceType, exceptionId, limit).stream()
-                .map(evidence -> new EvidenceDto(evidence.id(), evidence.fileUrl(), evidence.evidenceType(),
+                .map(evidence -> toSignedDto(evidence.id(), evidence.fileUrl(), evidence.evidenceType(),
                         DeliveryTimes.format(evidence.capturedAt())))
                 .toList();
+    }
+
+    private EvidenceDto toSignedDto(long id, String fileUrl, String evidenceType, String capturedAt) {
+        return new EvidenceDto(id, urlSigner.sign(fileUrl), evidenceType, capturedAt);
+    }
+
+    private static EvidenceUrlSigner testSigner() {
+        return new EvidenceUrlSigner("evidence-test-secret", 1800L);
     }
 
     static String buildWatermarkText(LocalDateTime shotAt, Double lat, Double lng, String taskNo) {

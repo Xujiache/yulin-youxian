@@ -1,5 +1,6 @@
 package com.xianda.freshdelivery.delivery.task;
 
+import com.xianda.freshdelivery.delivery.common.EvidenceUrlSigner;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
 import javax.sql.DataSource;
@@ -51,7 +52,8 @@ final class DeliveryTaskTestHarness {
         this.stateMachine = new DeliveryTaskStateMachine();
         this.eventRecorder = new DeliveryTaskEventRecorder(eventDao);
         this.configPort = new JdbcDeliveryConfigPort(supportDao);
-        this.assembler = new DeliveryTaskAssembler(taskDao, waveStopDao, supportDao, configPort);
+        this.assembler = new DeliveryTaskAssembler(
+                taskDao, waveStopDao, supportDao, configPort, new EvidenceUrlSigner("task-test-secret", 1800L));
         this.orderBridgePort = new FakeOrderBridgePort();
         this.orderStatusBridge = new OrderStatusBridge(orderBridgePort, eventRecorder, eventDao, taskDao);
         this.idempotencyGuard = new TaskIdempotencyGuard(eventDao);

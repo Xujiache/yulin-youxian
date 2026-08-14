@@ -41,6 +41,7 @@ public class TrackingBoardDao {
             resultSet.getString("customer_remark"),
             resultSet.getString("delivery_instruction"),
             resultSet.getString("slot_label"),
+            localDate(resultSet, "delivery_date"),
             dateTime(resultSet, "promised_at"),
             dateTime(resultSet, "eta_at"),
             longOrNull(resultSet, "rider_id"),
@@ -69,7 +70,7 @@ public class TrackingBoardDao {
                        t.receiver_phone_masked, t.address_detail, t.address_lat, t.address_lng, t.area_label,
                        t.building_label, t.unit_no, t.floor_no, t.room_no, t.item_count, t.total_weight_kg,
                        t.package_count, t.cold_chain_level, t.goods_summary, t.customer_remark,
-                       t.delivery_instruction, t.slot_label, t.promised_at, t.eta_at, t.rider_id,
+                       t.delivery_instruction, t.slot_label, t.delivery_date, t.promised_at, t.eta_at, t.rider_id,
                        r.name AS rider_name, t.wave_id, w.wave_no, s.seq_no,
                        (SELECT COUNT(*) FROM delivery_wave_stop ws WHERE ws.wave_id = t.wave_id) AS total_stops,
                        t.dispatch_score, t.reassign_count, t.hold_until_at, t.created_at, t.picked_ready_at,
@@ -217,6 +218,11 @@ public class TrackingBoardDao {
         return resultSet.getTimestamp(column) == null ? null : resultSet.getTimestamp(column).toLocalDateTime();
     }
 
+    private static LocalDate localDate(ResultSet resultSet, String column) throws SQLException {
+        java.sql.Date value = resultSet.getDate(column);
+        return value == null ? null : value.toLocalDate();
+    }
+
     private static Long longOrNull(ResultSet resultSet, String column) throws SQLException {
         long value = resultSet.getLong(column);
         return resultSet.wasNull() ? null : value;
@@ -257,6 +263,7 @@ public class TrackingBoardDao {
             String customerRemark,
             String deliveryInstruction,
             String slotLabel,
+            LocalDate deliveryDate,
             LocalDateTime promisedAt,
             LocalDateTime etaAt,
             Long riderId,

@@ -62,6 +62,7 @@ class DeliveryBoardServiceTests {
         DeliveryBoardDto board = boardService.board();
 
         assertEquals(1, board.queues().pending().size());
+        assertEquals("2026-08-11", board.queues().pending().get(0).deliveryDate());
         assertEquals(1, board.queues().overtimeRisk().size());
         assertEquals(1, board.queues().openException().size());
         assertEquals(DeliveryBoardService.RISK_HIGH, board.queues().overtimeRisk().get(0).overtimeRisk());

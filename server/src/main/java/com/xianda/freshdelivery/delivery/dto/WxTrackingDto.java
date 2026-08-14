@@ -18,7 +18,11 @@ public record WxTrackingDto(
         RatingDto rating,
         String notice,
         /** 送达凭证照片。只在送达后返回，未送达时为空列表。 */
-        List<String> deliveryPhotos
+        List<String> deliveryPhotos,
+        /** 发车后最近 2–3 分钟清洗轨迹。未发车、终态或关闭短轨迹时为 null。 */
+        List<TrailPointDto> recentTrail,
+        /** 到本单的剩余路线几何。不含前序顾客姓名或地址。 */
+        RemainingRouteDto remainingRoute
 ) {
     public record TimelineNodeDto(
             String code,
@@ -51,7 +55,21 @@ public record WxTrackingDto(
             String lowerAt,
             String upperAt,
             Integer remainingSeconds,
-            Boolean isRange
+            Boolean isRange,
+            String source,
+            String updatedAt
+    ) {}
+
+    public record TrailPointDto(
+            Double lat,
+            Double lng,
+            String at
+    ) {}
+
+    public record RemainingRouteDto(
+            String polyline,
+            Integer distanceMeters,
+            List<GeoPointDto> points
     ) {}
 
     public record PollingDto(

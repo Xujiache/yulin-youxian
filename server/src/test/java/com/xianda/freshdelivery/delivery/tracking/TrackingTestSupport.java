@@ -135,11 +135,23 @@ final class TrackingTestSupport {
     }
 
     static void insertLocation(JdbcTemplate jdbcTemplate, long riderId, LocalDateTime locatedAt, double lat, double lng) {
+        insertLocation(jdbcTemplate, riderId, null, locatedAt, lat, lng, true);
+    }
+
+    static void insertLocation(
+            JdbcTemplate jdbcTemplate,
+            long riderId,
+            Long waveId,
+            LocalDateTime locatedAt,
+            double lat,
+            double lng,
+            boolean cleaned
+    ) {
         jdbcTemplate.update("""
-                        INSERT INTO rider_location (rider_id, lat, lng, located_at, motion_state, is_cleaned)
-                        VALUES (?, ?, ?, ?, 'RIDING', 1)
+                        INSERT INTO rider_location (rider_id, wave_id, lat, lng, located_at, motion_state, is_cleaned)
+                        VALUES (?, ?, ?, ?, ?, 'RIDING', ?)
                         """,
-                riderId, lat, lng, Timestamp.valueOf(locatedAt));
+                riderId, waveId, lat, lng, Timestamp.valueOf(locatedAt), cleaned ? 1 : 0);
     }
 
     static void insertLatest(
@@ -305,6 +317,12 @@ final class TrackingTestSupport {
             values.put(STORE_LNG, "120.7000000");
             values.put(ETA_DISPLAY_AS_RANGE, "true");
             values.put(ETA_RANGE_SPAN_MINUTES, "10");
+            values.put(ETA_EBIKE_SPEED_KMH, "15");
+            values.put(ETA_DEFAULT_HANDOFF_SECONDS, "180");
+            values.put(ETA_LIVE_RECOMPUTE_INTERVAL_SECONDS, "30");
+            values.put(DETOUR_FACTOR, "1.35");
+            values.put(CUSTOMER_TRAIL_SECONDS, "180");
+            values.put(CUSTOMER_TRAIL_MAX_POINTS, "20");
             values.put(PRIVACY_NUMBER_ENABLED, "false");
             values.put(MAX_CONCURRENT_TASK, "8");
             values.put(REQUIRE_VERIFY_CODE, "false");

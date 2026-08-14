@@ -188,6 +188,42 @@ public class TrackingLocationDao {
         return result;
     }
 
+    /**
+     * 顾客侧短轨迹：仅当前骑手、当前波次、清洗点，按时间正序，最多 {@code limit} 个最近点。
+     */
+    public List<HistoryPoint> customerTrail(
+            long riderId,
+            long waveId,
+            LocalDateTime from,
+            LocalDateTime to,
+            int limit
+    ) {
+        if (limit <= 0 || from == null || to == null || to.isBefore(from)) {
+            return List.of();
+        }
+        return jdbcTemplate.query("""
+                        SELECT lat, lng, speed_mps, bearing, motion_state, located_at
+                        FROM (
+                            SELECT lat, lng, speed_mps, bearing, motion_state, located_at
+                            FROM rider_location
+                            WHERE rider_id = ?
+                              AND wave_id = ?
+                              AND is_cleaned = 1
+                              AND located_at >= ?
+                              AND located_at <= ?
+                            ORDER BY located_at DESC
+                            LIMIT ?
+                        ) recent
+                        ORDER BY located_at
+                        """,
+                HISTORY_MAPPER,
+                riderId,
+                waveId,
+                TrackingTimes.timestamp(from),
+                TrackingTimes.timestamp(to),
+                limit);
+    }
+
     public List<HistoryPoint> history(long riderId, LocalDateTime from, LocalDateTime to, int hardLimit) {
         return jdbcTemplate.query("""
                         SELECT lat, lng, speed_mps, bearing, motion_state, located_at

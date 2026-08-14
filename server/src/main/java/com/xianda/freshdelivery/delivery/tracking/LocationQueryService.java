@@ -32,6 +32,30 @@ public class LocationQueryService {
         return locationDao.findLatest(riderId);
     }
 
+    /**
+     * 顾客专用短轨迹：当前骑手、当前波次、发车之后、窗口内的清洗点。
+     */
+    public List<TrackingLocationDao.HistoryPoint> customerRecentTrail(
+            long riderId,
+            Long waveId,
+            LocalDateTime departedAt,
+            LocalDateTime now,
+            int windowSeconds,
+            int maxPoints
+    ) {
+        if (waveId == null || departedAt == null || now == null || windowSeconds <= 0 || maxPoints <= 0) {
+            return List.of();
+        }
+        LocalDateTime from = now.minusSeconds(windowSeconds);
+        if (departedAt.isAfter(from)) {
+            from = departedAt;
+        }
+        if (from.isAfter(now)) {
+            return List.of();
+        }
+        return locationDao.customerTrail(riderId, waveId, from, now, maxPoints);
+    }
+
     public Map<Long, TrackingLocationDao.LatestRow> currentPositions(Collection<Long> riderIds) {
         return locationDao.findLatestOf(riderIds);
     }

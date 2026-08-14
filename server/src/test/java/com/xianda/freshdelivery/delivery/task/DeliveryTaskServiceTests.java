@@ -895,6 +895,20 @@ class DeliveryTaskServiceTests {
                 "重放的送达请求不能再触发一次统计刷新，统计本身也是重算而不是累加");
     }
 
+    @Test
+    void taskDetailSignsEvidenceFileUrlBecauseImageTagsCannotSendAuthorization() {
+        long taskId = pendingTask(1001L, "XD001");
+        harness.insertEvidence(taskId, RIDER_ID, "DELIVERED");
+
+        var detail = harness.taskService.taskDetail(taskId);
+
+        assertEquals(1, detail.evidences().size());
+        String url = detail.evidences().get(0).fileUrl();
+        assertTrue(url.startsWith("/uploads/delivery/test-" + taskId + ".jpg?"), url);
+        assertTrue(url.contains("e="), url);
+        assertTrue(url.contains("s="), url);
+    }
+
     private long pendingTask(long orderId, String orderNo) {
         harness.orderBridgePort.putOrder(orderId, orderNo, "备货中");
         return harness.taskService.pickReady(orderId, null, TaskOperator.admin("A")).taskId();

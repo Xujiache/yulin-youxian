@@ -54,7 +54,7 @@ class DeliveryMigrationTests {
     @Test
     void seedsEveryDeliveryConfigEntry() {
         Integer total = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM delivery_config", Integer.class);
-        assertEquals(78, total);
+        assertEquals(81, total);
         assertEquals(2, jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM delivery_config WHERE category = 'AMAP'", Integer.class));
         assertEquals("", jdbcTemplate.queryForObject(
@@ -81,6 +81,10 @@ class DeliveryMigrationTests {
         assertEquals("64", jdbcTemplate.queryForObject(
                 "SELECT config_value FROM delivery_config WHERE config_key = 'routing.amap_max_requests'",
                 String.class));
+        assertEquals("38.3864669", jdbcTemplate.queryForObject(
+                "SELECT config_value FROM delivery_config WHERE config_key = 'store.lat'", String.class));
+        assertEquals("106.0971672", jdbcTemplate.queryForObject(
+                "SELECT config_value FROM delivery_config WHERE config_key = 'store.lng'", String.class));
         assertTrue(jdbcTemplate.queryForObject(
                 "SELECT description FROM delivery_config WHERE config_key = 'amap.web_key'", String.class)
                 .contains("服务端"));
