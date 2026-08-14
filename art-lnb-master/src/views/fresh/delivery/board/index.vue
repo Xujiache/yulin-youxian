@@ -372,6 +372,7 @@
     batchAssignTasks,
     cancelTask,
     dispatchSlot,
+    RIDER_CONCURRENCY_LIMIT,
     forceRiderOffDuty,
     getDeliveryBoard,
     getDeliveryConfigs,
@@ -387,8 +388,10 @@
     type DeliveryMapSnapshot,
     type DispatchCandidate,
     type DispatchSuggestion,
-    type RiderBoardCard
+    type RiderBoardCard,
+    type SlotDispatchPayload
   } from '@/api/delivery'
+  import { isHttpError } from '@/utils/http/error'
   import DeliveryMap from '../components/DeliveryMap.vue'
   import DispatchSuggestPanel from '../components/DispatchSuggestPanel.vue'
   import RiderBoardCardItem from '../components/RiderBoardCard.vue'
@@ -1086,6 +1089,30 @@
     taskPickerSelection.value = rows
   }
 
+  /**
+   * 超载默认拒绝。服务端把具体数字写在错误信息里，这里弹第二次确认，
+   * 店主认了再带 confirmOverload 发一次。疲劳停派那类硬拒绝不会走到这里。
+   */
+  const dispatchSlotWithOverloadConfirm = async (payload: SlotDispatchPayload) => {
+    try {
+      await dispatchSlot(payload, { showErrorMessage: false })
+    } catch (error) {
+      if (!isHttpError(error) || error.code !== RIDER_CONCURRENCY_LIMIT) {
+        throw error
+      }
+      await ElMessageBox.confirm(
+        `${error.message}\n\n确认仍发给这个骑手？疲劳停派、不在岗、账号停用不能用这条确认绕过。`,
+        '超出承载上限',
+        {
+          type: 'warning',
+          confirmButtonText: '仍要发车',
+          cancelButtonText: '取消'
+        }
+      )
+      await dispatchSlot({ ...payload, confirmOverload: true }, { showErrorMessage: false })
+    }
+  }
+
   const confirmTaskPicker = async () => {
     const rider = taskPickerRider.value
     if (!rider || taskPickerSelection.value.length === 0) return
@@ -1109,8 +1136,7 @@
       )
       assigning.value = true
       if (slot) {
-        // 发车是整批成功或整批不动，服务端还会顺带触发路径规划
-        await dispatchSlot({ riderId: rider.riderId, slotLabel: slot, taskIds })
+        await dispatchSlotWithOverloadConfirm({ riderId: rider.riderId, slotLabel: slot, taskIds })
         ElMessage.success(`「${slot}」已发车`)
       } else {
         await batchAssignTasks({ taskIds, riderId: rider.riderId })

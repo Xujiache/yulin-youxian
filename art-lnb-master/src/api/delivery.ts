@@ -296,7 +296,12 @@ export interface SlotDispatchPayload {
   /** 期望时段。服务端会与任务实际时段核对，对不上直接拒绝 */
   slotLabel?: string
   taskIds: number[]
+  /** 明知超出并发/载重上限也照发。疲劳停派、不在岗、账号停用不能靠这个绕过 */
+  confirmOverload?: boolean
 }
+
+/** 与服务端 DeliveryErrorCode.RIDER_CONCURRENCY_LIMIT 对齐 */
+export const RIDER_CONCURRENCY_LIMIT = 1021
 
 export interface SlotDispatchResult {
   waveId: number
@@ -313,10 +318,11 @@ export interface SlotDispatchResult {
  * 与 batchAssignTasks 的区别是它不走打分和聚类 —— 店主已经决定好给谁，
  * 系统只负责原样落库并触发路径规划。整批成功或整批不动。
  */
-export function dispatchSlot(data: SlotDispatchPayload) {
+export function dispatchSlot(data: SlotDispatchPayload, options?: { showErrorMessage?: boolean }) {
   return request.post<SlotDispatchResult>({
     url: '/api/admin/delivery/waves/dispatch-slot',
-    data
+    data,
+    showErrorMessage: options?.showErrorMessage
   })
 }
 
