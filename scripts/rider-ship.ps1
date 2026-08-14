@@ -53,8 +53,11 @@ if ($Sequence -le 0) {
         if ([int]::TryParse((Get-Content $stateFile -Raw).Trim(), [ref]$saved)) { $known += $saved }
     }
     if (Test-Path $adb) {
+        $prevEap = $ErrorActionPreference
+        $ErrorActionPreference = 'Continue'
         $line = & $adb shell dumpsys package com.yulin.rider 2>$null |
             Select-String 'versionCode=(\d+)' | Select-Object -First 1
+        $ErrorActionPreference = $prevEap
         if ($line) { $known += [int]$line.Matches[0].Groups[1].Value }
     }
     $highest = ($known | Measure-Object -Maximum).Maximum
@@ -74,7 +77,10 @@ Write-Host "[ship] 序号 $Sequence，任务：$($tasks -join ' ')" -ForegroundC
 
 Push-Location $app
 try {
-    & .\gradlew.bat @gradleArgs 2>&1 | Tee-Object -FilePath $log | Out-Null
+    # Gradle 会把 SDK XML 版本提示写到 stderr。PowerShell 5.1 在 Stop 模式下
+    # 会把 NativeCommandError 当成终止异常，构建刚启动就被掐掉。
+    $argLine = ($gradleArgs | ForEach-Object { if ($_ -match '\s') { '"' + $_ + '"' } else { $_ } }) -join ' '
+    cmd /c "gradlew.bat $argLine > `"$log`" 2>&1"
     $code = $LASTEXITCODE
 } finally {
     Pop-Location
