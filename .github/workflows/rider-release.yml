@@ -1,0 +1,232 @@
+name: Rider Android release
+
+on:
+  push:
+    tags:
+      - "rider-v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "已存在的注解标签，例如 rider-v2026.08.15.1"
+        required: true
+      policy:
+        description: "OPTIONAL 或 FORCE。留空则看标签说明是否以 FORCE: 开头。"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rider-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Sign, upload and publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@v4
+      - uses: android-actions/setup-android@v3
+
+      - name: Parse version from annotated tag
+        id: version
+        shell: bash
+        env:
+          INPUT_TAG: ${{ github.event.inputs.tag }}
+          INPUT_POLICY: ${{ github.event.inputs.policy }}
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME}"
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" && -n "${INPUT_TAG}" ]]; then
+            tag="${INPUT_TAG}"
+          fi
+          if [[ ! "$tag" =~ ^rider-v([0-9]{4})\.([0-9]{2})\.([0-9]{2})\.([0-9]{1,2})$ ]]; then
+            echo "标签必须是 rider-vYYYY.MM.DD.N，当前: $tag" >&2
+            exit 1
+          fi
+          year="${BASH_REMATCH[1]}"
+          month="${BASH_REMATCH[2]}"
+          day="${BASH_REMATCH[3]}"
+          seq="${BASH_REMATCH[4]}"
+          yy="${year:2:2}"
+          version_code=$((10#$yy$month$day * 100 + 10#$seq))
+          version_name="${year}.${month}.${day}.${seq}"
+          notes="$(git tag -l --format='%(contents)' "$tag" | sed 's/[[:space:]]*$//')"
+          title="$(printf '%s\n' "$notes" | head -n 1)"
+          policy="${INPUT_POLICY^^}"
+          if [[ -z "$policy" ]]; then
+            if [[ "$notes" =~ ^FORCE([:：[:space:]]|$) ]]; then
+              policy="FORCE"
+              title="$(printf '%s\n' "$title" | sed -E 's/^FORCE[:：][[:space:]]*//')"
+            else
+              policy="OPTIONAL"
+            fi
+          fi
+          if [[ "$policy" != "OPTIONAL" && "$policy" != "FORCE" ]]; then
+            echo "policy 只能是 OPTIONAL 或 FORCE，当前: $policy" >&2
+            exit 1
+          fi
+          if [[ -z "$title" ]]; then
+            title="骑手端 ${version_name}"
+          fi
+          if [[ -z "$notes" ]]; then
+            notes="$title"
+          fi
+          {
+            echo "tag=$tag"
+            echo "version_code=$version_code"
+            echo "version_name=$version_name"
+            echo "policy=$policy"
+          } >> "$GITHUB_OUTPUT"
+          {
+            echo "title<<EOF"
+            printf '%s\n' "$title"
+            echo "EOF"
+            echo "notes<<EOF"
+            printf '%s\n' "$notes"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+          echo "Publishing $tag versionCode=$version_code policy=$policy"
+
+      - name: Test debug unit tests
+        working-directory: rider-android
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon --no-build-cache testDebugUnitTest \
+            -PRIDER_VERSION_CODE=${{ steps.version.outputs.version_code }} \
+            -PRIDER_VERSION_NAME=${{ steps.version.outputs.version_name }} \
+            -PRIDER_BUILD_SEQUENCE=$(printf '%s' '${{ steps.version.outputs.tag }}' | awk -F. '{print $NF}')
+
+      - name: Evaluate release signing secrets
+        id: signing
+        shell: bash
+        env:
+          RIDER_KEYSTORE_BASE64: ${{ secrets.RIDER_KEYSTORE_BASE64 }}
+          RIDER_KEYSTORE_PASSWORD: ${{ secrets.RIDER_KEYSTORE_PASSWORD }}
+          RIDER_KEY_ALIAS: ${{ secrets.RIDER_KEY_ALIAS }}
+          RIDER_KEY_PASSWORD: ${{ secrets.RIDER_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          present=0
+          for name in RIDER_KEYSTORE_BASE64 RIDER_KEYSTORE_PASSWORD RIDER_KEY_ALIAS RIDER_KEY_PASSWORD; do
+            if [[ -n "${!name}" ]]; then
+              present=$((present + 1))
+            fi
+          done
+          if (( present != 4 )); then
+            echo "自动发布需要完整的签名 Secrets（RIDER_KEYSTORE_BASE64 / PASSWORD / KEY_ALIAS / KEY_PASSWORD）。" >&2
+            exit 1
+          fi
+
+      - name: Materialize ephemeral release keystore
+        shell: bash
+        env:
+          RIDER_KEYSTORE_BASE64: ${{ secrets.RIDER_KEYSTORE_BASE64 }}
+        run: |
+          set -euo pipefail
+          install -d -m 700 rider-android/keystore
+          printf '%s' "$RIDER_KEYSTORE_BASE64" | base64 --decode > rider-android/keystore/ci-release.jks
+          chmod 600 rider-android/keystore/ci-release.jks
+
+      - name: Build and verify signed release APK
+        working-directory: rider-android
+        env:
+          RIDER_KEYSTORE_PATH: ${{ github.workspace }}/rider-android/keystore/ci-release.jks
+          RIDER_KEYSTORE_PASSWORD: ${{ secrets.RIDER_KEYSTORE_PASSWORD }}
+          RIDER_KEY_ALIAS: ${{ secrets.RIDER_KEY_ALIAS }}
+          RIDER_KEY_PASSWORD: ${{ secrets.RIDER_KEY_PASSWORD }}
+          RIDER_EXPECTED_CERT_SHA256: ${{ secrets.RIDER_EXPECTED_CERT_SHA256 }}
+          ORG_GRADLE_PROJECT_AMAP_KEY: ${{ secrets.AMAP_KEY }}
+          ORG_GRADLE_PROJECT_RIDER_EXPECTED_CERT_SHA256: ${{ secrets.RIDER_EXPECTED_CERT_SHA256 }}
+        run: |
+          ./gradlew --no-daemon :app:verifyReleaseSignature \
+            -PRIDER_VERSION_CODE=${{ steps.version.outputs.version_code }} \
+            -PRIDER_VERSION_NAME=${{ steps.version.outputs.version_name }} \
+            -PRIDER_BUILD_SEQUENCE=$(printf '%s' '${{ steps.version.outputs.tag }}' | awk -F. '{print $NF}') \
+            -PRIDER_EXPECTED_CERT_SHA256="${RIDER_EXPECTED_CERT_SHA256}"
+          (
+            cd app/build/outputs/apk/release
+            sha256sum *.apk > SHA256SUMS.txt
+          )
+
+      - name: Upload signed release APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: rider-release-${{ steps.version.outputs.tag }}
+          path: |
+            rider-android/app/build/outputs/apk/release/*.apk
+            rider-android/app/build/outputs/apk/release/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Publish to backend and notify riders
+        shell: bash
+        env:
+          RIDER_APP_PUBLISH_TOKEN: ${{ secrets.RIDER_APP_PUBLISH_TOKEN }}
+          RIDER_PUBLISH_BASE_URL: ${{ secrets.RIDER_PUBLISH_BASE_URL }}
+          TITLE: ${{ steps.version.outputs.title }}
+          NOTES: ${{ steps.version.outputs.notes }}
+          POLICY: ${{ steps.version.outputs.policy }}
+          VERSION_CODE: ${{ steps.version.outputs.version_code }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${RIDER_APP_PUBLISH_TOKEN}" ]]; then
+            echo "缺少 Secret RIDER_APP_PUBLISH_TOKEN，无法上传发布。" >&2
+            exit 1
+          fi
+          base="${RIDER_PUBLISH_BASE_URL:-https://hqhjxt.vip}"
+          base="${base%/}"
+          mapfile -t apks < <(printf '%s\n' rider-android/app/build/outputs/apk/release/*.apk)
+          (( ${#apks[@]} == 1 )) || { echo "expected exactly one release APK" >&2; exit 1; }
+          response="$(mktemp)"
+          http_code="$(
+            curl -sS --max-time 600 --fail-with-body -o "$response" -w '%{http_code}' \
+              -X POST \
+              -H "X-Rider-App-Publish-Token: ${RIDER_APP_PUBLISH_TOKEN}" \
+              -F "file=@${apks[0]};type=application/vnd.android.package-archive" \
+              -F "channel=production" \
+              -F "title=${TITLE}" \
+              -F "notes=${NOTES}" \
+              -F "policy=${POLICY}" \
+              -F "sourceSha=${GITHUB_SHA}" \
+              "${base}/api/internal/rider-app/releases"
+          )"
+          echo "publish HTTP ${http_code}"
+          python3 - "$response" "$VERSION_CODE" <<'PY'
+          import json, sys
+          payload = json.load(open(sys.argv[1], encoding="utf-8"))
+          if payload.get("code") not in (0, "0"):
+              raise SystemExit(f"publish rejected: {payload}")
+          data = payload.get("data") or {}
+          expected = int(sys.argv[2])
+          if int(data.get("versionCode") or 0) != expected:
+              raise SystemExit(f"published versionCode {data.get('versionCode')} != {expected}")
+          print(f"published id={data.get('id')} versionCode={data.get('versionCode')} status={data.get('status')}")
+          PY
+          latest_file="$(mktemp)"
+          curl -sS --max-time 30 --fail-with-body -o "$latest_file" \
+            "${base}/api/public/rider/app/latest?channel=production&versionCode=0"
+          python3 - "$latest_file" "$VERSION_CODE" <<'PY'
+          import json, sys
+          payload = json.load(open(sys.argv[1], encoding="utf-8"))
+          if payload.get("code") not in (0, "0"):
+              raise SystemExit(f"latest rejected: {payload}")
+          data = payload.get("data") or {}
+          expected = int(sys.argv[2])
+          if int(data.get("versionCode") or 0) != expected:
+              raise SystemExit(f"latest versionCode {data.get('versionCode')} != {expected}")
+          print("latest ok policy=%s versionCode=%s" % (data.get("policy"), data.get("versionCode")))
+          PY
