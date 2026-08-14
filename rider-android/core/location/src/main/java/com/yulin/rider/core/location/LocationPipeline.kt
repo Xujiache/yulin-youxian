@@ -122,6 +122,9 @@ class LocationPipeline @Inject constructor(
         val writer = launch {
             for (captured in inbox) {
                 buffer.append(captured.point, captured.context)
+                if (isActivelyDelivering() && captured.point.motionState == "RIDING") {
+                    uploader.requestImmediateFlush()
+                }
                 val pending = buffer.pendingCount()
                 _state.update { it.copy(pendingUploadCount = pending) }
             }
@@ -205,7 +208,7 @@ class LocationPipeline @Inject constructor(
 
     private suspend fun uploadLoop() {
         while (currentCoroutineContext().isActive) {
-            uploader.awaitNextSlot()
+            uploader.awaitNextSlot(isActivelyDelivering())
             val outcome = try {
                 uploader.uploadOnce(currentShiftId)
             } catch (e: CancellationException) {
@@ -242,6 +245,10 @@ class LocationPipeline @Inject constructor(
             source?.updateInterval(sampler.currentIntervalSeconds() * 1000L)
         }
         response.commands.forEach { _commands.emit(it) }
+    }
+
+    private fun isActivelyDelivering(): Boolean {
+        return currentTaskId != null || _shift.value.activeTaskCount > 0
     }
 
     private fun openSource(onFix: (RiderLocationFix) -> Unit): RiderLocationSource? {
