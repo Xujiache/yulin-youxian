@@ -45,6 +45,10 @@ object RiderPreferenceKeys {
      */
     val LAST_ROUTE = stringPreferencesKey("last_route")
     val LAST_ROUTE_AT = longPreferencesKey("last_route_at")
+
+    val UPDATE_SKIPPED_VERSION_CODE = longPreferencesKey("update_skipped_version_code")
+    val UPDATE_PARTIAL_ETAG = stringPreferencesKey("update_partial_etag")
+    val UPDATE_LAST_CHECK_AT = longPreferencesKey("update_last_check_at")
 }
 
 /** 深色模式三态。骑手白天强光、夜间骑行的取向完全不同,不能只跟随系统。 */

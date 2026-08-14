@@ -79,6 +79,9 @@ class BackupServiceTests {
         Files.createDirectories(data.resolve("uploads/delivery/202608"));
         Files.writeString(data.resolve("uploads/delivery/202608/evidence.jpg"), "evidence",
                 StandardCharsets.UTF_8);
+        Files.createDirectories(data.resolve("uploads/apk/production"));
+        Files.writeString(data.resolve("uploads/apk/production/dummy.apk"), "apk-bytes",
+                StandardCharsets.UTF_8);
         PrintJobService printing = mock(PrintJobService.class);
         Harness harness = service(jdbc, data, data.resolve("uploads/delivery"), 5,
                 new BackupFaultInjector(), printing);
@@ -95,11 +98,12 @@ class BackupServiceTests {
             assertEquals(SafeBackupEngine.durableTableNames(),
                     JSON.convertValue(manifest.path("durableTables"),
                             JSON.getTypeFactory().constructCollectionType(List.class, String.class)));
-            assertEquals(35, manifest.path("durableTables").size());
+            assertEquals(37, manifest.path("durableTables").size());
             for (String table : SafeBackupEngine.durableTableNames()) {
                 assertTrue(zipEntryNames(archive).contains("database/tables/" + table + ".jsonl"));
             }
             assertTrue(zipEntryNames(archive).contains("files/data/uploads/delivery/202608/evidence.jpg"));
+            assertFalse(zipEntryNames(archive).stream().anyMatch(name -> name.endsWith(".apk")));
 
             Matcher matcher = Pattern.compile("^backup-(\\d{8}-\\d{6})-\\d{3}-manual\\.zip$")
                     .matcher(metadata.fileName());

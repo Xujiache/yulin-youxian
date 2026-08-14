@@ -36,6 +36,9 @@ rider-android/**/build/
 rider-android/.gradle/
 .gradle/
 
+# Rider APK blobs live outside data/ so 5-minute backups do not ingest 70–100MB files.
+apk-releases/
+
 # Local scratch work: 联调令牌、截图、一次性脚本
 tmp/
 

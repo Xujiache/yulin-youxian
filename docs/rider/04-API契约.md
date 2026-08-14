@@ -411,7 +411,16 @@
 - `GET /api/rider/appeals?status=`
 - `GET /api/rider/messages?unreadOnly=&page=`
 - `POST /api/rider/messages/{id}/read` · `POST /api/rider/messages/{id}/ack`
-- `POST /api/rider/devices` —— 上报/更新设备与推送 `registrationId`
+- `POST /api/rider/devices` —— 上报/更新设备与推送 `registrationId`。可附带 `appVersionCode`、`managedMode`（`DEVICE_OWNER` / `PROFILE_OWNER` / `STANDARD`）、`lastUpdateStatus`、`lastUpdateVersionCode`。
+
+## 1.7 公开版本检查（登录前可用，不受配送关闸影响）
+
+- `GET /api/public/rider/app/latest?channel=&versionCode=` —— **不要**把 APK 元数据挂到 3 秒一次的 `GET /api/rider/sync`。
+  - `policy`: `NONE` / `OPTIONAL` / `FORCE`
+  - `fileUrl` 为公开不可变路径 `/uploads/apk/**`（可带站点前缀），安装器不能走 HMAC/Authorization
+  - 比较 `versionCode`，不是 versionName
+
+消息 `messageType=APP_UPDATE`、`linkType=APP`、`linkTarget=versionCode`。必须按骑手逐条发送。
 
 ---
 
@@ -601,7 +610,22 @@
 - `GET /api/admin/delivery/analytics/overview?from=&to=`
   —— 准时率、平均配送时长、人效、异常分布、楼栋难度榜、各时段单量热力
 - `GET /api/admin/delivery/analytics/riders?from=&to=`
-- `POST /api/admin/delivery/messages/broadcast` —— `{ title, content, riderIds[]?, priority, needVoice }`
+- `POST /api/admin/delivery/messages/broadcast` —— `{ title, content, riderIds[]?, priority, needVoice, messageType?, linkType?, linkTarget? }`
+
+## 2.x 骑手 Android 版本中心 `/api/admin/rider-app/**`
+
+- `GET /api/admin/rider-app/releases?channel=&page=` —— 分页历史
+- `GET /api/admin/rider-app/coverage?channel=` —— 近 7 日设备覆盖
+- `POST /api/admin/rider-app/releases` —— multipart 上传草稿（`file` + title/notes/policy）
+- `POST /api/admin/rider-app/releases/{id}/publish` —— 发布并全员推送
+- `POST /api/admin/rider-app/releases/{id}/notify` —— 重新推送
+- `POST /api/admin/rider-app/releases/{id}/disable` —— 停用
+- `POST /api/admin/rider-app/releases/{id}/activate` —— 回滚当前指针
+- `POST /api/internal/rider-app/releases` —— CI 令牌幂等上传并发布（header `X-Rider-App-Publish-Token`）
+
+已发布记录不可删除或改低 versionCode。同一 channel+versionCode+sha256 重复提交返回已有记录；hash 不同返回 409。
+
+---
 
 ---
 

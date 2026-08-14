@@ -347,8 +347,8 @@ public class RiderShiftService {
                 backgroundLocation, notification, batteryOptimizationIgnored, keepaliveGuideDone, now);
         if (updated == 0) {
             riderDeviceDao.upsert(new RiderDevice(
-                    null, riderId, request.deviceId().trim(), null, null, null, null, null, null,
-                    batteryOptimizationIgnored, notification, backgroundLocation, keepaliveGuideDone,
+                    null, riderId, request.deviceId().trim(), null, null, null, null, null, null, null, null, null,
+                    null, null, batteryOptimizationIgnored, notification, backgroundLocation, keepaliveGuideDone,
                     now, null, null), now);
         }
     }

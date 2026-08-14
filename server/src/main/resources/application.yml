@@ -19,11 +19,14 @@ spring:
     validate-on-migrate: true
   servlet:
     multipart:
-      max-file-size: 5MB
-      max-request-size: 10MB
+      max-file-size: 150MB
+      max-request-size: 160MB
 
 server:
   port: ${SERVER_PORT:8080}
+  tomcat:
+    max-http-form-post-size: 160MB
+    max-swallow-size: 160MB
 
 management:
   endpoints:
@@ -120,3 +123,12 @@ delivery:
     # 不配就每次启动随机生成，已发出的链接会在重启后失效；多实例必须显式配置成同一个值。
     signing-secret: ${DELIVERY_UPLOAD_SIGNING_SECRET:}
     signature-ttl-seconds: ${DELIVERY_UPLOAD_SIGNATURE_TTL_SECONDS:1800}
+  rider-app:
+    channel: ${RIDER_APP_CHANNEL:production}
+    package-name: ${RIDER_APP_PACKAGE_NAME:com.yulin.rider}
+    storage-path: ${RIDER_APP_STORAGE_PATH:../apk-releases}
+    public-base-url: ${RIDER_APP_PUBLIC_BASE_URL:https://hqhjxt.vip}
+    expected-cert-sha256: ${RIDER_EXPECTED_CERT_SHA256:}
+    publish-token: ${RIDER_APP_PUBLISH_TOKEN:}
+    max-file-size-bytes: ${RIDER_APP_MAX_FILE_SIZE_BYTES:157286400}
+    retain-apk-count: ${RIDER_APP_RETAIN_APK_COUNT:8}

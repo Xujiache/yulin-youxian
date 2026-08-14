@@ -33,6 +33,7 @@ include(":core:datastore")
 include(":core:model")
 include(":core:location")
 include(":core:push")
+include(":core:update")
 
 include(":feature:auth")
 include(":feature:shift")

@@ -4,4 +4,5 @@ package com.yulin.rider.core.common
 object RiderWorkNames {
     const val ACTION_SYNC = "rider-action-sync"
     const val ACTION_SYNC_PERIODIC = "rider-action-sync-periodic"
+    const val UPDATE_CHECK = "rider-update-check"
 }

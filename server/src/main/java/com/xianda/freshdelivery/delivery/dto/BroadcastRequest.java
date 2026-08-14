@@ -7,5 +7,12 @@ public record BroadcastRequest(
         String content,
         List<Long> riderIds,
         String priority,
-        Boolean needVoice
-) {}
+        Boolean needVoice,
+        String messageType,
+        String linkType,
+        String linkTarget
+) {
+    public BroadcastRequest(String title, String content, List<Long> riderIds, String priority, Boolean needVoice) {
+        this(title, content, riderIds, priority, needVoice, null, null, null);
+    }
+}

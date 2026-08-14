@@ -11,5 +11,9 @@ public record DeviceReportRequest(
         Boolean batteryOptimizationIgnored,
         Boolean notificationEnabled,
         Boolean backgroundLocationGranted,
-        Boolean keepaliveGuideDone
+        Boolean keepaliveGuideDone,
+        Integer appVersionCode,
+        String managedMode,
+        String lastUpdateStatus,
+        Integer lastUpdateVersionCode
 ) {}

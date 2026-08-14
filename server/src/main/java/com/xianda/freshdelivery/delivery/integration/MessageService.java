@@ -78,10 +78,16 @@ public class MessageService {
                 ? messageRecordDao.findActiveRiderIds()
                 : request.riderIds().stream().filter(java.util.Objects::nonNull).distinct().toList();
         boolean needVoice = Boolean.TRUE.equals(request.needVoice());
+        String messageType = request.messageType() == null || request.messageType().isBlank()
+                ? "ANNOUNCEMENT" : request.messageType().trim();
+        String linkType = request.linkType() == null || request.linkType().isBlank()
+                ? "NONE" : request.linkType().trim();
+        String linkTarget = request.linkTarget() == null || request.linkTarget().isBlank()
+                ? null : request.linkTarget().trim();
         List<Long> messageIds = new ArrayList<>(targets.size());
         for (Long riderId : targets) {
-            messageIds.add(send(riderId, "ANNOUNCEMENT", request.title(), request.content(),
-                    request.priority(), needVoice, "NONE", null));
+            messageIds.add(send(riderId, messageType, request.title(), request.content(),
+                    request.priority(), needVoice, linkType, linkTarget));
         }
         return messageIds;
     }

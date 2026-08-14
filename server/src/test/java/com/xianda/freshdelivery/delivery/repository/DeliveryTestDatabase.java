@@ -27,7 +27,8 @@ public final class DeliveryTestDatabase {
             "V16__store_coords_xingjing_police.sql",
             "V17__store_coords_xingjing_market.sql",
             "V18__store_coords_operator_pin.sql",
-            "V19__customer_live_tracking.sql"
+            "V19__customer_live_tracking.sql",
+            "V20__rider_app_release.sql"
     );
 
     private DeliveryTestDatabase() {
@@ -79,6 +80,7 @@ public final class DeliveryTestDatabase {
         result = result.replaceAll("(?i)ENGINE=InnoDB\\s+DEFAULT\\s+CHARSET=utf8mb4\\s+COLLATE=utf8mb4_unicode_ci", "");
         result = result.replaceAll("(?i)ON UPDATE CURRENT_TIMESTAMP\\(6\\)", "");
         result = result.replaceAll("(?i)TINYINT\\(1\\)", "TINYINT");
+        result = result.replaceAll("(?i)\\s+AFTER\\s+\\w+", "");
         result = result.replaceAll("(?i)\\bDATETIME\\(6\\)", "TIMESTAMP(6)");
         result = result.replaceAll("\\bJSON\\b", "LONGTEXT");
         result = result.replaceAll("\\bMEDIUMTEXT\\b", "LONGTEXT");

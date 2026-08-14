@@ -310,6 +310,16 @@ export const freshRoutes: AppRouteRecord = {
             icon: 'ri:database-2-line',
             keepAlive: false
           }
+        },
+        {
+          path: 'rider-app',
+          name: 'FreshRiderApp',
+          component: '/fresh/rider-app/index',
+          meta: {
+            title: '骑手 Android 版本',
+            icon: 'ri:android-line',
+            keepAlive: false
+          }
         }
       ]
     }

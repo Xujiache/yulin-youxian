@@ -21,6 +21,9 @@ public final class DeliveryErrorCode {
     public static final int LOCATION_REJECTED = 1040;
     public static final int PRIVACY_NUMBER_UNAVAILABLE = 1050;
     public static final int EVIDENCE_UPLOAD_FAILED = 1060;
+    public static final int APP_RELEASE_NOT_FOUND = 1070;
+    public static final int APP_RELEASE_STATUS_NOT_ALLOWED = 1071;
+    public static final int APP_RELEASE_INVALID = 1072;
 
     private DeliveryErrorCode() {
     }
@@ -46,6 +49,9 @@ public final class DeliveryErrorCode {
             case LOCATION_REJECTED -> "位置数据被拒";
             case PRIVACY_NUMBER_UNAVAILABLE -> "隐私号服务不可用";
             case EVIDENCE_UPLOAD_FAILED -> "凭证上传失败";
+            case APP_RELEASE_NOT_FOUND -> "版本记录不存在";
+            case APP_RELEASE_STATUS_NOT_ALLOWED -> "当前版本状态不允许该操作";
+            case APP_RELEASE_INVALID -> "安装包校验失败";
             default -> "配送服务异常";
         };
     }

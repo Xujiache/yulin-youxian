@@ -32,6 +32,13 @@ public class RiderDeviceService {
         String deviceId = request.deviceId().trim();
         LocalDateTime now = LocalDateTime.now(clock);
         RiderDevice existing = riderDeviceDao.find(riderId, deviceId).orElse(null);
+        String lastUpdateStatus = fallback(request.lastUpdateStatus(), existing == null ? null : existing.lastUpdateStatus());
+        Integer lastUpdateVersionCode = request.lastUpdateVersionCode() != null
+                ? request.lastUpdateVersionCode()
+                : existing == null ? null : existing.lastUpdateVersionCode();
+        LocalDateTime lastUpdateAt = request.lastUpdateStatus() != null && !request.lastUpdateStatus().isBlank()
+                ? now
+                : existing == null ? null : existing.lastUpdateAt();
         RiderDevice device = new RiderDevice(
                 existing == null ? null : existing.id(),
                 riderId,
@@ -40,6 +47,12 @@ public class RiderDeviceService {
                 fallback(request.model(), existing == null ? null : existing.model()),
                 fallback(request.osVersion(), existing == null ? null : existing.osVersion()),
                 fallback(request.appVersion(), existing == null ? null : existing.appVersion()),
+                request.appVersionCode() != null ? request.appVersionCode()
+                        : existing == null ? null : existing.appVersionCode(),
+                fallback(request.managedMode(), existing == null ? null : existing.managedMode()),
+                lastUpdateStatus,
+                lastUpdateVersionCode,
+                lastUpdateAt,
                 fallback(request.pushRegistrationId(), existing == null ? null : existing.pushRegistrationId()),
                 fallback(request.pushVendor(), existing == null ? null : existing.pushVendor()),
                 fallback(request.batteryOptimizationIgnored(), existing == null ? null : existing.batteryOptimizationIgnored()),

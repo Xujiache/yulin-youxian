@@ -12,9 +12,10 @@ import org.springframework.stereotype.Repository;
 @Repository
 public class RiderDeviceDao {
     private static final String COLUMNS = """
-            id, rider_id, device_id, manufacturer, model, os_version, app_version, push_registration_id,
-            push_vendor, battery_optimization_ignored, notification_enabled, background_location_granted,
-            keepalive_guide_done, last_seen_at, created_at, updated_at
+            id, rider_id, device_id, manufacturer, model, os_version, app_version, app_version_code,
+            managed_mode, last_update_status, last_update_version_code, last_update_at,
+            push_registration_id, push_vendor, battery_optimization_ignored, notification_enabled,
+            background_location_granted, keepalive_guide_done, last_seen_at, created_at, updated_at
             """;
 
     private static final RowMapper<RiderDevice> ROW_MAPPER = (resultSet, rowNum) -> new RiderDevice(
@@ -25,6 +26,11 @@ public class RiderDeviceDao {
             resultSet.getString("model"),
             resultSet.getString("os_version"),
             resultSet.getString("app_version"),
+            JdbcValues.intOrNull(resultSet, "app_version_code"),
+            resultSet.getString("managed_mode"),
+            resultSet.getString("last_update_status"),
+            JdbcValues.intOrNull(resultSet, "last_update_version_code"),
+            JdbcValues.dateTime(resultSet, "last_update_at"),
             resultSet.getString("push_registration_id"),
             resultSet.getString("push_vendor"),
             resultSet.getBoolean("battery_optimization_ignored"),
@@ -97,6 +103,10 @@ public class RiderDeviceDao {
         return jdbcTemplate.update("""
                         UPDATE rider_device SET
                             manufacturer = ?, model = ?, os_version = ?, app_version = ?,
+                            app_version_code = ?, managed_mode = ?,
+                            last_update_status = COALESCE(?, last_update_status),
+                            last_update_version_code = COALESCE(?, last_update_version_code),
+                            last_update_at = COALESCE(?, last_update_at),
                             push_registration_id = ?, push_vendor = ?, battery_optimization_ignored = ?,
                             notification_enabled = ?, background_location_granted = ?, keepalive_guide_done = ?,
                             last_seen_at = ?, updated_at = CURRENT_TIMESTAMP(6)
@@ -106,6 +116,11 @@ public class RiderDeviceDao {
                 device.model(),
                 device.osVersion(),
                 device.appVersion(),
+                device.appVersionCode(),
+                device.managedMode(),
+                device.lastUpdateStatus(),
+                device.lastUpdateVersionCode(),
+                JdbcValues.timestamp(device.lastUpdateAt()),
                 device.pushRegistrationId(),
                 device.pushVendor(),
                 Boolean.TRUE.equals(device.batteryOptimizationIgnored()),
@@ -121,9 +136,10 @@ public class RiderDeviceDao {
         jdbcTemplate.update("""
                         INSERT INTO rider_device
                             (rider_id, device_id, manufacturer, model, os_version, app_version,
-                             push_registration_id, push_vendor, battery_optimization_ignored,
+                             app_version_code, managed_mode, last_update_status, last_update_version_code,
+                             last_update_at, push_registration_id, push_vendor, battery_optimization_ignored,
                              notification_enabled, background_location_granted, keepalive_guide_done, last_seen_at)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         """,
                 device.riderId(),
                 device.deviceId(),
@@ -131,6 +147,11 @@ public class RiderDeviceDao {
                 device.model(),
                 device.osVersion(),
                 device.appVersion(),
+                device.appVersionCode(),
+                device.managedMode(),
+                device.lastUpdateStatus(),
+                device.lastUpdateVersionCode(),
+                JdbcValues.timestamp(device.lastUpdateAt()),
                 device.pushRegistrationId(),
                 device.pushVendor(),
                 Boolean.TRUE.equals(device.batteryOptimizationIgnored()),

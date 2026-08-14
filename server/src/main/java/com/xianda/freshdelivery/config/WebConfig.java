@@ -27,6 +27,7 @@ public class WebConfig implements WebMvcConfigurer {
     private final SecureUploadInterceptor secureUploadInterceptor;
     private final Path dataDirectory;
     private final Path deliveryUploadDirectory;
+    private final Path riderApkDirectory;
 
     public WebConfig(
             WxAuthInterceptor wxAuthInterceptor,
@@ -37,7 +38,8 @@ public class WebConfig implements WebMvcConfigurer {
             SessionRevocationGuard sessionRevocationGuard,
             SecureUploadInterceptor secureUploadInterceptor,
             @Value("${backup.data-directory:data}") String dataDirectory,
-            @Value("${delivery.upload.delivery-path:data/uploads/delivery}") String deliveryUploadDirectory
+            @Value("${delivery.upload.delivery-path:data/uploads/delivery}") String deliveryUploadDirectory,
+            @Value("${delivery.rider-app.storage-path:../apk-releases}") String riderApkDirectory
     ) {
         this.wxAuthInterceptor = wxAuthInterceptor;
         this.adminAuthInterceptor = adminAuthInterceptor;
@@ -48,6 +50,7 @@ public class WebConfig implements WebMvcConfigurer {
         this.secureUploadInterceptor = secureUploadInterceptor;
         this.dataDirectory = resolvePath(dataDirectory);
         this.deliveryUploadDirectory = resolvePath(deliveryUploadDirectory);
+        this.riderApkDirectory = resolvePath(riderApkDirectory);
     }
 
     @Override
@@ -100,6 +103,11 @@ public class WebConfig implements WebMvcConfigurer {
         registry.addResourceHandler("/uploads/delivery/**")
                 .addResourceLocations(directoryLocation(deliveryUploadDirectory))
                 .setCacheControl(CacheControl.noStore());
+        registry.addResourceHandler("/uploads/apk/**")
+                .addResourceLocations(directoryLocation(riderApkDirectory))
+                .setCacheControl(CacheControl.maxAge(Duration.ofDays(365))
+                        .cachePublic()
+                        .immutable());
         registry.addResourceHandler("/uploads/refunds/**")
                 .addResourceLocations(directoryLocation(dataDirectory.resolve("uploads/refunds")))
                 .setCacheControl(CacheControl.noStore());

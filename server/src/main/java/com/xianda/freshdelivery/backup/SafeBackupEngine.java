@@ -117,7 +117,9 @@ public final class SafeBackupEngine {
             "delivery_zone",
             "rider_message",
             "privacy_number_binding",
-            "delivery_rating"
+            "delivery_rating",
+            "rider_app_release",
+            "rider_app_channel"
     );
     private static final List<String> LOTTERY_TABLES = List.of(
             "marketing_lottery_campaign",
@@ -757,7 +759,14 @@ public final class SafeBackupEngine {
                 if (!Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) {
                     continue;
                 }
+                String fileName = path.getFileName().toString();
+                if (fileName.toLowerCase(Locale.ROOT).endsWith(".apk")) {
+                    continue;
+                }
                 String relative = root.relativize(path).toString().replace('\\', '/');
+                if (relative.contains("uploads/apk/") || relative.contains("apk-releases/")) {
+                    continue;
+                }
                 putSource(output, targetPrefix + relative, path);
             }
         }

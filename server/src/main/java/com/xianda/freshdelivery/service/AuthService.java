@@ -277,6 +277,14 @@ public class AuthService {
     }
 
     public Optional<AdminSession> resolveAdmin(String authorization) {
+        return resolveStoredAdmin(authorization).map(StoredAdminSession::identity);
+    }
+
+    public Optional<String> resolveAdminUsername(String authorization) {
+        return resolveStoredAdmin(authorization).map(StoredAdminSession::principal);
+    }
+
+    private Optional<StoredAdminSession> resolveStoredAdmin(String authorization) {
         String token = bearerToken(authorization);
         if (token == null || !token.startsWith("admin_")) {
             return Optional.empty();
@@ -291,7 +299,7 @@ public class AuthService {
             revokeAdminSession(session);
             return Optional.empty();
         }
-        return Optional.of(session.identity());
+        return Optional.of(session);
     }
 
     public AdminProfileDto adminProfile(String authorization) {

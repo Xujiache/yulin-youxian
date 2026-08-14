@@ -38,13 +38,17 @@ class RiderDeviceAndTrackTests {
     void upsertsDeviceAndKeepsPushRegistrationId() {
         riderDeviceService.report(RIDER_ID, new DeviceReportRequest(
                 "android-1", "Xiaomi", "23127PN0CC", "16", "1.0.0",
-                "jpush-registration-1", "JPUSH", true, true, true, true));
+                "jpush-registration-1", "JPUSH", true, true, true, true,
+                100, "STANDARD", null, null));
 
         RiderDevice stored = riderDeviceService.report(RIDER_ID, new DeviceReportRequest(
-                "android-1", null, null, null, "1.0.1", null, null, null, null, null, null));
+                "android-1", null, null, null, "1.0.1", null, null, null, null, null, null,
+                101, null, null, null));
 
         assertEquals(1, jdbcTemplate.queryForObject("SELECT COUNT(*) FROM rider_device", Integer.class));
         assertEquals("1.0.1", stored.appVersion());
+        assertEquals(101, stored.appVersionCode());
+        assertEquals("STANDARD", stored.managedMode());
         assertEquals("Xiaomi", stored.manufacturer());
         assertEquals("jpush-registration-1", stored.pushRegistrationId());
         assertTrue(stored.notificationEnabled());
@@ -53,7 +57,8 @@ class RiderDeviceAndTrackTests {
     @Test
     void rejectsDeviceReportWithoutDeviceId() {
         assertThrows(DeliveryException.class, () -> riderDeviceService.report(RIDER_ID,
-                new DeviceReportRequest(null, null, null, null, null, null, null, null, null, null, null)));
+                new DeviceReportRequest(null, null, null, null, null, null, null, null, null, null, null,
+                        null, null, null, null)));
     }
 
     @Test

@@ -52,6 +52,24 @@ class DeliveryMigrationTests {
     }
 
     @Test
+    void createsRiderAppReleaseTablesAndDeviceUpdateColumns() {
+        assertEquals(1, jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.tables WHERE LOWER(table_schema) = 'public' AND LOWER(table_name) = 'rider_app_release'",
+                Integer.class));
+        assertEquals(1, jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.tables WHERE LOWER(table_schema) = 'public' AND LOWER(table_name) = 'rider_app_channel'",
+                Integer.class));
+        assertEquals(1, jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM rider_app_channel WHERE channel = 'production'", Integer.class));
+        Integer columns = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*) FROM information_schema.columns
+                WHERE LOWER(table_schema) = 'public' AND LOWER(table_name) = 'rider_device'
+                  AND LOWER(column_name) IN ('app_version_code', 'managed_mode', 'last_update_status')
+                """, Integer.class);
+        assertEquals(3, columns);
+    }
+
+    @Test
     void seedsEveryDeliveryConfigEntry() {
         Integer total = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM delivery_config", Integer.class);
         assertEquals(81, total);
