@@ -27,7 +27,7 @@ cd rider-android
 
 ## 镜像说明(中国大陆网络,成败关键)
 
-- `settings.gradle.kts` 中 `pluginManagement` 与 `dependencyResolutionManagement` 均把阿里云镜像(public / google / gradle-plugin)置于 `google()`、`mavenCentral()` 之前。
+- `settings.gradle.kts` 中 KSP 固定走 Maven Central（阿里云对该 plugin marker 会 502）；其余依赖官方源在前，阿里云作回落。
 - `gradle/gradle-wrapper.properties` 的 `distributionUrl` 指向 `https://mirrors.cloud.tencent.com/gradle/`。
 
 ## 模块图
@@ -52,5 +52,5 @@ core/common  designsystem  network  database  datastore  model  location  push
 ## 已知暂缓项(TODO)
 
 - **极光推送已注释暂缓**(`core/push/build.gradle.kts`):阿里云镜像最高只有 jpush 4.0.5 / jcore 2.7.4,其 AAR 与 targetSdk 36 不兼容(PushReceiver 缺 `android:exported`,Android 12+ 强制拒绝)。待官方 5.x 可解析后启用;AppKey 占位符已留在 `app/build.gradle.kts` 的 `manifestPlaceholders`。
-- 高德 navi-3dmap 已内置 3dmap 与定位类,故未单独引入 `com.amap.api:3dmap` / `com.amap.api:location`(会重复类);API Key 的 `meta-data` 待申请后补。
+- 高德 navi-3dmap 已内置 3dmap 与定位类,故未单独引入 `com.amap.api:3dmap` / `com.amap.api:location`(会重复类)。Android Key 走仓库外 `~/.yulin/rider-publish.env`，用 `scripts/rider-configure-amap-key.sh` 写入；正式发布用仓库根目录 `scripts/rider-publish.sh`。
 - 通知渠道自定义提示音(`res/raw/new_task.mp3`)资源就位后需新建渠道 id 迁移(渠道声音创建后不可改)。

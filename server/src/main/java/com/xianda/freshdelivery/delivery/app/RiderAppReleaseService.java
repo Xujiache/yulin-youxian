@@ -161,7 +161,7 @@ public class RiderAppReleaseService {
         }
     }
 
-    public RiderAppReleaseDto publishFromCi(
+    public RiderAppReleaseDto publishAutomated(
             MultipartFile file,
             String channel,
             String title,

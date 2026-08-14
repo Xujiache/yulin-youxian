@@ -106,25 +106,44 @@ class RiderAppReleaseServiceTests {
     }
 
     @Test
-    void ciPublishIsIdempotentForSameHashAndConflictsOnDifferentHash() {
+    void localAutomatedPublishRecordsOperatorAndIsIdempotentForSameHash() {
         inspector.versionCode = 26081504;
-        RiderAppReleaseDto first = service.publishFromCi(apk("same"), "production", "CI", "log", "OPTIONAL", "deadbeef", "github-actions");
-        RiderAppReleaseDto second = service.publishFromCi(apk("same"), "production", "CI", "log", "OPTIONAL", "deadbeef", "github-actions");
+        RiderAppReleaseDto first = service.publishAutomated(
+                apk("same"), "production", "本机", "log", "OPTIONAL", "deadbeef", "server-local");
+        assertEquals("server-local", first.publishedBy());
+        RiderAppReleaseDto second = service.publishAutomated(
+                apk("same"), "production", "本机", "log", "OPTIONAL", "deadbeef", "server-local");
         assertEquals(first.id(), second.id());
         assertEquals("PUBLISHED", second.status());
+        assertEquals("server-local", second.publishedBy());
+    }
+
+    @Test
+    void automatedPublishConflictsWhenSameVersionHasDifferentHash() {
+        inspector.versionCode = 26081504;
+        service.publishAutomated(apk("same"), "production", "本机", "log", "OPTIONAL", "deadbeef", "server-local");
         MockMultipartFile other = new MockMultipartFile("file", "other.apk", "application/vnd.android.package-archive",
                 "different-bytes".getBytes(StandardCharsets.UTF_8));
         DeliveryException conflict = assertThrows(DeliveryException.class,
-                () -> service.publishFromCi(other, "production", "CI", "log", "OPTIONAL", "deadbeef", "github-actions"));
+                () -> service.publishAutomated(other, "production", "本机", "log", "OPTIONAL", "deadbeef", "server-local"));
         assertEquals(409, conflict.code());
+    }
+
+    @Test
+    void automatedPublishRejectsCertMismatch() {
+        inspector.versionCode = 26081507;
+        inspector.certSha256 = "b".repeat(64);
+        DeliveryException mismatch = assertThrows(DeliveryException.class,
+                () -> service.publishAutomated(apk("bad-cert"), "production", "本机", "log", "OPTIONAL", "abc", "server-local"));
+        assertTrue(mismatch.getMessage().contains("证书"));
     }
 
     @Test
     void disableMovesPointerAndHistoryStillListsTheRow() {
         inspector.versionCode = 26081505;
-        RiderAppReleaseDto first = service.publishFromCi(apk("a"), "production", "A", "a", "OPTIONAL", null, "admin");
+        RiderAppReleaseDto first = service.publishAutomated(apk("a"), "production", "A", "a", "OPTIONAL", null, "admin");
         inspector.versionCode = 26081506;
-        RiderAppReleaseDto second = service.publishFromCi(apk("b"), "production", "B", "b", "OPTIONAL", null, "admin");
+        RiderAppReleaseDto second = service.publishAutomated(apk("b"), "production", "B", "b", "OPTIONAL", null, "admin");
         service.disable(second.id(), "admin");
         PageResult<RiderAppReleaseDto> history = service.list("production", 1, 20);
         assertTrue(history.total() >= 2);

@@ -29,6 +29,8 @@ alwaysApply: true
 
 **小程序只报告改动，由用户手动发布，不要自动部署。**
 
+唯一允许的 `pm2 save`：把 `RIDER_APP_PUBLISH_TOKEN` / `RIDER_EXPECTED_CERT_SHA256` 注入当前进程后，用 `scripts/rider-publish.sh --sync-pm2-env` 持久化 dump。不要把这两项写进 `deploy/pm2/ecosystem.config.cjs`。
+
 ## 4. 骑手 Android 额外收尾
 
-Android 改动还要遵守 `rider-build-and-push.mdc`：本机无 Android SDK 时不要假装打了签名包；用注解标签 `rider-vYYYY.MM.DD.N` 走 GitHub Actions 签名并自动发布。
+Android 改动还要遵守 `rider-build-and-push.mdc`：在本机用 `scripts/rider-publish.sh` 签名并发布。不要打 `rider-v*` 标签，不要让普通 CI 接触正式私钥。

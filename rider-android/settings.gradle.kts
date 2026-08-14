@@ -1,23 +1,31 @@
 pluginManagement {
     repositories {
-        // 中国大陆网络:阿里云镜像置前,成败关键
+        // KSP 2.3.11 的 plugin marker 在阿里云上会 502，必须先走官方源。
+        exclusiveContent {
+            forRepository { mavenCentral() }
+            filter { includeGroup("com.google.devtools.ksp") }
+        }
+        mavenCentral()
+        google()
+        gradlePluginPortal()
         maven("https://maven.aliyun.com/repository/gradle-plugin")
         maven("https://maven.aliyun.com/repository/public")
         maven("https://maven.aliyun.com/repository/google")
-        google()
-        mavenCentral()
-        gradlePluginPortal()
     }
 }
 
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
+        exclusiveContent {
+            forRepository { mavenCentral() }
+            filter { includeGroup("com.google.devtools.ksp") }
+        }
+        mavenCentral()
+        google()
         maven("https://maven.aliyun.com/repository/public")
         maven("https://maven.aliyun.com/repository/google")
         maven("https://maven.aliyun.com/repository/gradle-plugin")
-        google()
-        mavenCentral()
     }
 }
 

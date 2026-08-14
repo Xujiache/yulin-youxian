@@ -54,7 +54,7 @@ jobs:
         run: npm run build
 
   android:
-    name: Android tests and signed gate
+    name: Android tests and debug APK
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -82,76 +82,6 @@ jobs:
             rider-android/app/build/outputs/apk/debug/SHA256SUMS.txt
           if-no-files-found: error
           retention-days: 14
-      - name: Evaluate release signing secrets
-        id: signing
-        shell: bash
-        env:
-          RIDER_KEYSTORE_BASE64: ${{ secrets.RIDER_KEYSTORE_BASE64 }}
-          RIDER_KEYSTORE_PASSWORD: ${{ secrets.RIDER_KEYSTORE_PASSWORD }}
-          RIDER_KEY_ALIAS: ${{ secrets.RIDER_KEY_ALIAS }}
-          RIDER_KEY_PASSWORD: ${{ secrets.RIDER_KEY_PASSWORD }}
-        run: |
-          set -euo pipefail
-          present=0
-          for name in RIDER_KEYSTORE_BASE64 RIDER_KEYSTORE_PASSWORD RIDER_KEY_ALIAS RIDER_KEY_PASSWORD; do
-            if [[ -n "${!name}" ]]; then
-              present=$((present + 1))
-            fi
-          done
-          if (( present == 0 )); then
-            echo "enabled=false" >> "$GITHUB_OUTPUT"
-            echo "Release signing skipped: no signing secrets are configured; debug remains mandatory."
-          elif (( present == 4 )); then
-            echo "enabled=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "Signing secrets are partially configured; refusing an unsigned release artifact." >&2
-            exit 1
-          fi
-      - name: Materialize ephemeral release keystore
-        if: steps.signing.outputs.enabled == 'true'
-        shell: bash
-        env:
-          RIDER_KEYSTORE_BASE64: ${{ secrets.RIDER_KEYSTORE_BASE64 }}
-        run: |
-          set -euo pipefail
-          install -d -m 700 rider-android/keystore
-          printf '%s' "$RIDER_KEYSTORE_BASE64" | base64 --decode > rider-android/keystore/ci-release.jks
-          chmod 600 rider-android/keystore/ci-release.jks
-      - name: Build signed release APK
-        if: steps.signing.outputs.enabled == 'true'
-        working-directory: rider-android
-        env:
-          RIDER_KEYSTORE_PATH: ${{ github.workspace }}/rider-android/keystore/ci-release.jks
-          RIDER_KEYSTORE_PASSWORD: ${{ secrets.RIDER_KEYSTORE_PASSWORD }}
-          RIDER_KEY_ALIAS: ${{ secrets.RIDER_KEY_ALIAS }}
-          RIDER_KEY_PASSWORD: ${{ secrets.RIDER_KEY_PASSWORD }}
-          ORG_GRADLE_PROJECT_AMAP_KEY: ${{ secrets.AMAP_KEY }}
-        run: ./gradlew --no-daemon :app:verifyReleaseSignature
-      - name: Verify APK signature and checksum
-        if: steps.signing.outputs.enabled == 'true'
-        shell: bash
-        run: |
-          set -euo pipefail
-          mapfile -t apksigners < <(printf '%s\n' "$ANDROID_HOME"/build-tools/*/apksigner | sort -V)
-          apksigner="${apksigners[${#apksigners[@]}-1]}"
-          [[ -x "$apksigner" ]] || { echo "apksigner not found" >&2; exit 1; }
-          mapfile -t apks < <(printf '%s\n' rider-android/app/build/outputs/apk/release/*.apk)
-          (( ${#apks[@]} == 1 )) || { echo "expected exactly one release APK" >&2; exit 1; }
-          "$apksigner" verify --verbose --print-certs "${apks[0]}"
-          (
-            cd rider-android/app/build/outputs/apk/release
-            sha256sum *.apk > SHA256SUMS.txt
-          )
-      - name: Upload signed release APK
-        if: steps.signing.outputs.enabled == 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          name: rider-release-signed-${{ github.sha }}
-          path: |
-            rider-android/app/build/outputs/apk/release/*.apk
-            rider-android/app/build/outputs/apk/release/SHA256SUMS.txt
-          if-no-files-found: error
-          retention-days: 30
 
   miniprogram:
     name: Mini-program Node check
@@ -220,7 +150,9 @@ jobs:
             deploy/scripts/install-release.sh \
             deploy/scripts/go-live.sh \
             deploy/scripts/rollback.sh \
-            deploy/scripts/restore-drill.sh
+            deploy/scripts/restore-drill.sh \
+            scripts/rider-publish.sh \
+            scripts/rider-configure-amap-key.sh
           node --check deploy/pm2/ecosystem.config.cjs
       - name: Assert Flyway V11 and 36-table readiness contract
         run: python3 .github/scripts/check_release_contract.py

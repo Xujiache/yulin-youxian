@@ -30,18 +30,30 @@ public class InternalRiderAppController {
     }
 
     @PostMapping("/releases")
-    public ApiResponse<RiderAppReleaseDto> publishFromCi(
+    public ApiResponse<RiderAppReleaseDto> publishAutomated(
             @RequestHeader(value = "X-Rider-App-Publish-Token", required = false) String token,
             @RequestParam("file") MultipartFile file,
             @RequestParam(required = false) String channel,
             @RequestParam(required = false) String title,
             @RequestParam(required = false) String notes,
             @RequestParam(required = false) String policy,
-            @RequestParam(required = false) String sourceSha
+            @RequestParam(required = false) String sourceSha,
+            @RequestParam(required = false) String operator
     ) {
         requireToken(token);
-        return ApiResponse.ok(riderAppReleaseService.publishFromCi(
-                file, channel, title, notes, policy, sourceSha, "github-actions"));
+        return ApiResponse.ok(riderAppReleaseService.publishAutomated(
+                file, channel, title, notes, policy, sourceSha, resolveOperator(operator)));
+    }
+
+    static String resolveOperator(String operator) {
+        if (operator == null || operator.isBlank()) {
+            return "server-local";
+        }
+        String normalized = operator.trim();
+        if ("server-local".equals(normalized) || "windows-emergency".equals(normalized)) {
+            return normalized;
+        }
+        return "server-local";
     }
 
     private void requireToken(String token) {

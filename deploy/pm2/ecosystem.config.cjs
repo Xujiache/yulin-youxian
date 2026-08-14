@@ -46,6 +46,8 @@ module.exports = {
       merge_logs: true,
       out_file: path.join(logRoot, 'server-out.log'),
       error_file: path.join(logRoot, 'server-error.log'),
+      // RIDER_APP_PUBLISH_TOKEN / RIDER_EXPECTED_CERT_SHA256 只注入运行中的 PM2
+      // 进程并写入 dump，不要写进这份入库配置。
       env: {
         TZ: 'Asia/Shanghai',
         SERVER_ADDRESS: '127.0.0.1',

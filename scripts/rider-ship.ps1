@@ -1,12 +1,13 @@
-﻿# 骑手端一键出包：跑测试 + 打 release + 校验签名 + 输出可复制的产物路径。
-#
-# 把原来五六条命令合成一步。真正拖慢节奏的不是 Gradle（改叶子模块 20 秒上下），
-# 是来回敲命令的往返。
+﻿# 骑手端 Windows 应急出包：跑测试 + 打 release + 校验签名 + 输出产物路径。
+# 这不是正式 OTA 入口。生产发布用 Linux 本机 scripts/rider-publish.sh。
 #
 #   pwsh scripts/rider-ship.ps1              # 自动挑当日序号
 #   pwsh scripts/rider-ship.ps1 -Sequence 7  # 指定序号
 #   pwsh scripts/rider-ship.ps1 -Arm64Only   # 只打 arm64，体积减到约 70MB 好走微信
 #   pwsh scripts/rider-ship.ps1 -SkipTests   # 只在赶时间且刚跑过测试时用
+#
+# versionName=YYYY.MM.DD.N，versionCode=YYMMDDNN，日期按 Asia/Shanghai，
+# 与本机 rider-publish.sh 对齐。不要再产出 0.1.0。
 [CmdletBinding()]
 param(
     [int]$Sequence = 0,
@@ -38,15 +39,21 @@ function Get-ApkVersionCode([string]$path) {
 # 已发出去的最高 versionCode。记在工作区外，构建产物被覆盖或 clean 掉都不影响。
 $stateFile = Join-Path $env:USERPROFILE '.yulin\rider-last-version'
 
-# versionCode 是 YYMMDD + 两位当日序号，必须单调递增，否则装机被系统当成降级拒绝。
+# versionCode 是上海时区 YYMMDD + 两位当日序号，必须单调递增。
+# versionName 与本机脚本相同：YYYY.MM.DD.N。
 #
 # 三个来源取最大，缺一不可：
 #   - 这个状态文件：唯一可靠的「已发出去的最高版本」；
 #   - 磁盘上的 release 包：状态文件丢了时的兜底，但它会被下一次构建覆盖，不能单独依赖；
-#   - 设备上已装的：往往是 debug 包（不带 -PRIDER_BUILD_SEQUENCE，恒为当日 01），
-#     只看它会算出比已发版本还小的号。
+#   - 设备上已装的：往往是 debug 包（不带显式版本），只看它可能算出比已发版本还小的号。
+$tz = $null
+try { $tz = [TimeZoneInfo]::FindSystemTimeZoneById('China Standard Time') } catch { $tz = $null }
+if (-not $tz) {
+    try { $tz = [TimeZoneInfo]::FindSystemTimeZoneById('Asia/Shanghai') } catch { $tz = $null }
+}
+$now = if ($tz) { [TimeZoneInfo]::ConvertTimeFromUtc([DateTime]::UtcNow, $tz) } else { Get-Date }
+$today = [int]$now.ToString('yyMMdd')
 if ($Sequence -le 0) {
-    $today = [int](Get-Date).ToUniversalTime().ToString('yyMMdd')
     $known = @(0, (Get-ApkVersionCode $apkPath))
     if (Test-Path $stateFile) {
         $saved = 0
@@ -64,16 +71,23 @@ if ($Sequence -le 0) {
     $Sequence = if ([math]::Floor($highest / 100) -eq $today) { ($highest % 100) + 1 } else { 1 }
 }
 if ($Sequence -lt 1 -or $Sequence -gt 99) { throw "当日序号越界：$Sequence" }
+$versionCode = $today * 100 + $Sequence
+$versionName = $now.ToString('yyyy.MM.dd') + ".$Sequence"
 
 $tasks = @()
 if (-not $SkipTests) { $tasks += 'testDebugUnitTest' }
 $tasks += 'verifyReleaseSignature'          # 它自带 assembleRelease 并校验签名
-$gradleArgs = $tasks + @("-PRIDER_BUILD_SEQUENCE=$Sequence", '--console=plain')
+$gradleArgs = $tasks + @(
+    "-PRIDER_BUILD_SEQUENCE=$Sequence",
+    "-PRIDER_VERSION_CODE=$versionCode",
+    "-PRIDER_VERSION_NAME=$versionName",
+    '--console=plain'
+)
 if ($Arm64Only) { $gradleArgs += '-PRIDER_ABI=arm64' }
 
 # 日志写临时目录：build/preview 下的文件常被别的进程占着，写进去会中断构建
 $log = Join-Path $env:TEMP "rider-ship-$(Get-Date -Format 'HHmmss').log"
-Write-Host "[ship] 序号 $Sequence，任务：$($tasks -join ' ')" -ForegroundColor Cyan
+Write-Host "[ship] 应急出包 $versionName ($versionCode)，任务：$($tasks -join ' ')" -ForegroundColor Cyan
 
 Push-Location $app
 try {

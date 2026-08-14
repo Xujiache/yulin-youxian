@@ -1,54 +1,46 @@
 ---
-description: 骑手端改动后的固定收尾：验证、签名发布、推 GitHub、给出产物路径
+description: 骑手端改动后的固定收尾：验证、本机签名发布、推 GitHub、给出产物路径
 globs: rider-android/**
 alwaysApply: false
 ---
 
 # 改完骑手端必须做的三件事
 
-顺序固定：**先验证 → 再签名发布 → 再推送 → 最后给路径**。任何一步失败就停下来说清楚，不要跳过。
+顺序固定：**先验证 → 再本机签名发布 → 再推送 → 最后给路径**。任何一步失败就停下来说清楚，不要跳过。
 
-本仓库的生产签名包由 **GitHub Actions** 打，私钥只存在 repo Secrets，不进生产服务器、不进仓库。自动发布默认是**可选更新**；只有明确标记强制时才阻断旧版本。
+正式签名包在**这台生产 Linux 机**上打。私钥只在仓库外 `/root/.yulin/`，不进 Git、不进 `ecosystem.config.cjs`、不进普通 CI。不要打 `rider-v*` 标签，也不要走 GitHub Actions 签名。
 
-## 1. 验证
+自动发布默认是**可选更新**；只有明确传 `--policy FORCE` 时才阻断旧版本。FORCE 会让所有更旧客户端无法继续使用，不要随手开。
 
-有 Android SDK / 签名材料的机器上：
+## 1. 验证并本机发布
 
-```powershell
-$env:JAVA_HOME="C:\Program Files\Android\Android Studio\jbr"
-$env:ANDROID_SDK_ROOT="C:\Users\Administrator\AppData\Local\Android\Sdk"
-$env:ANDROID_HOME=$env:ANDROID_SDK_ROOT
-.\gradlew.bat testDebugUnitTest verifyReleaseSignature -PRIDER_BUILD_SEQUENCE=<当日序号>
+这台机器已安装 `/opt/android-sdk`。日常发布：
+
+```bash
+# 预检 SDK、签名、版本号
+bash scripts/rider-publish.sh --dry-run
+
+# 正式发布（需要已提交的干净 HEAD，以及 ~/.yulin/rider-publish.env 里的 AMAP_KEY）
+bash scripts/rider-publish.sh --title "更新标题" --notes "更新日志正文"
 ```
 
-- `verifyReleaseSignature` 自带 `assembleRelease` 并校验签名，不要只跑 `assembleRelease`。
-- **versionCode 是 `YYMMDD` + 两位当日序号**。序号必须比设备上已装的大，否则装机被当作降级拒绝。
-  先 `adb shell dumpsys package com.yulin.rider | Select-String versionCode` 看一眼再定。
-- 签名口令读 `%USERPROFILE%\.yulin\rider-signing.properties`，高德 Key 读全局 `~/.gradle/gradle.properties`，都不要写进仓库。
-- **不要为了快牺牲准度**：不跳测试、不跳签名校验、不用 `-PRIDER_ABI=arm64` 减体积，除非用户明确要小包。
+- 脚本会跑 Android 单测、`verifyReleaseSignature`，再用 `aapt2` / `apksigner` / SHA-256 核对包名、版本、ABI 和新证书。
+- 通过 `http://127.0.0.1:8090/api/internal/rider-app/releases` 上传，operator 记为 `server-local`。
+- `versionCode=YYMMDDNN`、`versionName=YYYY.MM.DD.N`，日期按 `Asia/Shanghai`，必须比后端当前版本大。
+- 只检查已跟踪文件是否脏；未跟踪的本地测试脚本不阻断发布。
+- **不要为了快牺牲准度**：不跳测试、不跳验签、不用 `--abi arm64` 减体积，除非用户明确要小包。
+- 高德 Android Key 用 `scripts/rider-configure-amap-key.sh <Key>` 写入仓库外环境。没有 Key 时可以 `--build-only`，不要把空白地图的包发成正式 OTA。
 
-这台 Linux 部署机通常 **没有 Android SDK**。不要在这里假装打了签名包；把提交推上去，用下面的标签走 Actions。
+Windows 应急出包仍可用 `pwsh scripts/rider-ship.ps1`，版本规则与本机脚本对齐，但**不会登记 OTA**。
 
-## 2. 推送 GitHub 并打发布标签
+## 2. 推送 GitHub
 
 按模块分提交，不要把不相干的改动堆成一个。推之前 `git fetch`，远程有新提交就先
 `git rebase origin/<branch>` 保持线性历史。禁止强推。
 
-后端/管理台在本机部署验证成功后，打**注解标签**触发自动签名发布：
-
-```bash
-git tag -a rider-vYYYY.MM.DD.N -m "更新标题
-
-更新日志正文"
-git push origin rider-vYYYY.MM.DD.N
-```
-
-- 标签格式必须是 `rider-vYYYY.MM.DD.N`（N 为当日序号，对应 versionCode 末两位）。
-- 注解内容就是骑手看到的更新日志；源码 SHA 由 Actions 写入版本历史。
-- 默认 OPTIONAL。需要强制更新时在 tag message 首行加 `FORCE:` 或在 workflow 输入里标明。
+**不要**再打 `rider-v*` 注解标签。源码 SHA 由本机发布脚本写入版本记录。
 
 ## 3. 给出可核对的产物信息
 
-本机若打出了 APK，回复末尾用独立代码块给出**绝对路径**，并说明 versionCode、大小、SHA-256。
-
-若走 Actions：给出 tag 名、workflow 链接、以及发布后 `GET /api/public/rider/app/latest` 的 versionCode。
+回复末尾给出 APK **绝对路径**、versionName、versionCode、大小、SHA-256，以及
+`GET /api/public/rider/app/latest` 的 versionCode。仓库外回执在 `~/.yulin/releases/`。

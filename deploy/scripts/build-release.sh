@@ -30,7 +30,9 @@ java_version_output="$(java -version 2>&1)"
 [[ -x "$REPO_ROOT/server/mvnw" ]] || die "server Maven wrapper is missing or not executable"
 
 # 骑手端 APK 默认不打：服务器发布机通常没有 Android SDK，更不该放签名 keystore。
-# 要连 APK 一起出就 RIDER_APK=1，前置条件缺一不可，缺了直接失败而不是悄悄跳过 ——
+# 要连 APK 一起出就 RIDER_APK=1，前置条件缺一不可，缺了直接失败而不是悄悄跳过。
+# 这一段只把签名包打进 tarball，不会登记 OTA，也不是正式骑手发布入口。
+# 正式发布用 scripts/rider-publish.sh。
 # 半个包比没有包更危险。
 BUILD_RIDER_APK="${RIDER_APK:-0}"
 if [[ "$BUILD_RIDER_APK" == "1" ]]; then

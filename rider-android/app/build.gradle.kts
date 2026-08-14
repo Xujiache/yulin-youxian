@@ -1,5 +1,5 @@
 import java.time.LocalDate
-import java.time.ZoneOffset
+import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Properties
 
@@ -15,14 +15,16 @@ val releaseRequested = gradle.startParameter.taskNames.any { it.contains("releas
 val buildSequence = (project.findProperty("RIDER_BUILD_SEQUENCE") as String?)
     ?.toIntOrNull() ?: 1
 require(buildSequence in 0..99) { "RIDER_BUILD_SEQUENCE 必须在 0..99" }
-val dateVersionCode = LocalDate.now(ZoneOffset.UTC)
+val shanghaiDate = LocalDate.now(ZoneId.of("Asia/Shanghai"))
+val dateVersionCode = shanghaiDate
     .format(DateTimeFormatter.ofPattern("yyMMdd"))
     .toInt() * 100 + buildSequence
 val riderVersionCode = (project.findProperty("RIDER_VERSION_CODE") as String?)
     ?.toIntOrNull() ?: dateVersionCode
 require(riderVersionCode > 0) { "RIDER_VERSION_CODE 必须是正整数" }
 val riderVersionName = (project.findProperty("RIDER_VERSION_NAME") as String?)
-    ?.trim()?.takeIf { it.isNotEmpty() } ?: "0.1.0"
+    ?.trim()?.takeIf { it.isNotEmpty() }
+    ?: (shanghaiDate.format(DateTimeFormatter.ofPattern("yyyy.MM.dd")) + "." + buildSequence)
 
 val externalSigningPropertiesFile = sequenceOf(
     System.getenv("RIDER_SIGNING_PROPERTIES_FILE"),
@@ -59,9 +61,12 @@ android {
         manifestPlaceholders["JPUSH_APPKEY"] = "TODO_JPUSH_APPKEY"
         manifestPlaceholders["JPUSH_CHANNEL"] = "developer-default"
 
-        // 高德 Key 尚未申请。留空时 SDK 鉴权失败但不崩溃,拿到后 -PAMAP_KEY=xxx 或写进
-        // gradle.properties 即可,不需要改任何源码。
-        manifestPlaceholders["AMAP_KEY"] = (project.findProperty("AMAP_KEY") as String?).orEmpty()
+        // 高德 Android Key 走 -PAMAP_KEY 或环境变量 AMAP_KEY，不要写进仓库。
+        // 留空时 SDK 鉴权失败但不崩溃，地图底图空白。
+        manifestPlaceholders["AMAP_KEY"] = sequenceOf(
+            project.findProperty("AMAP_KEY") as String?,
+            System.getenv("AMAP_KEY"),
+        ).mapNotNull { it?.trim()?.takeIf(String::isNotEmpty) }.firstOrNull().orEmpty()
     }
 
     val keystorePath = signingValue("RIDER_KEYSTORE_PATH")
