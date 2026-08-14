@@ -46,6 +46,17 @@ public enum DeliveryTaskStatus {
         return this == DELIVERED || this == RETURNED || this == CANCELLED;
     }
 
+    /**
+     * 骑手这边已经没活可干。
+     *
+     * EXCEPTION 不是终态——调度还要处理那一单——但骑手不能再推进。
+     * 若按终态判断能不能回店，上报「顾客联系不上」之后「我已回店」永远出不来，
+     * 这一波收不了尾，下一个时段也发不出去。
+     */
+    public boolean isRiderSettled() {
+        return isTerminal() || this == EXCEPTION;
+    }
+
     /** 是否是「骑手还在处理」的中间态。异常解除时用来判断能不能原样恢复。 */
     public boolean isResumable() {
         return this == ACCEPTED || this == PICKED_UP || this == DELIVERING || this == ARRIVED;

@@ -318,6 +318,59 @@ class DeliveryTaskServiceTests {
     }
 
     @Test
+    void 最后一单挂异常时波次转到待回店并且骑手能确认回店() {
+        // 一单送达、一单顾客联系不上。骑手这边已经没活，不该把这一波卡死。
+        long delivered = pendingTask(1001L, "XD001");
+        long stuck = pendingTask(1002L, "XD002");
+        long waveId = harness.waveService.createWave(
+                new WaveCreateRequest(RIDER_ID, List.of(delivered, stuck)), TaskOperator.admin("A")
+        );
+        harness.waveDao.updateRider(waveId, RIDER_ID, TaskTimes.now());
+        harness.taskService.assignTask(delivered, RIDER_ID, waveId, "MANUAL", null, null);
+        harness.taskService.assignTask(stuck, RIDER_ID, waveId, "MANUAL", null, null);
+        harness.taskService.acceptWave(RIDER_ID, waveId, new TaskActionRequest("evt-aw-x", null, null));
+        harness.taskService.pickupWave(RIDER_ID, waveId, new PickupRequest("evt-p-x", null, null, List.of(), 2));
+        harness.taskService.depart(RIDER_ID, delivered, new TaskActionRequest("evt-d1-x", null, null));
+        harness.taskService.deliver(RIDER_ID, delivered,
+                new DeliverRequest("evt-dl1-x", null, null, null, List.of(), "DOOR"));
+        harness.taskService.depart(RIDER_ID, stuck, new TaskActionRequest("evt-d2-x", null, null));
+        harness.taskService.arrive(RIDER_ID, stuck, new TaskActionRequest("evt-ar2-x", null, null));
+
+        harness.taskService.enterException(stuck, 77L);
+
+        assertEquals("EXCEPTION", harness.taskStatus(stuck));
+        assertEquals("RETURNING", harness.waveDao.findById(waveId).orElseThrow().status());
+
+        harness.taskService.returnToStore(RIDER_ID, waveId, new TaskActionRequest("evt-rt-x", null, null));
+        assertEquals("COMPLETED", harness.waveDao.findById(waveId).orElseThrow().status());
+        assertEquals("EXCEPTION", harness.taskStatus(stuck), "回店不该把异常单自行销掉，调度还要处理");
+    }
+
+    @Test
+    void 还有待送的单时异常不能让波次提前转待回店() {
+        long delivering = pendingTask(1001L, "XD001");
+        long stuck = pendingTask(1002L, "XD002");
+        long waveId = harness.waveService.createWave(
+                new WaveCreateRequest(RIDER_ID, List.of(delivering, stuck)), TaskOperator.admin("A")
+        );
+        harness.waveDao.updateRider(waveId, RIDER_ID, TaskTimes.now());
+        harness.taskService.assignTask(delivering, RIDER_ID, waveId, "MANUAL", null, null);
+        harness.taskService.assignTask(stuck, RIDER_ID, waveId, "MANUAL", null, null);
+        harness.taskService.acceptWave(RIDER_ID, waveId, new TaskActionRequest("evt-aw-y", null, null));
+        harness.taskService.pickupWave(RIDER_ID, waveId, new PickupRequest("evt-p-y", null, null, List.of(), 2));
+        harness.taskService.depart(RIDER_ID, delivering, new TaskActionRequest("evt-d1-y", null, null));
+        harness.taskService.depart(RIDER_ID, stuck, new TaskActionRequest("evt-d2-y", null, null));
+        harness.taskService.arrive(RIDER_ID, stuck, new TaskActionRequest("evt-ar2-y", null, null));
+        harness.taskService.enterException(stuck, 78L);
+
+        assertEquals("EXCEPTION", harness.taskStatus(stuck));
+        assertEquals("DELIVERING", harness.taskStatus(delivering));
+        assertEquals("DELIVERING", harness.waveDao.findById(waveId).orElseThrow().status());
+        assertThrows(DeliveryException.class, () -> harness.taskService.returnToStore(
+                RIDER_ID, waveId, new TaskActionRequest("evt-rt-y", null, null)));
+    }
+
+    @Test
     void 整波次接单把全部已派单转成已接单() {
         long first = pendingTask(1001L, "XD001");
         long second = pendingTask(1002L, "XD002");

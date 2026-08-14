@@ -654,6 +654,8 @@ public class DeliveryTaskService {
                 taskDao.closeTask(task.id(), now);
                 refreshWave(task.waveId(), now);
             }
+            // 最后一单挂异常时也要让波次转到待回店，否则骑手端的「我已回店」对不上服务端状态。
+            case EXCEPTION -> refreshWave(task.waveId(), now);
             default -> {
             }
         }
@@ -665,13 +667,19 @@ public class DeliveryTaskService {
         }
         waveDao.refreshAggregates(waveId, now);
         waveDao.findById(waveId).ifPresent(wave -> {
-            if (wave.taskCount() != null && wave.taskCount() > 0
-                    && wave.taskCount().equals(wave.completedCount())
-                    && !"COMPLETED".equals(wave.status())
-                    && !"RETURNING".equals(wave.status())
-                    && !"CANCELLED".equals(wave.status())) {
-                // 送完不等于收工:骑手还在最后一个顾客门口,得回店才能装下一波。
-                // 直接置 COMPLETED 会让调度台以为他已经空出来了。
+            if ("COMPLETED".equals(wave.status())
+                    || "RETURNING".equals(wave.status())
+                    || "CANCELLED".equals(wave.status())) {
+                return;
+            }
+            List<DeliveryTask> tasks = taskDao.findByWaveId(waveId);
+            if (tasks.isEmpty()) {
+                return;
+            }
+            // completed_count 不含 EXCEPTION。一单顾客联系不上时 completed < taskCount，
+            // 按完成数判断的话波次永远到不了待回店，骑手也点不了回店。
+            boolean riderDone = tasks.stream().allMatch(task -> isRiderSettled(task.status()));
+            if (riderDone) {
                 waveDao.markReturning(waveId, now);
             }
         });
@@ -785,7 +793,7 @@ public class DeliveryTaskService {
             }
             List<DeliveryTask> tasks = taskDao.findByWaveId(waveId);
             List<DeliveryTask> unfinished = tasks.stream()
-                    .filter(task -> !isTerminal(task.status()))
+                    .filter(task -> !isRiderSettled(task.status()))
                     .toList();
             if (!unfinished.isEmpty()) {
                 throw new DeliveryException(DeliveryErrorCode.TASK_STATUS_NOT_ALLOWED,
@@ -812,9 +820,9 @@ public class DeliveryTaskService {
         return currentWaveCards(waveId);
     }
 
-    private static boolean isTerminal(String status) {
+    private static boolean isRiderSettled(String status) {
         DeliveryTaskStatus parsed = parseStatus(status);
-        return parsed != null && parsed.isTerminal();
+        return parsed != null && parsed.isRiderSettled();
     }
 
     private List<TaskCardDto> doPickupWave(long riderId, long waveId, PickupRequest request, String clientEventId) {
@@ -941,6 +949,11 @@ public class DeliveryTaskService {
     }
 
     public void assignTask(long taskId, long riderId, Long waveId, String dispatchMode, Double dispatchScore, String detailJson) {
+        assignTask(taskId, riderId, waveId, dispatchMode, dispatchScore, detailJson, true);
+    }
+
+    public void assignTask(long taskId, long riderId, Long waveId, String dispatchMode, Double dispatchScore,
+                           String detailJson, boolean announce) {
         TaskOperator operator = TaskOperator.system();
         DeliveryTask updated = unitOfWork.commit(() -> {
             DeliveryTask task = requireTaskForUpdate(taskId);
@@ -967,6 +980,9 @@ public class DeliveryTaskService {
             );
             return reloaded;
         });
+        if (!announce) {
+            return;
+        }
         if (updated.waveId() != null) {
             recomputeWaveEta(updated.waveId());
         }

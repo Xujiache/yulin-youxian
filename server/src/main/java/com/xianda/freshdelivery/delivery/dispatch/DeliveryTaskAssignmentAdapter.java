@@ -21,6 +21,12 @@ public class DeliveryTaskAssignmentAdapter implements TaskAssignmentPort {
     }
 
     @Override
+    public void assignTaskQuietly(long taskId, long riderId, Long waveId, String dispatchMode,
+                                  Double dispatchScore, String detailJson) {
+        require().assignTask(taskId, riderId, waveId, dispatchMode, dispatchScore, detailJson, false);
+    }
+
+    @Override
     public void reassignTask(long taskId, long toRiderId, String reason, String operatorType, String operatorName) {
         require().reassignTask(taskId, toRiderId, reason, operatorType, operatorName);
     }

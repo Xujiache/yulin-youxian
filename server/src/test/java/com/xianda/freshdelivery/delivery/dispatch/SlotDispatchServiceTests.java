@@ -68,6 +68,8 @@ class SlotDispatchServiceTests {
         assertEquals(2, assignmentPort.assigned.size());
         assertEquals("14:00-15:00", dao.createdSlot);
         assertTrue(routingPort.planned.contains(result.waveId()), "发车必须触发路径规划");
+        assertEquals(1, dao.messages.size(), "整波只推一条，不能按单数连发「新任务待接单」");
+        assertTrue(dao.messages.get(0).contains("共 2 单"), dao.messages.get(0));
     }
 
     @Test
@@ -280,6 +282,7 @@ class SlotDispatchServiceTests {
         private long nextWaveId = 100L;
         private String createdSlot;
         private RiderCandidateRow rider = DispatchTestSupport.rider(RIDER).build();
+        private final List<String> messages = new ArrayList<>();
 
         private void addPending(long taskId, LocalDate date, String slot) {
             addPending(taskId, date, slot, 1.0d);
@@ -382,8 +385,9 @@ class SlotDispatchServiceTests {
         }
 
         @Override
-        public void insertMessage(Long riderId, String messageNo, String type, String title,
-                                  String body, boolean requireAck, String payloadJson, String channel) {
+        public void insertMessage(Long riderId, String messageType, String title, String content,
+                                  String priority, boolean needVoice, String linkType, String linkTarget) {
+            messages.add(title + "|" + content);
         }
 
         private record WaveState(long id, long riderId, LocalDate date, String slot) {}

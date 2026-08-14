@@ -100,6 +100,7 @@ public class SlotDispatchService {
         // delivery_route_plan_failure 里供调度台查看。
         waveRoutingPort.planWave(committed.waveId(), !committed.waveCreated());
         waveRoutingPort.recomputeWaveEta(committed.waveId());
+        announceWaveAssigned(command.riderId(), committed);
 
         log.info("时段发车：{} {} 共 {} 单派给骑手 {}，波次 {}{}",
                 committed.deliveryDate(), committed.slotLabel(), committed.taskIds().size(),
@@ -153,7 +154,7 @@ public class SlotDispatchService {
 
         List<Long> assigned = new ArrayList<>(locked.size());
         for (DispatchTaskRow task : locked) {
-            assignmentPort.assignTask(task.taskId(), command.riderId(), waveId,
+            assignmentPort.assignTaskQuietly(task.taskId(), command.riderId(), waveId,
                     DispatchCodes.MODE_MANUAL, null, detailJson(slot, command.riderId(), waveId));
             assigned.add(task.taskId());
         }
@@ -270,6 +271,28 @@ public class SlotDispatchService {
                     "选中任务的时段是[" + slot + "]，与请求的[" + expected + "]不一致，请刷新后重试");
         }
         return new SlotKey(date, slot);
+    }
+
+    /**
+     * 整波只推一条。逐单推的话骑手连着听十几条「新任务待接单」，
+     * 而产品设计就是到店后一键全接。
+     */
+    private void announceWaveAssigned(long riderId, Committed committed) {
+        String slot = committed.slotLabel() == null || committed.slotLabel().isBlank()
+                ? "本时段" : committed.slotLabel();
+        try {
+            dispatchDao.insertMessage(
+                    riderId,
+                    "TASK_ASSIGNED",
+                    slot + " 已发车",
+                    slot + " 共 " + committed.taskIds().size() + " 单已发给你，请一键接单后到店取货",
+                    "HIGH",
+                    true,
+                    "WAVE",
+                    String.valueOf(committed.waveId()));
+        } catch (RuntimeException exception) {
+            log.warn("时段发车通知骑手 {} 失败：{}", riderId, exception.getMessage());
+        }
     }
 
     private void cleanupEmptyWave(Long waveId) {
