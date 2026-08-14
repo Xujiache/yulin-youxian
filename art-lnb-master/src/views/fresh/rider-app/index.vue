@@ -37,7 +37,7 @@
         </div>
         <div>
           <div class="muted">纳管 / 普通</div>
-          <div class="fresh-page__title">{{ coverage.deviceOwner + coverage.profileOwner }} / {{ coverage.standard }}</div>
+          <div class="fresh-page__title">{{ (coverage.deviceOwner ?? 0) + (coverage.profileOwner ?? 0) }} / {{ coverage.standard ?? 0 }}</div>
           <div class="muted">Device Owner {{ coverage.deviceOwner }} · Profile Owner {{ coverage.profileOwner }}</div>
         </div>
       </div>
@@ -52,6 +52,9 @@
           </template>
         </ElTableColumn>
         <ElTableColumn prop="title" label="更新标题" min-width="160" />
+        <ElTableColumn label="更新日志" min-width="180" show-overflow-tooltip>
+          <template #default="{ row }">{{ row.notes || '—' }}</template>
+        </ElTableColumn>
         <ElTableColumn label="策略" width="100">
           <template #default="{ row }">
             <ElTag :type="row.policy === 'FORCE' ? 'danger' : 'success'">
