@@ -33,7 +33,12 @@ class UpdateInstaller @Inject constructor(
     fun verifyReadyToInstall(apk: File, latestSha256: String, latestVersionCode: Int): String? {
         if (!apk.isFile) return "安装包不存在"
         if (!ApkChecksum.matches(apk, latestSha256)) return "安装包校验失败"
-        val flags = PackageManager.GET_SIGNING_CERTIFICATES
+        val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            PackageManager.GET_SIGNING_CERTIFICATES
+        } else {
+            @Suppress("DEPRECATION")
+            PackageManager.GET_SIGNATURES
+        }
         val archive = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             context.packageManager.getPackageArchiveInfo(
                 apk.absolutePath,

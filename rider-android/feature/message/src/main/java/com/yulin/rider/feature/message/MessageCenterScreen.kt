@@ -113,6 +113,7 @@ fun MessageCenterScreen(
     modifier: Modifier = Modifier,
     viewModel: MessageViewModel = viewModel(),
     onBack: () -> Unit = {},
+    onOpenAppUpdate: () -> Unit = {},
 ) {
     val state by viewModel.state.collectAsState()
     MessageContent(
@@ -122,6 +123,7 @@ fun MessageCenterScreen(
         onRetry = viewModel::load,
         onRead = viewModel::markRead,
         onAck = viewModel::ack,
+        onOpenAppUpdate = onOpenAppUpdate,
     )
 }
 
@@ -133,6 +135,7 @@ private fun MessageContent(
     onRetry: () -> Unit = {},
     onRead: (RiderMessage) -> Unit = {},
     onAck: (RiderMessage) -> Unit = {},
+    onOpenAppUpdate: () -> Unit = {},
 ) {
     MtScaffold(title = "消息中心", modifier = modifier, onBack = onBack) {
         when {
@@ -169,6 +172,7 @@ private fun MessageContent(
                         message = message,
                         onRead = { onRead(message) },
                         onAck = { onAck(message) },
+                        onOpenAppUpdate = onOpenAppUpdate,
                     )
                 }
             }
@@ -177,8 +181,18 @@ private fun MessageContent(
 }
 
 @Composable
-private fun MessageRow(message: RiderMessage, onRead: () -> Unit, onAck: () -> Unit) {
-    MtCard(onClick = onRead) {
+private fun MessageRow(
+    message: RiderMessage,
+    onRead: () -> Unit,
+    onAck: () -> Unit,
+    onOpenAppUpdate: () -> Unit = {},
+) {
+    MtCard(onClick = {
+        onRead()
+        if (message.linkType.equals("APP", ignoreCase = true)) {
+            onOpenAppUpdate()
+        }
+    }) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()

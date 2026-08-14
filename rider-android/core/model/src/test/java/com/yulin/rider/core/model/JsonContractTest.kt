@@ -37,6 +37,51 @@ class JsonContractTest {
     }
 
     @Test
+    fun `device report encodes app version code and managed mode`() {
+        val encoded = json.encodeToString(
+            DeviceReport(
+                deviceId = "android-device",
+                appVersionCode = 26081501,
+                managedMode = "DEVICE_OWNER",
+            )
+        )
+        val fields = json.parseToJsonElement(encoded).jsonObject
+        assertEquals("26081501", fields.getValue("appVersionCode").toString())
+        assertEquals("DEVICE_OWNER", fields.getValue("managedMode").toString().trim('"'))
+    }
+
+    @Test
+    fun `public latest update payload decodes policy and file url`() {
+        val response = json.decodeFromString<ApiResponse<AppUpdateLatest>>(
+            """
+            {
+              "code": 0,
+              "message": "success",
+              "data": {
+                "policy": "OPTIONAL",
+                "channel": "production",
+                "versionCode": 26081501,
+                "versionName": "2026.08.15.1",
+                "title": "骑手端更新",
+                "notes": "修复定位",
+                "fileUrl": "https://hqhjxt.vip/uploads/apk/production/26081501-abcd.apk",
+                "fileSize": 70123456,
+                "fileSha256": "aa",
+                "packageName": "com.yulin.rider",
+                "certSha256": "bb",
+                "minSupportedVersionCode": 0
+              }
+            }
+            """.trimIndent()
+        )
+        val latest = requireNotNull(response.data)
+        assertTrue(latest.isOptional)
+        assertTrue(latest.available)
+        assertEquals(26081501, latest.versionCode)
+        assertEquals("https://hqhjxt.vip/uploads/apk/production/26081501-abcd.apk", latest.fileUrl)
+    }
+
+    @Test
     fun `message read state is derived from readAt inside PageResult`() {
         val response = json.decodeFromString<ApiResponse<PageResult<RiderMessage>>>(
             """

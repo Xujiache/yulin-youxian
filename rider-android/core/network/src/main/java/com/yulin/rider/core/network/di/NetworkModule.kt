@@ -1,6 +1,7 @@
 package com.yulin.rider.core.network.di
 
 import com.yulin.rider.core.network.BuildConfig
+import com.yulin.rider.core.network.api.RiderAppUpdateApi
 import com.yulin.rider.core.network.api.RiderAuthApi
 import com.yulin.rider.core.network.api.RiderEarningApi
 import com.yulin.rider.core.network.api.RiderExceptionApi
@@ -101,6 +102,7 @@ object NetworkModule {
     @Provides @Singleton fun provideExceptionApi(retrofit: Retrofit): RiderExceptionApi = retrofit.create(RiderExceptionApi::class.java)
     @Provides @Singleton fun provideEarningApi(retrofit: Retrofit): RiderEarningApi = retrofit.create(RiderEarningApi::class.java)
     @Provides @Singleton fun provideMessageApi(retrofit: Retrofit): RiderMessageApi = retrofit.create(RiderMessageApi::class.java)
+    @Provides @Singleton fun provideAppUpdateApi(retrofit: Retrofit): RiderAppUpdateApi = retrofit.create(RiderAppUpdateApi::class.java)
 
     private fun baseClientBuilder(deviceInfoInterceptor: DeviceInfoInterceptor): OkHttpClient.Builder =
         OkHttpClient.Builder()

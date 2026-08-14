@@ -160,6 +160,12 @@ class SyncPoller @Inject constructor(
             .filter { it.isNotBlank() }
             .joinToString("，")
         if (text.isBlank()) return
+        if (message.linkType.equals("APP", ignoreCase = true) ||
+            message.messageType.equals("APP_UPDATE", ignoreCase = true)
+        ) {
+            notifier.notifyAppUpdate(message.title ?: "骑手端有新版本", message.content.orEmpty())
+            return
+        }
         notifier.notifyUrgent(message.title ?: "紧急提醒", message.content.orEmpty())
         voice.playPromptTone()
         // 一次 sync 最多带 5 条紧急消息，必须排队播；用打断的话只有最后一条能听全

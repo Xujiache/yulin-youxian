@@ -13,14 +13,36 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import com.yulin.rider.core.designsystem.FreshSpacing
 import com.yulin.rider.core.designsystem.MtAction
 import com.yulin.rider.core.designsystem.MtPrimaryButton
+import com.yulin.rider.core.designsystem.MtScaffold
 import com.yulin.rider.core.designsystem.RiderColors
 import kotlinx.coroutines.launch
+
+@Composable
+fun AppUpdateScreen(
+    controller: UpdateController,
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val state by controller.state.collectAsState()
+    LaunchedEffect(Unit) { controller.check(manual = true) }
+    MtScaffold(title = "应用更新", modifier = modifier, onBack = onBack) {
+        UpdatePanel(
+            state = state,
+            controller = controller,
+            force = state.policy == UpdatePolicyResolver.FORCE,
+            modifier = Modifier.fillMaxSize(),
+        )
+    }
+}
 
 @Composable
 fun ForceUpdateGate(state: UpdateUiState, controller: UpdateController) {

@@ -34,6 +34,7 @@ import com.yulin.rider.core.designsystem.FreshSpacing
 import com.yulin.rider.core.designsystem.MtAction
 import com.yulin.rider.core.designsystem.MtPrimaryButton
 import com.yulin.rider.core.designsystem.RiderColors
+import com.yulin.rider.core.update.UpdateController
 import kotlinx.coroutines.withTimeoutOrNull
 
 /** 启动后应当落到哪一屏。顺序即业务前置条件的顺序,不能调换。 */
@@ -50,6 +51,7 @@ enum class StartDestination(val route: String) {
  * 超过这个数说明底层卡住了，必须给骑手一条出路，不能让加载圈一直转。
  */
 private const val RESOLVE_TIMEOUT_MILLIS = 6_000L
+private const val UPDATE_CHECK_TIMEOUT_MILLIS = 8_000L
 
 /**
  * 启动页。只做一件事:判断该去哪。
@@ -63,6 +65,7 @@ private const val RESOLVE_TIMEOUT_MILLIS = 6_000L
 fun SplashScreen(
     tokenStore: RiderTokenStore,
     settingsStore: RiderSettingsStore,
+    updateController: UpdateController,
     onResolved: (StartDestination, String?) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -95,7 +98,12 @@ fun SplashScreen(
         if (resolved == null) {
             stuck = true
         } else {
-            onResolved(resolved.first, resolved.second)
+            withTimeoutOrNull(UPDATE_CHECK_TIMEOUT_MILLIS) {
+                updateController.checkOnLaunch()
+            }
+            if (!updateController.blocksBusiness()) {
+                onResolved(resolved.first, resolved.second)
+            }
         }
     }
 

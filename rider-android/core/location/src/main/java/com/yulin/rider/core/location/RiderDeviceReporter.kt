@@ -1,5 +1,6 @@
 package com.yulin.rider.core.location
 
+import android.app.admin.DevicePolicyManager
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
@@ -51,6 +52,8 @@ class RiderDeviceReporter @Inject constructor(
                 notificationEnabled = status.notificationGranted,
                 backgroundLocationGranted = status.backgroundLocationGranted,
                 keepaliveGuideDone = store.guideDone,
+                appVersionCode = appVersionCode(),
+                managedMode = managedMode(),
             )
         )
         response.code == 0
@@ -65,6 +68,28 @@ class RiderDeviceReporter @Inject constructor(
         context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "unknown"
     } catch (e: PackageManager.NameNotFoundException) {
         "unknown"
+    }
+
+    private fun appVersionCode(): Int = try {
+        val info = context.packageManager.getPackageInfo(context.packageName, 0)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            info.longVersionCode.toInt()
+        } else {
+            @Suppress("DEPRECATION")
+            info.versionCode
+        }
+    } catch (e: PackageManager.NameNotFoundException) {
+        0
+    }
+
+    private fun managedMode(): String {
+        val manager = context.getSystemService(DevicePolicyManager::class.java) ?: return "STANDARD"
+        val packageName = context.packageName
+        return when {
+            manager.isDeviceOwnerApp(packageName) -> "DEVICE_OWNER"
+            manager.isProfileOwnerApp(packageName) -> "PROFILE_OWNER"
+            else -> "STANDARD"
+        }
     }
 
     private companion object {

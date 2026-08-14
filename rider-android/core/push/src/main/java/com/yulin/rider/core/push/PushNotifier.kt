@@ -61,6 +61,30 @@ class PushNotifier @Inject constructor(
         post(NOTIFICATION_ID_URGENT, notification)
     }
 
+    fun notifyAppUpdate(title: String, content: String) {
+        ensureChannels()
+        val launch = context.packageManager.getLaunchIntentForPackage(context.packageName) ?: return
+        launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        launch.putExtra(EXTRA_ROUTE, ROUTE_APP_UPDATE)
+        val pending = PendingIntent.getActivity(
+            context,
+            REQUEST_CODE_APP_UPDATE,
+            launch,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        val notification = NotificationCompat.Builder(context, CHANNEL_URGENT)
+            .setSmallIcon(R.drawable.ic_notify_rider)
+            .setContentTitle(title)
+            .setContentText(content)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(content))
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_STATUS)
+            .setAutoCancel(true)
+            .setContentIntent(pending)
+            .build()
+        post(NOTIFICATION_ID_APP_UPDATE, notification)
+    }
+
     fun cancelNewTask() {
         runCatching {
             NotificationManagerCompat.from(context).cancel(NOTIFICATION_ID_NEW_TASK)
@@ -126,10 +150,13 @@ class PushNotifier @Inject constructor(
         const val EXTRA_TASK_ID = "rider_task_id"
         const val EXTRA_TASK_VERSION = "rider_task_version"
         const val ROUTE_NEW_TASK = "new_task"
+        const val ROUTE_APP_UPDATE = "app_update"
 
         private const val NOTIFICATION_ID_NEW_TASK = 2001
         private const val NOTIFICATION_ID_URGENT = 2002
+        private const val NOTIFICATION_ID_APP_UPDATE = 2003
         private const val REQUEST_CODE = 2001
+        private const val REQUEST_CODE_APP_UPDATE = 2003
         private const val TAG = "PushNotifier"
     }
 }

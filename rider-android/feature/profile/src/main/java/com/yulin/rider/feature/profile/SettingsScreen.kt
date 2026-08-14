@@ -439,7 +439,11 @@ private fun openAppDetails(context: android.content.Context) {
 
 /** 关于页。 */
 @Composable
-fun AboutScreen(modifier: Modifier = Modifier, onBack: () -> Unit = {}) {
+fun AboutScreen(
+    modifier: Modifier = Modifier,
+    onBack: () -> Unit = {},
+    onCheckUpdate: () -> Unit = {},
+) {
     val context = LocalContext.current
     val deps = ProfileFeature.depsOrNull()
     val clipboard = LocalClipboardManager.current
@@ -453,6 +457,7 @@ fun AboutScreen(modifier: Modifier = Modifier, onBack: () -> Unit = {}) {
         supportPhone = deps?.supportPhone,
         modifier = modifier,
         onBack = onBack,
+        onCheckUpdate = onCheckUpdate,
         onOpenFiling = {
             runCatching {
                 context.startActivity(
@@ -486,6 +491,7 @@ private fun AboutContent(
     supportPhone: String? = null,
     modifier: Modifier = Modifier,
     onBack: () -> Unit = {},
+    onCheckUpdate: () -> Unit = {},
     onOpenFiling: () -> Unit = {},
     onCopyDeviceId: () -> Unit = {},
     onCallSupport: () -> Unit = {},
@@ -515,6 +521,15 @@ private fun AboutContent(
                 EntryRow("构建号", versionCode?.toString() ?: "—")
                 MtDivider()
                 EntryRow("应用包名", "com.yulin.rider")
+                MtDivider()
+                Box(Modifier.padding(FreshSpacing.Sm)) {
+                    MtPrimaryButton(
+                        text = "检查更新",
+                        action = MtAction.ACCEPT,
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = onCheckUpdate,
+                    )
+                }
             }
 
             MtCard {

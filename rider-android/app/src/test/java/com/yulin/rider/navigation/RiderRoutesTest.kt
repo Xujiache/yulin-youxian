@@ -17,5 +17,6 @@ class RiderRoutesTest {
     fun protectedScreensAreNotBusinessDestinations() {
         assertTrue(RiderRoutes.LOGIN in RiderRoutes.PRE_BUSINESS_ROUTES)
         assertTrue(RiderRoutes.LOCATION_CONSENT in RiderRoutes.PRE_BUSINESS_ROUTES)
+        assertTrue(RiderRoutes.APP_UPDATE !in RiderRoutes.PRE_BUSINESS_ROUTES)
     }
 }

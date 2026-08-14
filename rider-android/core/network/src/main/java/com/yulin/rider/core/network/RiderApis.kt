@@ -1,6 +1,7 @@
 package com.yulin.rider.core.network
 
 import android.content.Context
+import com.yulin.rider.core.network.api.RiderAppUpdateApi
 import com.yulin.rider.core.network.api.RiderAuthApi
 import com.yulin.rider.core.network.api.RiderEarningApi
 import com.yulin.rider.core.network.api.RiderExceptionApi
@@ -27,6 +28,7 @@ class RiderApiRegistry @Inject constructor(
     val exception: RiderExceptionApi,
     val earning: RiderEarningApi,
     val message: RiderMessageApi,
+    val appUpdate: RiderAppUpdateApi,
     val caller: ApiCaller,
     val sessionEvents: SessionEvents,
 ) {
@@ -39,6 +41,7 @@ class RiderApiRegistry @Inject constructor(
     val exceptionApi: RiderExceptionApi get() = exception
     val earningApi: RiderEarningApi get() = earning
     val messageApi: RiderMessageApi get() = message
+    val appUpdateApi: RiderAppUpdateApi get() = appUpdate
 }
 
 @EntryPoint

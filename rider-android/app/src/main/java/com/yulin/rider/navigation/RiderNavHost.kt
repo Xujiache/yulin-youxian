@@ -29,6 +29,8 @@ import com.yulin.rider.core.location.KeepAliveGuideScreen
 import com.yulin.rider.core.location.LocationController
 import com.yulin.rider.core.network.SessionEvent
 import com.yulin.rider.core.network.SessionEvents
+import com.yulin.rider.core.update.AppUpdateScreen
+import com.yulin.rider.core.update.UpdateController
 import com.yulin.rider.feature.auth.ChangePasswordRoute
 import com.yulin.rider.feature.auth.LocationConsentRoute
 import com.yulin.rider.feature.auth.LoginRoute
@@ -64,9 +66,12 @@ fun RiderNavHost(
     settingsStore: RiderSettingsStore,
     sessionEvents: SessionEvents,
     locationController: LocationController,
+    updateController: UpdateController,
     /** 派单通知点开后要打开的任务;由 MainActivity 从 Intent 里解出来。 */
     newTaskRequests: StateFlow<Long?>,
     onNewTaskHandled: () -> Unit,
+    appUpdateRequests: StateFlow<Boolean>,
+    onAppUpdateHandled: () -> Unit,
     /** 登录态失效:定位与轮询要跟着停,否则骑手已被登出而手机还在后台跑定位。 */
     onSessionEnded: () -> Unit,
     modifier: Modifier = Modifier,
@@ -93,6 +98,11 @@ fun RiderNavHost(
         navController = navController,
         onHandled = onNewTaskHandled,
     )
+    AppUpdateIntentHandler(
+        requests = appUpdateRequests,
+        navController = navController,
+        onHandled = onAppUpdateHandled,
+    )
 
     NavHost(
         navController = navController,
@@ -103,6 +113,7 @@ fun RiderNavHost(
             SplashScreen(
                 tokenStore = tokenStore,
                 settingsStore = settingsStore,
+                updateController = updateController,
                 onResolved = { destination, resumeRoute ->
                     navController.navigate(destination.route) {
                         popUpTo(RiderRoutes.SPLASH) { inclusive = true }
@@ -318,7 +329,10 @@ fun RiderNavHost(
         }
 
         composable(RiderRoutes.MESSAGE) {
-            MessageCenterScreen(onBack = { navController.popBackStack() })
+            MessageCenterScreen(
+                onBack = { navController.popBackStack() },
+                onOpenAppUpdate = { navController.navigate(RiderRoutes.APP_UPDATE) },
+            )
         }
 
         composable(RiderRoutes.PROFILE) {
@@ -347,7 +361,17 @@ fun RiderNavHost(
         }
 
         composable(RiderRoutes.ABOUT) {
-            AboutScreen(onBack = { navController.popBackStack() })
+            AboutScreen(
+                onBack = { navController.popBackStack() },
+                onCheckUpdate = { navController.navigate(RiderRoutes.APP_UPDATE) },
+            )
+        }
+
+        composable(RiderRoutes.APP_UPDATE) {
+            AppUpdateScreen(
+                controller = updateController,
+                onBack = { navController.popBackStack() },
+            )
         }
     }
 }
@@ -454,6 +478,28 @@ private fun NewTaskIntentHandler(
             }
             if (ready != null) {
                 navController.navigate(RiderRoutes.dispatch(taskId)) { launchSingleTop = true }
+            }
+            onHandled()
+        }
+    }
+}
+
+@Composable
+private fun AppUpdateIntentHandler(
+    requests: StateFlow<Boolean>,
+    navController: NavHostController,
+    onHandled: () -> Unit,
+) {
+    LaunchedEffect(requests, navController) {
+        requests.collect { requested ->
+            if (!requested) return@collect
+            val ready = withTimeoutOrNull(WAIT_FOR_BUSINESS_MILLIS) {
+                navController.currentBackStackEntryFlow.first { entry ->
+                    entry.destination.route?.let { it !in RiderRoutes.PRE_BUSINESS_ROUTES } == true
+                }
+            }
+            if (ready != null) {
+                navController.navigate(RiderRoutes.APP_UPDATE) { launchSingleTop = true }
             }
             onHandled()
         }

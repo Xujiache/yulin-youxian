@@ -14,12 +14,13 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <!-- Android 14+ 锁屏全屏派单页必需;缺失时只会降级成横幅通知,不会崩 -->
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
-    <!-- 网络 / 拍照 / 反馈 -->
+    <!-- 网络 / 拍照 / 反馈 / 应用内更新 -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <!--
       声明相机与定位权限会被系统隐式当成硬件要求，从而把没有这些硬件的设备

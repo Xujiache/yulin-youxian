@@ -4,7 +4,7 @@
 
     <application>
         <receiver
-            android:name=".RiderDeviceAdminReceiver"
+            android:name="com.yulin.rider.core.update.RiderDeviceAdminReceiver"
             android:exported="true"
             android:permission="android.permission.BIND_DEVICE_ADMIN">
             <meta-data
@@ -15,7 +15,7 @@
             </intent-filter>
         </receiver>
         <receiver
-            android:name=".UpdateInstallReceiver"
+            android:name="com.yulin.rider.core.update.UpdateInstallReceiver"
             android:exported="false">
             <intent-filter>
                 <action android:name="com.yulin.rider.action.UPDATE_INSTALL_RESULT" />

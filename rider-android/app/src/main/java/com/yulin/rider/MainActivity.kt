@@ -8,6 +8,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -16,6 +18,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
 import androidx.lifecycle.Lifecycle
@@ -39,6 +42,10 @@ import com.yulin.rider.core.network.RiderApis
 import com.yulin.rider.core.network.SessionEvents
 import com.yulin.rider.core.push.PushController
 import com.yulin.rider.core.push.PushNotifier
+import com.yulin.rider.core.update.ForceUpdateGate
+import com.yulin.rider.core.update.OptionalUpdateDialog
+import com.yulin.rider.core.update.UpdateCheckWorker
+import com.yulin.rider.core.update.UpdateController
 import com.yulin.rider.feature.exception.ExceptionFeature
 import com.yulin.rider.feature.auth.AuthRepository
 import com.yulin.rider.feature.profile.ProfileFeature
@@ -71,9 +78,13 @@ class MainActivity : ComponentActivity() {
     @Inject lateinit var pushController: PushController
     @Inject lateinit var sessionCoordinator: RiderSessionCoordinator
     @Inject lateinit var authRepository: AuthRepository
+    @Inject lateinit var updateController: UpdateController
 
     /** 派单通知要打开的任务;导航图消费后置回 null。 */
     private val newTaskRequests = MutableStateFlow<Long?>(null)
+
+    /** 应用更新通知点开后打开更新页。 */
+    private val appUpdateRequests = MutableStateFlow(false)
 
     /** 上班时定位没起来这类「不挡流程但必须告知」的提示。 */
     private val dutyAlert = MutableStateFlow<String?>(null)
@@ -103,6 +114,7 @@ class MainActivity : ComponentActivity() {
         }
         observeRiderSignals()
         handlePushIntent(intent)
+        UpdateCheckWorker.enqueuePeriodic(this)
 
         setContent {
             val settings by settingsStore.settingsFlow.collectAsState(initial = RiderSettings())
@@ -120,15 +132,24 @@ class MainActivity : ComponentActivity() {
                         fontScale = density.fontScale * settings.fontScale,
                     ),
                 ) {
-                    RiderNavHost(
-                        tokenStore = tokenStore,
-                        settingsStore = settingsStore,
-                        sessionEvents = sessionEvents,
-                        locationController = locationController,
-                        newTaskRequests = newTaskRequests,
-                        onNewTaskHandled = { newTaskRequests.value = null },
-                        onSessionEnded = ::endSession,
-                    )
+                    val updateState by updateController.state.collectAsState()
+                    Box(Modifier.fillMaxSize()) {
+                        RiderNavHost(
+                            tokenStore = tokenStore,
+                            settingsStore = settingsStore,
+                            sessionEvents = sessionEvents,
+                            locationController = locationController,
+                            updateController = updateController,
+                            newTaskRequests = newTaskRequests,
+                            onNewTaskHandled = { newTaskRequests.value = null },
+                            appUpdateRequests = appUpdateRequests,
+                            onAppUpdateHandled = { appUpdateRequests.value = false },
+                            onSessionEnded = ::endSession,
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                        ForceUpdateGate(state = updateState, controller = updateController)
+                        OptionalUpdateDialog(state = updateState, controller = updateController)
+                    }
 
                     val alert by dutyAlert.collectAsState()
                     alert?.let { message ->
@@ -314,12 +335,19 @@ class MainActivity : ComponentActivity() {
     private fun currentLocation(): GeoPoint? = locationController.lastFix.value?.toGeoPoint()
 
     private fun handlePushIntent(intent: Intent?) {
-        if (intent?.getStringExtra(PushNotifier.EXTRA_ROUTE) != PushNotifier.ROUTE_NEW_TASK) return
-        // 骑手已经点开看了,循环播报和常驻的派单通知到此为止
-        pushController.acknowledgeNewTask(pushController.resolveTaskVersionFromIntent(intent))
-        newTaskRequests.value = pushController.resolveTaskIdFromIntent(intent)
-        // 不清掉的话,进程被回收后系统重投同一个 Intent 会再跳一次
-        intent.removeExtra(PushNotifier.EXTRA_ROUTE)
+        when (intent?.getStringExtra(PushNotifier.EXTRA_ROUTE)) {
+            PushNotifier.ROUTE_APP_UPDATE -> {
+                appUpdateRequests.value = true
+                intent.removeExtra(PushNotifier.EXTRA_ROUTE)
+            }
+            PushNotifier.ROUTE_NEW_TASK -> {
+                // 骑手已经点开看了,循环播报和常驻的派单通知到此为止
+                pushController.acknowledgeNewTask(pushController.resolveTaskVersionFromIntent(intent))
+                newTaskRequests.value = pushController.resolveTaskIdFromIntent(intent)
+                // 不清掉的话,进程被回收后系统重投同一个 Intent 会再跳一次
+                intent.removeExtra(PushNotifier.EXTRA_ROUTE)
+            }
+        }
     }
 
     /** 骑行时屏幕熄灭要重新解锁才能看下一单,危险且慢。 */

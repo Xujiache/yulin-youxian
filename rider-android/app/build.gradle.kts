@@ -191,6 +191,7 @@ dependencies {
     implementation(project(":core:model"))
     implementation(project(":core:location"))
     implementation(project(":core:push"))
+    implementation(project(":core:update"))
 
     implementation(project(":feature:auth"))
     implementation(project(":feature:shift"))

@@ -10,7 +10,7 @@ internal const val HEADER_AUTHORIZATION = "Authorization"
 internal const val BEARER_PREFIX = "Bearer "
 
 /** login / refresh 免鉴权(04 §0),带上过期令牌反而会被拦截器提前拒掉。 */
-private val NO_AUTH_PATHS = listOf("/auth/login", "/auth/refresh")
+private val NO_AUTH_PATHS = listOf("/auth/login", "/auth/refresh", "/public/rider/app/")
 
 /** 注入 `Authorization: Bearer rider_xxx`(06 §3.8)。 */
 @Singleton

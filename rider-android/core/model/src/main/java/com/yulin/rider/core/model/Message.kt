@@ -35,6 +35,10 @@ data class DeviceReport(
     val notificationEnabled: Boolean? = null,
     val backgroundLocationGranted: Boolean? = null,
     val keepaliveGuideDone: Boolean? = null,
+    val appVersionCode: Int? = null,
+    val managedMode: String? = null,
+    val lastUpdateStatus: String? = null,
+    val lastUpdateVersionCode: Int? = null,
 )
 
 @Serializable

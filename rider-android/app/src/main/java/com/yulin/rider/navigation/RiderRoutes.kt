@@ -35,6 +35,7 @@ object RiderRoutes {
     const val PROFILE = "profile"
     const val SETTINGS = "settings"
     const val ABOUT = "about"
+    const val APP_UPDATE = "app_update"
 
     // 服务分、结算详情、申诉三页不在导航图里:家庭自营配送不给自己计价结算,
     // 也就没有评分和申诉对象。真要开的话连页面带路由一起加,别只留个进不去的壳。
