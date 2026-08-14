@@ -26,6 +26,9 @@ public class DeliveryBoardService {
 
     private static final int RISK_HIGH_SECONDS = 600;
     private static final int RISK_MEDIUM_SECONDS = 1800;
+    // 波次状态字面量在这里重新写一份，是为了不让看板反向依赖 delivery.task ——
+    // tracking 整包都是通过 port 与业务侧打交道的。
+    private static final String STATUS_RETURNING = "RETURNING";
     private static final List<String> IN_TRANSIT_STATUSES =
             List.of("ASSIGNED", "ACCEPTED", "PICKED_UP", "DELIVERING", "ARRIVED");
 
@@ -73,6 +76,9 @@ public class DeliveryBoardService {
         Map<Long, TrackingBoardDao.RiderLoadRow> loads = boardDao.riderLoads();
         Map<Long, Long> currentWaves = boardDao.currentWaveByRider();
         Map<Long, LocalDateTime> planReturns = boardDao.planReturnByRider();
+        List<TrackingBoardDao.WaveBriefRow> waveRows = boardDao.activeWaves();
+        Map<Long, String> waveStatusById = new LinkedHashMap<>();
+        waveRows.forEach(wave -> waveStatusById.put(wave.waveId(), wave.status()));
 
         boolean requireVerifyCode = ports.config().getBool(TrackingConfigPort.REQUIRE_VERIFY_CODE);
         boolean requirePhoto = ports.config().getBool(TrackingConfigPort.REQUIRE_PHOTO);
@@ -80,8 +86,10 @@ public class DeliveryBoardService {
 
         List<DeliveryBoardDto.RiderBoardCardDto> riders = new ArrayList<>(riderRows.size());
         for (TrackingRiderDao.BoardRiderRow row : riderRows) {
+            Long currentWaveId = currentWaves.get(row.riderId());
             riders.add(riderCard(row, positions.get(row.riderId()), loads.get(row.riderId()),
-                    currentWaves.get(row.riderId()), planReturns.get(row.riderId()), now, livenessTimeout));
+                    currentWaveId, waveStatusById.get(currentWaveId),
+                    planReturns.get(row.riderId()), now, livenessTimeout));
         }
 
         List<DeliveryBoardDto.AdminTaskCardDto> pending = new ArrayList<>();
@@ -117,16 +125,24 @@ public class DeliveryBoardService {
         openException.sort(Comparator
                 .comparing((DeliveryBoardDto.AdminTaskCardDto card) -> card.createdAt() == null ? "" : card.createdAt()));
 
+        // 待回店的骑手未终结任务数确实是 0，但人还在最后一个顾客门口往回骑，
+        // 当成空闲派下一趟等于让他掉头。
         List<DeliveryBoardDto.RiderBoardCardDto> idleRiders = riders.stream()
                 .filter(rider -> "ON_DUTY".equals(rider.workStatus()))
                 .filter(rider -> rider.currentTaskCount() == null || rider.currentTaskCount() == 0)
+                .filter(rider -> !Boolean.TRUE.equals(rider.returningToStore()))
                 .toList();
 
         int onDutyRiderCount = (int) riders.stream().filter(rider -> "ON_DUTY".equals(rider.workStatus())).count();
+        int returningRiderCount = (int) riders.stream()
+                .filter(rider -> "ON_DUTY".equals(rider.workStatus()))
+                .filter(rider -> Boolean.TRUE.equals(rider.returningToStore()))
+                .count();
         int availableRiderCount = (int) riders.stream()
                 .filter(rider -> "ON_DUTY".equals(rider.workStatus()))
                 .filter(rider -> !Boolean.TRUE.equals(rider.locationStale()))
                 .filter(rider -> rider.dispatchPausedUntil() == null)
+                .filter(rider -> !Boolean.TRUE.equals(rider.returningToStore()))
                 .filter(rider -> rider.loadRatio() == null || rider.loadRatio() < 1d)
                 .count();
 
@@ -142,6 +158,7 @@ public class DeliveryBoardService {
                 boardDao.openExceptionCount(),
                 onDutyRiderCount,
                 availableRiderCount,
+                returningRiderCount,
                 capacityWarning,
                 stats.avgSeconds() == null ? 0 : stats.avgSeconds() / 60,
                 stats.deliveredCount() == null || stats.deliveredCount() == 0
@@ -149,7 +166,7 @@ public class DeliveryBoardService {
                         : Math.round((double) stats.onTimeCount() / stats.deliveredCount() * 100d) / 100d
         );
 
-        List<DeliveryBoardDto.WaveBriefDto> waves = boardDao.activeWaves().stream()
+        List<DeliveryBoardDto.WaveBriefDto> waves = waveRows.stream()
                 .map(wave -> new DeliveryBoardDto.WaveBriefDto(
                         wave.waveId(),
                         wave.waveNo(),
@@ -192,6 +209,7 @@ public class DeliveryBoardService {
             TrackingLocationDao.LatestRow position,
             TrackingBoardDao.RiderLoadRow load,
             Long currentWaveId,
+            String currentWaveStatus,
             LocalDateTime planReturnAt,
             LocalDateTime now,
             int livenessTimeoutSeconds
@@ -220,6 +238,8 @@ public class DeliveryBoardService {
                 stale,
                 position == null ? null : position.batteryLevel(),
                 currentWaveId,
+                currentWaveStatus,
+                STATUS_RETURNING.equals(currentWaveStatus),
                 taskCount,
                 row.maxConcurrentTask(),
                 Math.round((double) taskCount / maxConcurrent * 1000d) / 1000d,

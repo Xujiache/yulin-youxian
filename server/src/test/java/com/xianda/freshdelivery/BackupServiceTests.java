@@ -16,6 +16,7 @@ import com.xianda.freshdelivery.backup.BackupFaultInjector;
 import com.xianda.freshdelivery.backup.BackupMaintenanceMode;
 import com.xianda.freshdelivery.backup.SafeBackupEngine;
 import com.xianda.freshdelivery.backup.SecureUploadInterceptor;
+import com.xianda.freshdelivery.delivery.common.EvidenceUrlSigner;
 import com.xianda.freshdelivery.backup.SessionRevocationGuard;
 import com.xianda.freshdelivery.delivery.account.RiderAuthService;
 import com.xianda.freshdelivery.service.AuthService;
@@ -342,7 +343,9 @@ class BackupServiceTests {
         AuthService auth = mock(AuthService.class);
         RiderAuthService riderAuth = mock(RiderAuthService.class);
         SessionRevocationGuard sessions = new SessionRevocationGuard();
-        SecureUploadInterceptor interceptor = new SecureUploadInterceptor(auth, riderAuth, sessions);
+        EvidenceUrlSigner urlSigner = new EvidenceUrlSigner("test-secret", 1800L);
+        SecureUploadInterceptor interceptor =
+                new SecureUploadInterceptor(auth, riderAuth, sessions, urlSigner);
 
         MockHttpServletRequest anonymousRequest = new MockHttpServletRequest("GET", "/uploads/delivery/proof.jpg");
         MockHttpServletResponse anonymousResponse = new MockHttpServletResponse();
@@ -360,6 +363,40 @@ class BackupServiceTests {
         assertTrue(interceptor.preHandle(authenticatedRequest, authenticatedResponse, new Object()));
         assertEquals("private, no-store", authenticatedResponse.getHeader("Cache-Control"));
         assertEquals("Authorization", authenticatedResponse.getHeader("Vary"));
+    }
+
+    @Test
+    void signedEvidenceLinksLetTheMiniProgramRenderPhotosWithoutHeaders() throws Exception {
+        AuthService auth = mock(AuthService.class);
+        RiderAuthService riderAuth = mock(RiderAuthService.class);
+        EvidenceUrlSigner urlSigner = new EvidenceUrlSigner("test-secret", 1800L);
+        SecureUploadInterceptor interceptor = new SecureUploadInterceptor(
+                auth, riderAuth, new SessionRevocationGuard(), urlSigner);
+
+        String path = "/uploads/delivery/202608/proof.jpg";
+        String signed = urlSigner.sign(path);
+        String query = signed.substring(signed.indexOf('?') + 1);
+
+        MockHttpServletRequest signedRequest = new MockHttpServletRequest("GET", path);
+        signedRequest.setQueryString(query);
+        for (String pair : query.split("&")) {
+            int equals = pair.indexOf('=');
+            signedRequest.addParameter(pair.substring(0, equals), pair.substring(equals + 1));
+        }
+        MockHttpServletResponse signedResponse = new MockHttpServletResponse();
+        assertTrue(interceptor.preHandle(signedRequest, signedResponse, new Object()));
+        assertEquals("private, no-store", signedResponse.getHeader("Cache-Control"));
+
+        // 换一个文件名复用同一张票据，等于拿到别人家门口的照片，必须拦下来
+        MockHttpServletRequest otherFileRequest =
+                new MockHttpServletRequest("GET", "/uploads/delivery/202608/other.jpg");
+        for (String pair : query.split("&")) {
+            int equals = pair.indexOf('=');
+            otherFileRequest.addParameter(pair.substring(0, equals), pair.substring(equals + 1));
+        }
+        MockHttpServletResponse otherFileResponse = new MockHttpServletResponse();
+        assertFalse(interceptor.preHandle(otherFileRequest, otherFileResponse, new Object()));
+        assertEquals(401, otherFileResponse.getStatus());
     }
 
     private Harness service(

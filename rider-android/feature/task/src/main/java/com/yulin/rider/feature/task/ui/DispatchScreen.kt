@@ -37,6 +37,7 @@ import com.yulin.rider.core.designsystem.MtCard
 import com.yulin.rider.core.designsystem.MtCardHeader
 import com.yulin.rider.core.designsystem.MtDivider
 import com.yulin.rider.core.designsystem.MtEmptyState
+import com.yulin.rider.core.designsystem.MtInfoBar
 import com.yulin.rider.core.designsystem.MtLeg
 import com.yulin.rider.core.designsystem.MtLegBlock
 import com.yulin.rider.core.designsystem.MtPrimaryButton
@@ -47,6 +48,8 @@ import com.yulin.rider.core.designsystem.StatusTone
 import com.yulin.rider.core.designsystem.tabularFigures
 import com.yulin.rider.feature.task.data.TaskCardUi
 import com.yulin.rider.feature.task.data.TaskRepository
+import com.yulin.rider.feature.task.data.riderMessage
+import com.yulin.rider.feature.task.data.runTransition
 import com.yulin.rider.feature.task.util.RiderFormats
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -65,11 +68,16 @@ class DispatchViewModel(app: Application, private val taskId: Long) : AndroidVie
         viewModelScope.launch { repository.refreshTask(taskId) }
     }
 
+    private val _error = MutableStateFlow<String?>(null)
+    val error: StateFlow<String?> = _error
+
     fun accept(onDone: () -> Unit) = viewModelScope.launch {
+        if (_accepting.value) return@launch
         _accepting.value = true
-        repository.accept(taskId)
+        val result = runTransition { repository.accept(taskId) }
         _accepting.value = false
-        onDone()
+        _error.value = result.riderMessage
+        if (result.queued) onDone()
     }
 
     companion object {
@@ -105,10 +113,12 @@ fun DispatchScreen(
     )
     val task by viewModel.task.collectAsState()
     val accepting by viewModel.accepting.collectAsState()
+    val error by viewModel.error.collectAsState()
 
     DispatchContent(
         task = task,
         accepting = accepting,
+        error = error,
         modifier = modifier,
         onDismiss = onDismiss,
         onAccept = { viewModel.accept { onAccepted(taskId) } },
@@ -119,6 +129,7 @@ fun DispatchScreen(
 private fun DispatchContent(
     task: TaskCardUi?,
     accepting: Boolean,
+    error: String? = null,
     modifier: Modifier = Modifier,
     onDismiss: () -> Unit = {},
     onAccept: () -> Unit = {},
@@ -157,6 +168,13 @@ private fun DispatchContent(
             }
         }
 
+        error?.let {
+            MtInfoBar(text = it, tone = StatusTone.DANGER, icon = FreshIconType.ERROR)
+        }
+
+        error?.let {
+            MtInfoBar(text = it, tone = StatusTone.DANGER, icon = FreshIconType.ERROR)
+        }
         Row(
             modifier = Modifier
                 .fillMaxWidth()

@@ -66,6 +66,9 @@ import com.yulin.rider.core.designsystem.tabularFigures
 import com.yulin.rider.feature.task.data.ReceiveMethod
 import com.yulin.rider.feature.task.data.TaskCardUi
 import com.yulin.rider.feature.task.data.TaskRepository
+import com.yulin.rider.feature.task.data.TransitionResult
+import com.yulin.rider.feature.task.data.riderMessage
+import com.yulin.rider.feature.task.data.runTransition
 import com.yulin.rider.feature.task.ui.camera.CameraCapture
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -100,8 +103,18 @@ class DeliverViewModel(
     val verifyCode: StateFlow<String> = savedStateHandle.getStateFlow(KEY_VERIFY_CODE, "")
     val infoSettled: StateFlow<Boolean> = savedStateHandle.getStateFlow(KEY_INFO_SETTLED, false)
 
+    private val _error = MutableStateFlow<String?>(null)
+    /** 送达没排进队列时的原因。空着就等于成功，界面不能靠「没崩」来判断。 */
+    val error: StateFlow<String?> = _error
+    private val _submitting = MutableStateFlow(false)
+    val submitting: StateFlow<Boolean> = _submitting
+
     init {
         viewModelScope.launch { repository.observeTask(taskId).collect { _task.value = it } }
+    }
+
+    fun dismissError() {
+        _error.value = null
     }
 
     fun openCamera(open: Boolean) {
@@ -126,7 +139,17 @@ class DeliverViewModel(
 
     fun deliver(photos: List<String>, method: ReceiveMethod, verifyCode: String?, onDone: () -> Unit) =
         viewModelScope.launch {
-            repository.deliver(taskId, photos, method, verifyCode)
+            if (_submitting.value) return@launch
+            _submitting.value = true
+            _error.value = null
+            val result = runTransition { repository.deliver(taskId, photos, method, verifyCode) }
+            _submitting.value = false
+            if (result is TransitionResult.EvidenceMissing) {
+                // 失效的那几张从草稿里摘掉，缩略图和「必拍」提示才对得上，骑手只补拍缺的
+                savedStateHandle[KEY_PHOTOS] = ArrayList(result.remainingPhotoPaths)
+            }
+            _error.value = result.riderMessage
+            if (!result.queued) return@launch
             savedStateHandle[KEY_PHOTOS] = arrayListOf<String>()
             savedStateHandle[KEY_VERIFY_CODE] = ""
             savedStateHandle[KEY_CAMERA_OPEN] = false
@@ -162,6 +185,8 @@ fun DeliverScreen(
         .getOrDefault(ReceiveMethod.FACE_TO_FACE)
     val verifyCode by viewModel.verifyCode.collectAsState()
     val infoSettled by viewModel.infoSettled.collectAsState()
+    val error by viewModel.error.collectAsState()
+    val submitting by viewModel.submitting.collectAsState()
 
     val current = task
     if (current == null) {
@@ -211,11 +236,14 @@ fun DeliverScreen(
         method = method,
         verifyCode = verifyCode,
         infoSettled = infoSettled,
+        error = error,
+        submitting = submitting,
         modifier = modifier,
         onBack = onBack,
         onTakePhoto = { viewModel.openCamera(true) },
         onMethodChange = viewModel::setMethod,
         onVerifyCodeChange = viewModel::setVerifyCode,
+        onDismissError = viewModel::dismissError,
         onConfirm = { viewModel.deliver(photos, method, verifyCode, onDone) },
     )
 }
@@ -227,16 +255,20 @@ private fun DeliverContent(
     method: ReceiveMethod,
     verifyCode: String,
     infoSettled: Boolean,
+    error: String? = null,
+    submitting: Boolean = false,
     modifier: Modifier = Modifier,
     onBack: () -> Unit = {},
     onTakePhoto: () -> Unit = {},
     onMethodChange: (ReceiveMethod) -> Unit = {},
     onVerifyCodeChange: (String) -> Unit = {},
+    onDismissError: () -> Unit = {},
     onConfirm: () -> Unit = {},
 ) {
     val codeOk = !task.card.requireVerifyCode || verifyCode.isNotBlank()
-    val canConfirm = photos.isNotEmpty() && infoSettled && codeOk
+    val canConfirm = photos.isNotEmpty() && infoSettled && codeOk && !submitting
     val disabledReason = when {
+        error != null -> error
         photos.isEmpty() -> "未拍摄送达凭证，无法确认送达"
         !codeOk -> "请填写顾客核销码"
         !infoSettled -> "请先核对地址、楼层与件数"
@@ -251,10 +283,10 @@ private fun DeliverContent(
         bottomBar = {
             MtBottomActionBar(
                 hint = disabledReason,
-                hintTone = if (photos.isEmpty()) StatusTone.DANGER else StatusTone.WARNING,
+                hintTone = if (photos.isEmpty() || error != null) StatusTone.DANGER else StatusTone.WARNING,
             ) {
                 SlideToConfirm(
-                    text = "滑动确认已送达",
+                    text = if (submitting) "正在记录…" else "滑动确认已送达",
                     action = MtAction.DELIVER,
                     modifier = Modifier.weight(1f),
                     enabled = canConfirm,
@@ -276,6 +308,14 @@ private fun DeliverContent(
                 ),
             verticalArrangement = Arrangement.spacedBy(FreshSpacing.Xs),
         ) {
+            error?.let {
+                MtInfoBar(
+                    text = it,
+                    tone = StatusTone.DANGER,
+                    icon = FreshIconType.ERROR,
+                    onDismiss = onDismissError,
+                )
+            }
             KeyInfoBlock(task)
 
             MtCard {

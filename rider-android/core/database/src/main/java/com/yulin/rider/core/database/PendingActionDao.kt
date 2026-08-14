@@ -10,8 +10,9 @@ import kotlinx.coroutines.flow.Flow
  * 队列 DAO。
  *
  * 分组规则:同一任务的动作必须串行(ARRIVE 一定要先于 DELIVER 到达服务端),不同任务之间可并行。
- * 没有 taskId 的动作(如整波次取货)按 waveId 归组,两者都没有的落到全局组 'G' ——
- * 宁可多串行几条,也不能乱序。
+ * 没有 taskId 的动作(整波接单 / 整波取货 / 回店)按 waveId 归组,两者都没有的落到全局组 'G'。
+ * 波次级动作与同波次任务级动作之间的先后由 [PendingActionQueries.CLAIM_HEAD_OF_EACH_GROUP]
+ * 的第二条约束单独保证。
  */
 @Dao
 interface PendingActionDao {
@@ -41,26 +42,8 @@ interface PendingActionDao {
     @Query("SELECT * FROM pending_action WHERE clientEventId = :clientEventId")
     suspend fun findById(clientEventId: String): PendingActionEntity?
 
-    /**
-     * 每个组只放出最早的一条。失败的队头不会被删除,于是自动阻塞了本组后续动作,
-     * 而其他组照常推进 —— 这就是 06 §3.3 要求的「FIFO + 同任务串行」。
-     */
-    @Query(
-        """
-        SELECT * FROM pending_action AS p
-        WHERE NOT EXISTS (
-            SELECT 1 FROM pending_action AS q
-            WHERE (CASE WHEN q.waveId IS NOT NULL THEN 'W' || q.waveId
-                        WHEN q.taskId IS NOT NULL THEN 'T' || q.taskId ELSE 'G' END)
-                = (CASE WHEN p.waveId IS NOT NULL THEN 'W' || p.waveId
-                        WHEN p.taskId IS NOT NULL THEN 'T' || p.taskId ELSE 'G' END)
-              AND (q.createdAt < p.createdAt
-                   OR (q.createdAt = p.createdAt AND q.rowid < p.rowid))
-        )
-        ORDER BY p.createdAt ASC, p.rowid ASC
-        LIMIT :limit
-        """
-    )
+    /** 见 [PendingActionQueries.CLAIM_HEAD_OF_EACH_GROUP]，那里连注释一起放着。 */
+    @Query(PendingActionQueries.CLAIM_HEAD_OF_EACH_GROUP)
     suspend fun claimHeadOfEachGroup(limit: Int): List<PendingActionEntity>
 
     /**
@@ -71,6 +54,16 @@ interface PendingActionDao {
         "SELECT * FROM pending_action WHERE taskId IN (:taskIds) ORDER BY createdAt ASC, rowid ASC"
     )
     suspend fun findByTasks(taskIds: List<Long>): List<PendingActionEntity>
+
+    /**
+     * 波次级动作(整波接单 / 整波取货 / 回店)。它们的 taskId 恒为 null，
+     * 所以 [findByTasks] 永远匹配不到，终态回滚和乐观标记清理都得单独把它们捞出来。
+     */
+    @Query(
+        "SELECT * FROM pending_action WHERE waveId = :waveId AND taskId IS NULL " +
+            "ORDER BY createdAt ASC, rowid ASC"
+    )
+    suspend fun findWaveLevelByWave(waveId: Long): List<PendingActionEntity>
 
     @Query("DELETE FROM pending_action WHERE clientEventId = :clientEventId")
     suspend fun delete(clientEventId: String)

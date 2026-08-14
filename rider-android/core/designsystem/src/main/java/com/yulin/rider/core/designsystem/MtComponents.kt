@@ -304,31 +304,62 @@ fun MtTextTabs(
 
 /* ------------------------------------------------------------------ 信息条 */
 
-/** 顶部信息条。蓝底蓝字，可关闭，整宽贴边。 */
+/**
+ * 顶部信息条。蓝底蓝字，可关闭，整宽贴边。
+ *
+ * [actionText] 是独立的行动槽位，和 [onDismiss] 的关闭叉分开：
+ * 把「点此重试」挂在关闭叉上，读屏念出来的是「关闭提示」，骑手按语音提示点下去
+ * 实际触发的却是重试，两者语义完全相反。
+ */
 @Composable
 fun MtInfoBar(
     text: String,
     modifier: Modifier = Modifier,
     tone: StatusTone = StatusTone.INFO,
     icon: FreshIconType = FreshIconType.SHIELD,
+    actionText: String? = null,
+    onAction: (() -> Unit)? = null,
     onDismiss: (() -> Unit)? = null,
 ) {
     Surface(modifier = modifier.fillMaxWidth(), color = tone.toneContainer()) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = FreshSpacing.Sm, vertical = FreshSpacing.Xs)
-                .semantics(mergeDescendants = true) { contentDescription = text },
+                .padding(horizontal = FreshSpacing.Sm, vertical = FreshSpacing.Xs),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(FreshSpacing.Xs),
         ) {
-            FreshIcon(icon, contentDescription = null, tint = tone.toneColor(), size = 18.dp)
-            Text(
-                text = text,
-                style = MaterialTheme.typography.bodyMedium,
-                color = tone.toneColor(),
-                modifier = Modifier.weight(1f),
-            )
+            Row(
+                modifier = Modifier
+                    .weight(1f)
+                    .semantics(mergeDescendants = true) { contentDescription = text },
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(FreshSpacing.Xs),
+            ) {
+                FreshIcon(icon, contentDescription = null, tint = tone.toneColor(), size = 18.dp)
+                Text(
+                    text = text,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = tone.toneColor(),
+                    modifier = Modifier.weight(1f),
+                )
+            }
+            if (actionText != null && onAction != null) {
+                Text(
+                    text = actionText,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = tone.toneColor(),
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(FreshRadius.Small))
+                        .clickable(onClick = onAction)
+                        .heightIn(min = 28.dp)
+                        .padding(horizontal = FreshSpacing.Xs, vertical = FreshSpacing.Xxs)
+                        .semantics {
+                            contentDescription = actionText
+                            role = Role.Button
+                        },
+                )
+            }
             if (onDismiss != null) {
                 Box(
                     modifier = Modifier

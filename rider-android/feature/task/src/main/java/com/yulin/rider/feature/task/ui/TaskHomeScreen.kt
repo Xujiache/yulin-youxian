@@ -93,6 +93,7 @@ fun TaskHomeScreen(
         onRefresh = viewModel::refresh,
         onRetrySync = viewModel::retrySync,
         onDismissFailure = viewModel::dismissFailure,
+        onDismissActionError = viewModel::dismissActionError,
         onSelectSection = viewModel::selectSection,
         onOpenTask = onOpenTask,
         onOpenWave = onOpenWave,
@@ -123,6 +124,7 @@ internal fun TaskHomeContent(
     onRefresh: () -> Unit = {},
     onRetrySync: () -> Unit = {},
     onDismissFailure: (String) -> Unit = {},
+    onDismissActionError: () -> Unit = {},
     onSelectSection: (TaskSection) -> Unit = {},
     onOpenTask: (Long) -> Unit = {},
     onOpenWave: (Long) -> Unit = {},
@@ -188,6 +190,15 @@ internal fun TaskHomeContent(
         state.notice?.let {
             MtInfoBar(text = it, tone = StatusTone.WARNING, icon = FreshIconType.OFFLINE)
         }
+        // 卡片上直接点的动作没排进队列时，骑手手上什么反馈都没有，只会以为自己点漏了
+        state.actionError?.let {
+            MtInfoBar(
+                text = it,
+                tone = StatusTone.DANGER,
+                icon = FreshIconType.ERROR,
+                onDismiss = onDismissActionError,
+            )
+        }
         // 被服务端拒绝并已回滚的动作。这条必须排在最前面：
         // 它意味着骑手以为做完的事情其实没做成，比「离线中」严重得多。
         state.syncFailures.forEach { failure ->
@@ -205,10 +216,11 @@ internal fun TaskHomeContent(
         }
         when {
             state.hasSyncFailure -> MtInfoBar(
-                text = "有操作多次同步失败，点此重试",
+                text = "有操作多次同步失败",
                 tone = StatusTone.DANGER,
                 icon = FreshIconType.ERROR,
-                onDismiss = onRetrySync,
+                actionText = "重试",
+                onAction = onRetrySync,
             )
 
             state.pendingSyncCount > 0 -> MtInfoBar(

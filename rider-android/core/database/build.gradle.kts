@@ -31,6 +31,9 @@ dependencies {
     ksp(libs.hilt.compiler)
 
     testImplementation("junit:junit:4.13.2")
+    // 队头分组那条 SQL 直接对着真 SQLite 跑：顺序性写错的后果是「没取货就送达」，
+    // 只靠肉眼审 SQL 兜不住，而 Room 的队列 DAO 又跑不进 JVM 单测
+    testImplementation("org.xerial:sqlite-jdbc:3.41.2.2")
     androidTestImplementation("androidx.test:core-ktx:1.7.0")
     androidTestImplementation("androidx.test.ext:junit:1.3.0")
     androidTestImplementation("androidx.room:room-testing:2.8.4")

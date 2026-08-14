@@ -130,14 +130,47 @@ public class DeliveryExceptionService {
         // 不去重的话调度台上会出现好几条同样的「货品破损」，照片还会因为凭证已被
         // 前一条绑定而永久失败。
         String clientEventId = request.clientEventId() == null ? null : request.clientEventId().trim();
-        if (clientEventId != null && !clientEventId.isBlank()) {
-            Optional<DeliveryExceptionRecord> replayed =
-                    exceptionRecordDao.findByClientEventId(clientEventId);
-            if (replayed.isPresent()) {
-                return toDto(replayed.get());
-            }
+        Optional<ExceptionDto> replayed = replayOf(clientEventId, riderId);
+        if (replayed.isPresent()) {
+            return replayed.get();
         }
-        DeliveryExceptionRecord saved = unitOfWork.commit(() -> {
+        DeliveryExceptionRecord saved;
+        try {
+            saved = insertReport(riderId, request, type, clientEventId, now);
+        } catch (DuplicateKeyException conflict) {
+            // 上面那次重查是在事务外做的，看不到此刻还没提交的同键上报。唯一索引兜底之后
+            // 事务已回滚，这时再查就能拿到胜出的那条，对骑手端仍然表现为一次成功的重放。
+            return replayOf(clientEventId, riderId)
+                    .orElseThrow(() -> new DeliveryException(409, "异常上报发生并发冲突，请重试"));
+        }
+        notifyReported(saved, type);
+        return toDto(saved);
+    }
+
+    /**
+     * 重放也要认归属。
+     *
+     * clientEventId 由骑手端自己生成，一旦撞上（或被猜到）别人的键，原样返回那条异常单
+     * 等于把其他骑手、其他顾客的地址和描述交出去，所以对齐任务重放的 sameRider 校验。
+     */
+    private Optional<ExceptionDto> replayOf(String clientEventId, Long riderId) {
+        if (clientEventId == null || clientEventId.isBlank()) {
+            return Optional.empty();
+        }
+        return exceptionRecordDao.findByClientEventId(clientEventId).map(record -> {
+            if (riderId != null && !Objects.equals(record.riderId(), riderId)) {
+                throw new DeliveryException(403, "该幂等键已被其他骑手的异常上报占用");
+            }
+            return toDto(record);
+        });
+    }
+
+    private DeliveryExceptionRecord insertReport(Long riderId,
+                                                 ExceptionCreateRequest request,
+                                                 ExceptionType type,
+                                                 String clientEventId,
+                                                 LocalDateTime now) {
+        return unitOfWork.commit(() -> {
             ExceptionTaskQueryDao.TaskSnapshot task = request.taskId() == null
                     ? null
                     : taskQueryDao.findByIdForUpdate(request.taskId())
@@ -177,8 +210,7 @@ public class DeliveryExceptionService {
                     now,
                     now
             );
-            long exceptionId = insertWithGeneratedNo(draft, now);
-            exceptionRecordDao.markClientEventId(exceptionId, clientEventId);
+            long exceptionId = insertWithGeneratedNo(draft, clientEventId, now);
             if (evidenceDao.bindToException(evidenceIds, exceptionId, request.taskId(), riderId)
                     != evidenceIds.size()) {
                 throw new DeliveryException(409, "异常凭证绑定发生并发冲突，请重试");
@@ -189,8 +221,6 @@ public class DeliveryExceptionService {
             }
             return requireRecord(exceptionId);
         });
-        notifyReported(saved, type);
-        return toDto(saved);
     }
 
     public ExceptionDto handle(long exceptionId, ExceptionHandleRequest request, Long toRiderId, String operatorName) {
@@ -468,18 +498,22 @@ public class DeliveryExceptionService {
         }
     }
 
-    private long insertWithGeneratedNo(DeliveryExceptionRecord draft, LocalDateTime now) {
+    private long insertWithGeneratedNo(DeliveryExceptionRecord draft, String clientEventId, LocalDateTime now) {
         LocalDate date = now.toLocalDate();
         String prefix = EXCEPTION_NO_PREFIX + DAY_KEY.format(date);
+        DuplicateKeyException lastConflict = null;
         for (int attempt = 0; attempt < SEQUENCE_RETRY; attempt++) {
             String exceptionNo = prefix + pad(nextSequence(exceptionRecordDao.maxExceptionNoWithPrefix(prefix), prefix));
             try {
-                return exceptionRecordDao.insert(withNo(draft, exceptionNo), now);
+                return exceptionRecordDao.insert(withNo(draft, exceptionNo), clientEventId, now);
             } catch (DuplicateKeyException exception) {
+                lastConflict = exception;
                 log.debug("异常单号 {} 冲突，重试生成", exceptionNo);
             }
         }
-        throw new DeliveryException(500, "异常单号生成失败，请重试");
+        // 幂等键和单号共用一张表的唯一索引，这里分不清撞的是哪一个，
+        // 把原始异常抛回去让调用方按幂等键重查，避免把一次重放变成 500。
+        throw lastConflict;
     }
 
     private static DeliveryExceptionRecord withNo(DeliveryExceptionRecord draft, String exceptionNo) {

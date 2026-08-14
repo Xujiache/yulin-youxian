@@ -17,6 +17,9 @@ public record DeliveryBoardDto(
             Integer openExceptionCount,
             Integer onDutyRiderCount,
             Integer availableRiderCount,
+            // 单独报「待回店」的人数：这些人不计入 availableRiderCount，
+            // 不报出来调度员只会看到可用骑手是 0，不知道再等几分钟就有人了。
+            Integer returningRiderCount,
             Boolean capacityWarning,
             Integer avgDeliveryMinutes,
             Double onTimeRateToday
@@ -89,6 +92,10 @@ public record DeliveryBoardDto(
             Boolean locationStale,
             Integer batteryLevel,
             Long currentWaveId,
+            // 波次状态要跟到卡片上：待回店的骑手未终结任务数为 0，
+            // 只看 currentTaskCount 会和真正空闲的人长得一模一样。
+            String currentWaveStatus,
+            Boolean returningToStore,
             Integer currentTaskCount,
             Integer maxConcurrentTask,
             Double loadRatio,

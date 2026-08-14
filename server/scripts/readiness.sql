@@ -2,7 +2,7 @@ SET @schema_name := DATABASE();
 
 SELECT COUNT(*) INTO @flyway_latest
 FROM flyway_schema_history
-WHERE version = '14' AND success = 1;
+WHERE version = '15' AND success = 1;
 
 SELECT COUNT(*) INTO @flyway_failed
 FROM flyway_schema_history
@@ -66,7 +66,7 @@ WHERE table_schema = @schema_name
 SELECT IF(
   @flyway_latest = 1
   AND @flyway_failed = 0
-  AND @flyway_max_version = 14
+  AND @flyway_max_version = 15
   AND @business_table_count = 38
   AND @expected_table_count = 38,
   'READY',

@@ -1,9 +1,11 @@
 package com.yulin.rider
 
 import android.app.Application
+import com.yulin.rider.core.database.AccountScopedStores
 import com.yulin.rider.core.network.SessionEvent
 import com.yulin.rider.core.network.SessionEvents
 import com.yulin.rider.core.push.RiderPushManager
+import com.yulin.rider.feature.task.data.SyncFailureLog
 import dagger.hilt.android.HiltAndroidApp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -24,6 +26,10 @@ class RiderApplication : Application() {
         super.onCreate()
 
         RiderNotificationChannels.createAll(this)
+
+        // 失败横幅存在 feature/task 自己的 SharedPreferences 里，Room 那次清理带不走它，
+        // 不登记的话换账号后前一个骑手的任务号还挂在首页
+        AccountScopedStores.register { SyncFailureLog.get(this).clear() }
 
         // 极光 AppKey 为空时只打一条日志,3 秒轮询那条通道不受影响
         RiderPushManager.init(this, BuildConfig.DEBUG)

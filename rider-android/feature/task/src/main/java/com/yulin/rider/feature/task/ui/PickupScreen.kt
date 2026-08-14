@@ -44,6 +44,7 @@ import com.yulin.rider.core.designsystem.MtAction
 import com.yulin.rider.core.designsystem.MtBottomActionBar
 import com.yulin.rider.core.designsystem.MtCard
 import com.yulin.rider.core.designsystem.MtDivider
+import com.yulin.rider.core.designsystem.MtInfoBar
 import com.yulin.rider.core.designsystem.MtMetric
 import com.yulin.rider.core.designsystem.MtScaffold
 import com.yulin.rider.core.designsystem.MtTag
@@ -56,6 +57,8 @@ import com.yulin.rider.feature.task.data.TaskCardUi
 import com.yulin.rider.feature.task.data.TaskRepository
 import com.yulin.rider.feature.task.data.TaskStatus
 import com.yulin.rider.feature.task.data.WaveUi
+import com.yulin.rider.feature.task.data.riderMessage
+import com.yulin.rider.feature.task.data.runTransition
 import com.yulin.rider.feature.task.util.RiderFormats
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -77,9 +80,19 @@ class PickupViewModel(
     )
     val checked: StateFlow<Set<Long>> = _checked
 
+    private val _error = MutableStateFlow<String?>(null)
+    /** 取货没排进队列时的原因。不上屏的话骑手会以为已经取完货，把货落在店里。 */
+    val error: StateFlow<String?> = _error
+    private val _submitting = MutableStateFlow(false)
+    val submitting: StateFlow<Boolean> = _submitting
+
     init {
         viewModelScope.launch { repository.observeWave(waveId).collect { _wave.value = it } }
         viewModelScope.launch { repository.refresh() }
+    }
+
+    fun dismissError() {
+        _error.value = null
     }
 
     private fun updateChecked(next: Set<Long>) {
@@ -98,8 +111,14 @@ class PickupViewModel(
     }
 
     fun confirmPickup(onDone: () -> Unit) = viewModelScope.launch {
+        if (_submitting.value) return@launch
+        _submitting.value = true
+        _error.value = null
         val packages = _wave.value?.stops?.sumOf { it.card.packageCount.coerceAtLeast(1) } ?: 0
-        repository.pickupWave(waveId, _checked.value.toList(), packages)
+        val result = runTransition { repository.pickupWave(waveId, _checked.value.toList(), packages) }
+        _submitting.value = false
+        _error.value = result.riderMessage
+        if (!result.queued) return@launch
         savedStateHandle.remove<LongArray>(KEY_CHECKED)
         onDone()
     }
@@ -122,6 +141,8 @@ fun PickupScreen(
     )
     val wave by viewModel.wave.collectAsState()
     val checked by viewModel.checked.collectAsState()
+    val error by viewModel.error.collectAsState()
+    val submitting by viewModel.submitting.collectAsState()
     val current = wave
     if (current == null) {
         FreshStackScaffold(title = "取货核对", modifier = modifier) { insets ->
@@ -138,10 +159,13 @@ fun PickupScreen(
     PickupContent(
         wave = current,
         checked = checked,
+        error = error,
+        submitting = submitting,
         modifier = modifier,
         onBack = onBack,
         onToggle = viewModel::toggle,
         onCheckAll = { viewModel.checkAll(it) },
+        onDismissError = viewModel::dismissError,
         onConfirm = { viewModel.confirmPickup(onDone) },
     )
 }
@@ -150,10 +174,13 @@ fun PickupScreen(
 private fun PickupContent(
     wave: WaveUi,
     checked: Set<Long>,
+    error: String? = null,
+    submitting: Boolean = false,
     modifier: Modifier = Modifier,
     onBack: () -> Unit = {},
     onToggle: (Long) -> Unit = {},
     onCheckAll: (List<Long>) -> Unit = {},
+    onDismissError: () -> Unit = {},
     onConfirm: () -> Unit = {},
 ) {
     val stops = wave.stops.filter { it.displayStatus == TaskStatus.ACCEPTED }.ifEmpty { wave.stops }
@@ -168,13 +195,18 @@ private fun PickupContent(
         onBack = onBack,
         bottomBar = {
             MtBottomActionBar(
-                hint = if (allChecked) null else "还有 ${stops.size - checkedCount} 单未核对",
+                hint = error ?: if (allChecked) null else "还有 ${stops.size - checkedCount} 单未核对",
+                hintTone = if (error != null) StatusTone.DANGER else StatusTone.WARNING,
             ) {
                 SlideToConfirm(
-                    text = if (allChecked) "滑动确认已取货" else "请先逐单核对",
+                    text = when {
+                        submitting -> "正在记录…"
+                        allChecked -> "滑动确认已取货"
+                        else -> "请先逐单核对"
+                    },
                     action = MtAction.PICKUP,
                     modifier = Modifier.weight(1f),
-                    enabled = allChecked,
+                    enabled = allChecked && !submitting,
                     disabledReason = "需要核对本趟全部订单",
                     onConfirm = onConfirm,
                 )
@@ -191,6 +223,16 @@ private fun PickupContent(
             ),
             verticalArrangement = Arrangement.spacedBy(FreshSpacing.Xs),
         ) {
+            error?.let { message ->
+                item {
+                    MtInfoBar(
+                        text = message,
+                        tone = StatusTone.DANGER,
+                        icon = FreshIconType.ERROR,
+                        onDismiss = onDismissError,
+                    )
+                }
+            }
             item {
                 PickupSummary(
                     stops = stops,

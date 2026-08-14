@@ -80,8 +80,14 @@ class PendingActionQueue private constructor(private val appContext: Context) {
         var success = 0
         var failed = 0
         var rolledBack = 0
+        var stuck = 0
         for (row in queue.nextBatch()) {
-            if (row.isStuck) continue
+            // 退避耗尽的队头不再自动重试，但它挡住了本组后续动作，
+            // 上层必须知道「这一轮什么都没动，是因为有条卡住的」，否则骑手只看到队列不减
+            if (row.isStuck) {
+                stuck++
+                continue
+            }
             val decoded = row.toDomain()
             if (decoded == null) {
                 // 载荷解不出来就永远重放不了；删除与 dirty 清理仍必须在同一 Room 事务。
@@ -118,7 +124,7 @@ class PendingActionQueue private constructor(private val appContext: Context) {
                 }
             }
         }
-        ReplayResult(success, failed, rolledBack)
+        ReplayResult(success, failed, rolledBack, stuck)
     }
 
     /** 骑手在「同步异常」提示里手动重试:清零退避计数后再跑一轮。 */
@@ -238,22 +244,27 @@ class PendingActionQueue private constructor(private val appContext: Context) {
         )
     }
 
+    /**
+     * 成功收尾。
+     *
+     * 乐观标记只能对「这一单已经没有别的动作在排队」时才摘掉。
+     * 按整个波次判断会连坐：同波次任意一条动作还在队列里，整波的乐观状态就一直是 dirty，
+     * 服务端真值永远落不下来；反过来清 dirty 时按波次一刀切，
+     * 又会把别的单还没同步的乐观状态一起放开，下一次刷新就把它抹回去了。
+     */
     private suspend fun finishSuccessfulAction(row: PendingActionEntity, action: PendingAction) {
         val db = RiderDatabases.of(appContext)
-        val waveId = row.waveId
-        val taskId = row.taskId
         db.withTransaction {
             val pendingDao = db.pendingActionDao()
             val taskDao = db.taskCacheDao()
             pendingDao.delete(row.clientEventId)
-            val hasFollowing = when {
-                waveId != null -> pendingDao.findByWave(waveId).isNotEmpty()
-                taskId != null -> pendingDao.findByTask(taskId).isNotEmpty()
-                else -> pendingDao.getAll().isNotEmpty()
-            }
-            if (!hasFollowing) {
-                affectedTaskIds(db, row, action).forEach { taskDao.clearDirty(it) }
-            }
+            val affected = affectedTaskIds(db, row, action)
+            if (affected.isEmpty()) return@withTransaction
+            // 波次级动作没走完时，整波的乐观状态都还没落定
+            val waveBlocked = row.waveId?.let { pendingDao.findWaveLevelByWave(it).isNotEmpty() } == true
+            if (waveBlocked) return@withTransaction
+            val stillQueued = pendingDao.findByTasks(affected).mapNotNull { it.taskId }.toSet()
+            affected.filterNot { it in stillQueued }.forEach { taskDao.clearDirty(it) }
         }
     }
 
@@ -264,8 +275,8 @@ class PendingActionQueue private constructor(private val appContext: Context) {
      * 之前是 deleteByWave()，同波次其他单的送达动作和照片会被一起删掉，
      * 而它们的状态快照又没被恢复，界面上还显示「已送达」，数据就这么丢了。
      *
-     * 波次级动作（整波次取货）的影响面来自它的乐观快照，本来就是那一批任务，
-     * 所以按任务集合删既覆盖了级联依赖（没取到货就别谈送达），又不会误伤别人。
+     * 例外是同波次里晚于它入队的波次级动作：那些动作的前提就是这一条已经成功，
+     * 连坐范围与快照写回的判据都在 [TerminalRollback] 里，那边有单测钉着。
      */
     private suspend fun rollbackTerminalGroup(
         row: PendingActionEntity,
@@ -279,10 +290,11 @@ class PendingActionQueue private constructor(private val appContext: Context) {
             .distinct()
 
         val pendingDao = db.pendingActionDao()
-        // 失败的这条 + 受影响任务名下的后续动作。没有受影响任务时只删自己。
-        val doomed = (
-            listOf(row) + if (affected.isEmpty()) emptyList() else pendingDao.findByTasks(affected)
-            ).distinctBy { it.clientEventId }
+        val doomed = TerminalRollback.doomed(
+            failed = row,
+            sameTaskActions = if (affected.isEmpty()) emptyList() else pendingDao.findByTasks(affected),
+            waveLevelActions = row.waveId?.let { pendingDao.findWaveLevelByWave(it) }.orEmpty(),
+        )
         val evidenceHashes = doomed.mapNotNull { it.toDomain() }
             .flatMap { it.payload.evidences }
             .map { it.contentHash }
@@ -292,13 +304,19 @@ class PendingActionQueue private constructor(private val appContext: Context) {
         db.withTransaction {
             pendingDao.deleteAll(doomed.map { it.clientEventId })
             val taskDao = db.taskCacheDao()
-            snapshots.forEach {
-                taskDao.restoreStatus(
-                    taskId = it.taskId,
-                    status = it.status,
-                    statusText = it.statusText,
-                    updatedAt = System.currentTimeMillis(),
-                )
+            val now = System.currentTimeMillis()
+            snapshots.forEach { snapshot ->
+                val current = taskDao.findTask(snapshot.taskId)?.status
+                if (TerminalRollback.canRestore(action.payload.actionType, snapshot, current)) {
+                    taskDao.restoreStatus(
+                        taskId = snapshot.taskId,
+                        status = snapshot.status,
+                        statusText = snapshot.statusText,
+                        updatedAt = now,
+                    )
+                } else {
+                    taskDao.clearDirty(snapshot.taskId)
+                }
             }
             val restored = snapshots.mapTo(mutableSetOf()) { it.taskId }
             affected.filterNot { it in restored }.forEach { taskDao.clearDirty(it) }
@@ -332,20 +350,22 @@ class PendingActionQueue private constructor(private val appContext: Context) {
         }
     }
 
+    /**
+     * 这条动作真正改过的任务。
+     *
+     * 乐观快照是唯一可信的答案 —— 它就是入队时按下的那几单。
+     * 只有波次级动作连快照都没有(比如回店)才退回整波，那时也确实是整波的事。
+     */
     private suspend fun affectedTaskIds(
         db: com.yulin.rider.core.database.RiderDatabase,
         row: PendingActionEntity,
         action: PendingAction,
     ): List<Long> {
-        val waveId = row.waveId
-        if (waveId != null) return db.taskCacheDao().findByWave(waveId).map { it.taskId }
         val snapshots = action.payload.optimisticStates.map { it.taskId }
-        if (snapshots.isNotEmpty()) return snapshots
-        val taskId = row.taskId
-        return when {
-            taskId != null -> listOf(taskId)
-            else -> emptyList()
-        }
+        if (snapshots.isNotEmpty()) return snapshots.distinct()
+        row.taskId?.let { return listOf(it) }
+        val waveId = row.waveId ?: return emptyList()
+        return db.taskCacheDao().findByWave(waveId).map { it.taskId }
     }
 
     private fun PendingActionEntity.toDomain(): PendingAction? = runCatching {
@@ -365,6 +385,8 @@ class PendingActionQueue private constructor(private val appContext: Context) {
         /** 仅统计可重试失败；终态回滚不会让 WorkManager 无限重试。 */
         val failed: Int,
         val rolledBack: Int = 0,
+        /** 退避已耗尽、本轮被跳过的队头。只能由骑手手动重试，但必须让他看得见。 */
+        val stuck: Int = 0,
     )
 
     companion object {

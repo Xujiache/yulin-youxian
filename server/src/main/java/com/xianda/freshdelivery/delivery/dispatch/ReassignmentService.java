@@ -4,6 +4,7 @@ import com.xianda.freshdelivery.delivery.common.DeliveryTaskStatus;
 import com.xianda.freshdelivery.delivery.common.DeliveryErrorCode;
 import com.xianda.freshdelivery.delivery.common.DeliveryException;
 import java.time.Duration;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -157,7 +158,10 @@ public class ReassignmentService {
                 }
 
                 TaskCluster cluster = clusterFor(locked, context);
-                Optional<DispatchWaveRow> appendable = dispatchDao.findAppendableWave(toRiderId);
+                LocalDate deliveryDate = locked.deliveryDate() == null
+                        ? context.now().toLocalDate()
+                        : locked.deliveryDate();
+                Optional<DispatchWaveRow> appendable = appendableWaveFor(toRiderId, deliveryDate, locked.slotLabel());
                 boolean append = appendable.isPresent()
                         && batchingService.canAppendToWave(
                         dispatchDao.findTasksByWave(appendable.get().waveId()),
@@ -166,10 +170,8 @@ public class ReassignmentService {
                         context.now());
                 long newWaveId = append
                         ? appendable.get().waveId()
-                        : dispatchDao.createWave(
-                        toRiderId,
-                        locked.deliveryDate() == null ? context.now().toLocalDate() : locked.deliveryDate(),
-                        context.now());
+                        : dispatchDao.createSlotWave(
+                        toRiderId, deliveryDate, locked.slotLabel(), context.now());
                 selectedWaveId.set(newWaveId);
 
                 assignmentPort.reassignTask(
@@ -235,6 +237,20 @@ public class ReassignmentService {
                 context.now().plusSeconds(settings.pickupSeconds()),
                 combined);
         return evaluation.arrivals().get(task.taskId());
+    }
+
+    /**
+     * 带时段的单只能并进同一时段的波次。
+     *
+     * 不看时段地找「最近一个还没发的波次」会把 19:00 的单塞进 14:00 那趟车，
+     * 而且新建的波次 slot_label 为空，以后再按时段发车永远匹配不上它。
+     * 单本身没有时段时才退回旧的找法，那种情况没有时段可错配。
+     */
+    private Optional<DispatchWaveRow> appendableWaveFor(long riderId, LocalDate deliveryDate, String slotLabel) {
+        if (slotLabel == null || slotLabel.isBlank()) {
+            return dispatchDao.findAppendableWave(riderId);
+        }
+        return dispatchDao.findAppendableSlotWave(riderId, deliveryDate, slotLabel);
     }
 
     private TaskCluster clusterFor(DispatchTaskRow task, DispatchContext context) {

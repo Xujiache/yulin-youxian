@@ -15,13 +15,15 @@ public class DeliveryTaskStateMachine {
     /**
      * 「先进异常、再到目标」这条两步修复通道允许的终点。
      *
-     * 异常态本身能转出的状态比这个集合宽（解除异常要能回到进入异常之前的那一步），
-     * 但那是 resolveException 明确指定来源状态时才走的单步转换。
-     * 两步修复是给一个本来非法的跳转找台阶下，必须收窄到「继续送 / 退回 / 取消」，
-     * 否则「已派单 →（异常）→ 已到达」这种跳过接单和取货的路径就会被放行。
+     * 只保留两个终态。这条通道的用途是给一个本来非法的跳转找台阶下 ——
+     * 货在骑手身上退不回来、或者单直接作废，都必须有出口。
+     * 而任何非终态终点都意味着跳过中间环节：留着 DELIVERING 的时候，
+     * 骑手对一单没取的货直接点发车就能走「已派单 →（异常）→ 配送中」，
+     * picked_up_at 为空、顾客整程看不到骑手位置、波次也不会 markStarted。
+     * 异常态本身能转出的状态比这里宽，那是 resolveException 明确指定来源状态时
+     * 才走的单步转换，不经过这条通道。
      */
     private static final Set<DeliveryTaskStatus> EXCEPTION_REPAIR_TARGETS = EnumSet.of(
-            DeliveryTaskStatus.DELIVERING,
             DeliveryTaskStatus.RETURNED,
             DeliveryTaskStatus.CANCELLED
     );

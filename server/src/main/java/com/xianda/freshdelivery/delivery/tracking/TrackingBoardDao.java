@@ -122,7 +122,7 @@ public class TrackingBoardDao {
                                w.completed_count, w.plan_distance_meters, w.plan_return_at, w.max_cold_chain_level
                         FROM delivery_wave w
                         LEFT JOIN rider r ON r.id = w.rider_id
-                        WHERE w.status IN ('PLANNING', 'ASSIGNED', 'PICKING', 'DELIVERING')
+                        WHERE w.status IN ('PLANNING', 'ASSIGNED', 'PICKING', 'DELIVERING', 'RETURNING')
                         ORDER BY w.id
                         """,
                 (resultSet, rowNum) -> new WaveBriefRow(
@@ -138,12 +138,18 @@ public class TrackingBoardDao {
                         resultSet.getString("max_cold_chain_level")));
     }
 
+    /**
+     * 骑手当前在跑的波次。
+     *
+     * RETURNING 也算「在跑」：单虽然送完了，人还在回店路上，
+     * 漏掉它调度台会以为骑手已经空出来了。
+     */
     public Map<Long, Long> currentWaveByRider() {
         Map<Long, Long> waves = new LinkedHashMap<>();
         jdbcTemplate.query("""
                 SELECT rider_id, MAX(id) AS wave_id
                 FROM delivery_wave
-                WHERE rider_id IS NOT NULL AND status IN ('ASSIGNED', 'PICKING', 'DELIVERING')
+                WHERE rider_id IS NOT NULL AND status IN ('ASSIGNED', 'PICKING', 'DELIVERING', 'RETURNING')
                 GROUP BY rider_id
                 """, resultSet -> {
             waves.put(resultSet.getLong("rider_id"), resultSet.getLong("wave_id"));
@@ -156,7 +162,7 @@ public class TrackingBoardDao {
         jdbcTemplate.query("""
                 SELECT rider_id, MAX(plan_return_at) AS plan_return_at
                 FROM delivery_wave
-                WHERE rider_id IS NOT NULL AND status IN ('ASSIGNED', 'PICKING', 'DELIVERING')
+                WHERE rider_id IS NOT NULL AND status IN ('ASSIGNED', 'PICKING', 'DELIVERING', 'RETURNING')
                 GROUP BY rider_id
                 """, resultSet -> {
             returns.put(resultSet.getLong("rider_id"),

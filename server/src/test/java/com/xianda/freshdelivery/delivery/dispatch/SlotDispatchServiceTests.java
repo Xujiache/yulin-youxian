@@ -29,6 +29,7 @@ class SlotDispatchServiceTests {
     private static final LocalDate TODAY = LocalDate.of(2026, 8, 15);
     private static final long RIDER = 7L;
 
+    private DispatchFakes.MapConfigSource config;
     private RecordingDao dao;
     private RecordingAssignmentPort assignmentPort;
     private RecordingRoutingPort routingPort;
@@ -36,13 +37,21 @@ class SlotDispatchServiceTests {
 
     @BeforeEach
     void setUp() {
+        config = DispatchTestSupport.defaultConfig();
         dao = new RecordingDao();
         assignmentPort = new RecordingAssignmentPort();
         routingPort = new RecordingRoutingPort();
+        rebuildService();
+    }
+
+    private void rebuildService() {
+        DispatchSettings settings = DispatchTestSupport.settings(config);
+        RiderScoringService scoringService = new RiderScoringService(
+                new RouteEstimator(new DispatchFakes.FakeRoutePlanningPort(), settings), settings);
         service = new SlotDispatchService(dao, assignmentPort, routingPort, TaskUnitOfWork.direct(),
                 new DispatchEngine(dao, null, null, null, null, null, null, null, null,
-                        DispatchTestSupport.settings(DispatchTestSupport.defaultConfig()),
-                        DispatchTestSupport.fixedClock()));
+                        settings, DispatchTestSupport.fixedClock()),
+                scoringService, settings);
     }
 
     @Test
@@ -136,6 +145,102 @@ class SlotDispatchServiceTests {
                 new SlotDispatchService.SlotDispatchCommand(RIDER, null, List.of())));
     }
 
+    @Test
+    void 疲劳停派期的骑手不能发车而且不给绕过() {
+        dao.addPending(1L, TODAY, "14:00-15:00");
+        dao.rider = DispatchTestSupport.rider(RIDER)
+                .fatiguePausedUntil(DispatchTestSupport.NOW.plusHours(1)).build();
+
+        DeliveryException exception = assertThrows(DeliveryException.class, () -> service.dispatch(
+                new SlotDispatchService.SlotDispatchCommand(RIDER, "14:00-15:00", List.of(1L), true)));
+
+        assertEquals(DeliveryErrorCode.RIDER_FATIGUE_SUSPENDED, exception.code());
+        assertTrue(assignmentPort.assigned.isEmpty(), "疲劳停派是合规红线，确认参数也不能绕过");
+    }
+
+    @Test
+    void 不在岗的骑手不能发车() {
+        dao.addPending(1L, TODAY, "14:00-15:00");
+        dao.rider = DispatchTestSupport.rider(RIDER).workStatus("OFF_DUTY").build();
+
+        DeliveryException exception = assertThrows(DeliveryException.class, () -> service.dispatch(
+                new SlotDispatchService.SlotDispatchCommand(RIDER, "14:00-15:00", List.of(1L))));
+
+        assertEquals(DeliveryErrorCode.RIDER_OFF_DUTY, exception.code());
+        assertTrue(assignmentPort.assigned.isEmpty());
+    }
+
+    @Test
+    void 账号被停用的骑手不能发车() {
+        dao.addPending(1L, TODAY, "14:00-15:00");
+        dao.rider = DispatchTestSupport.rider(RIDER).accountStatus("SUSPENDED").build();
+
+        DeliveryException exception = assertThrows(DeliveryException.class, () -> service.dispatch(
+                new SlotDispatchService.SlotDispatchCommand(RIDER, "14:00-15:00", List.of(1L))));
+
+        assertEquals(DeliveryErrorCode.RIDER_SUSPENDED, exception.code());
+        assertTrue(assignmentPort.assigned.isEmpty());
+    }
+
+    @Test
+    void 超过波次单量上限时默认拒绝确认后放行() {
+        config.put(DispatchConfigKeys.MAX_TASKS_PER_WAVE, 2);
+        rebuildService();
+        dao.addPending(1L, TODAY, "14:00-15:00");
+        dao.addPending(2L, TODAY, "14:00-15:00");
+        dao.addPending(3L, TODAY, "14:00-15:00");
+
+        DeliveryException exception = assertThrows(DeliveryException.class, () -> service.dispatch(
+                new SlotDispatchService.SlotDispatchCommand(RIDER, "14:00-15:00", List.of(1L, 2L, 3L))));
+        assertEquals(DeliveryErrorCode.RIDER_CONCURRENCY_LIMIT, exception.code());
+        assertTrue(assignmentPort.assigned.isEmpty());
+
+        SlotDispatchService.SlotDispatchResult confirmed = service.dispatch(
+                new SlotDispatchService.SlotDispatchCommand(RIDER, "14:00-15:00", List.of(1L, 2L, 3L), true));
+        assertEquals(3, confirmed.taskIds().size());
+    }
+
+    @Test
+    void 超过波次载重上限时默认拒绝() {
+        config.put(DispatchConfigKeys.MAX_WAVE_WEIGHT_KG, 5);
+        rebuildService();
+        dao.addPending(1L, TODAY, "14:00-15:00", 4.0d);
+        dao.addPending(2L, TODAY, "14:00-15:00", 4.0d);
+
+        DeliveryException exception = assertThrows(DeliveryException.class, () -> service.dispatch(
+                new SlotDispatchService.SlotDispatchCommand(RIDER, "14:00-15:00", List.of(1L, 2L))));
+
+        assertEquals(DeliveryErrorCode.RIDER_CONCURRENCY_LIMIT, exception.code());
+        assertTrue(exception.getMessage().contains("载重"), exception.getMessage());
+    }
+
+    @Test
+    void 骑手在手单量超过并发上限时默认拒绝() {
+        dao.rider = DispatchTestSupport.rider(RIDER).maxConcurrentTask(2).build();
+        dao.addActive(90L);
+        dao.addActive(91L);
+        dao.addPending(1L, TODAY, "14:00-15:00");
+
+        DeliveryException exception = assertThrows(DeliveryException.class, () -> service.dispatch(
+                new SlotDispatchService.SlotDispatchCommand(RIDER, "14:00-15:00", List.of(1L))));
+
+        assertEquals(DeliveryErrorCode.RIDER_CONCURRENCY_LIMIT, exception.code());
+        assertTrue(exception.getMessage().contains("并发上限"), exception.getMessage());
+    }
+
+    @Test
+    void 一次发车的任务数有上限() {
+        List<Long> tooMany = new ArrayList<>();
+        for (long taskId = 1; taskId <= SlotDispatchService.MAX_TASKS_PER_DISPATCH + 1; taskId++) {
+            tooMany.add(taskId);
+        }
+
+        DeliveryException exception = assertThrows(DeliveryException.class, () -> service.dispatch(
+                new SlotDispatchService.SlotDispatchCommand(RIDER, null, tooMany)));
+
+        assertEquals(DeliveryErrorCode.TASK_STATUS_NOT_ALLOWED, exception.code());
+    }
+
     private static final class RecordingAssignmentPort implements TaskAssignmentPort {
         private final List<Long> assigned = new ArrayList<>();
 
@@ -171,12 +276,23 @@ class SlotDispatchServiceTests {
     private static final class RecordingDao implements DispatchDao {
         private final Map<Long, DispatchTaskRow> pending = new LinkedHashMap<>();
         private final Map<Long, WaveState> waves = new LinkedHashMap<>();
+        private final List<DispatchTaskRow> activeTasks = new ArrayList<>();
         private long nextWaveId = 100L;
         private String createdSlot;
+        private RiderCandidateRow rider = DispatchTestSupport.rider(RIDER).build();
 
         private void addPending(long taskId, LocalDate date, String slot) {
+            addPending(taskId, date, slot, 1.0d);
+        }
+
+        private void addActive(long taskId) {
+            activeTasks.add(DispatchTestSupport.task(taskId)
+                    .status("ACCEPTED").rider(RIDER).wave(1L).build());
+        }
+
+        private void addPending(long taskId, LocalDate date, String slot, double weightKg) {
             pending.put(taskId, new DispatchTaskRow(taskId, "XD" + taskId, null, null, "PENDING",
-                    "测试地址", 38.48d, 106.23d, "小区", "1号楼", "key", 1, "101", 1, 1.0d, "NORMAL",
+                    "测试地址", 38.48d, 106.23d, "小区", "1号楼", "key", 1, "101", 1, weightKg, "NORMAL",
                     date, slot, date.atTime(14, 0), date.atTime(15, 0), date.atTime(15, 0),
                     null, 0, null, null, 0, 0, 180));
         }
@@ -208,7 +324,7 @@ class SlotDispatchServiceTests {
 
         @Override
         public List<DispatchTaskRow> findActiveTasksByRider(long riderId) {
-            return List.of();
+            return riderId == RIDER ? List.copyOf(activeTasks) : List.of();
         }
 
         @Override
@@ -223,9 +339,7 @@ class SlotDispatchServiceTests {
 
         @Override
         public Optional<RiderCandidateRow> findRider(long riderId) {
-            return riderId == RIDER
-                    ? Optional.of(DispatchTestSupport.rider(RIDER).build())
-                    : Optional.empty();
+            return riderId == RIDER ? Optional.of(rider) : Optional.empty();
         }
 
         @Override

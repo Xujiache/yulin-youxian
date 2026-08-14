@@ -116,3 +116,7 @@ delivery:
     cleanup-zone: ${TRACKING_CLEANUP_ZONE:Asia/Shanghai}
   upload:
     delivery-path: ${DELIVERY_UPLOAD_PATH:data/uploads/delivery}
+    # 顾客端看送达照片走的是 URL 上的限时签名（小程序渲染图片带不了请求头）。
+    # 不配就每次启动随机生成，已发出的链接会在重启后失效；多实例必须显式配置成同一个值。
+    signing-secret: ${DELIVERY_UPLOAD_SIGNING_SECRET:}
+    signature-ttl-seconds: ${DELIVERY_UPLOAD_SIGNATURE_TTL_SECONDS:1800}

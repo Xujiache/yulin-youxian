@@ -40,7 +40,8 @@ class WxTrackingPrivacyTests {
                 new TrackingTestSupport.FixedOrderAccess(OWN_ORDER_ID),
                 new DeliveryEventStream(() -> 0L),
                 ports,
-                TrackingTestSupport.clock(NOW));
+                TrackingTestSupport.clock(NOW),
+                TrackingTestSupport.urlSigner());
 
         TrackingTestSupport.insertRider(jdbcTemplate, RIDER_ID, "张伟", NOW.minusDays(7));
         TrackingTestSupport.insertLatest(jdbcTemplate, RIDER_ID, NOW.minusSeconds(10), RIDER_LAT, RIDER_LNG);

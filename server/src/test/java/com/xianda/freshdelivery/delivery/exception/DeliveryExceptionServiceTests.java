@@ -265,9 +265,47 @@ class DeliveryExceptionServiceTests {
         assertNull(report("WRONG_ADDRESS").holdUntilAt());
     }
 
+    @Test
+    void 同一个幂等键重复上报只落一条并原样返回() {
+        ExceptionDto first = report("GOODS_DAMAGED", "client-fixed-key");
+        ExceptionDto again = report("GOODS_DAMAGED", "client-fixed-key");
+        assertEquals(first.exceptionId(), again.exceptionId());
+        assertEquals(first.exceptionNo(), again.exceptionNo());
+        assertEquals(1, (int) jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM delivery_exception WHERE client_event_id = ?", Integer.class,
+                "client-fixed-key"));
+    }
+
+    @Test
+    void 幂等键要和记录同一条insert落库() {
+        ExceptionDto reported = report("GOODS_DAMAGED", "client-inline-key");
+        assertEquals("client-inline-key", jdbcTemplate.queryForObject(
+                "SELECT client_event_id FROM delivery_exception WHERE id = ?", String.class,
+                reported.exceptionId()));
+    }
+
+    @Test
+    void 别人的幂等键不能换回别人的异常单() {
+        ExceptionDto mine = report("GOODS_DAMAGED", "client-shared-key");
+        long otherRiderId = A6Fixtures.insertRider(jdbcTemplate, "孙九", 100);
+        DeliveryException rejected = assertThrows(DeliveryException.class, () -> exceptionService.report(
+                otherRiderId, new ExceptionCreateRequest(
+                        "client-shared-key", null, null, "GOODS_DAMAGED", "冒用幂等键",
+                        List.of(), new GeoPointDto(30.1d, 120.1d))));
+        assertEquals(403, rejected.code());
+        assertEquals(1, (int) jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM delivery_exception WHERE client_event_id = ?", Integer.class,
+                "client-shared-key"));
+        assertNotNull(exceptionService.riderDetail(riderId, mine.exceptionId()));
+    }
+
     private ExceptionDto report(String type) {
+        return report(type, "client-" + type + "-" + System.nanoTime());
+    }
+
+    private ExceptionDto report(String type, String clientEventId) {
         return exceptionService.report(riderId, new ExceptionCreateRequest(
-                "client-" + type + "-" + System.nanoTime(), null, taskId, type, "测试上报",
+                clientEventId, null, taskId, type, "测试上报",
                 List.of(), new GeoPointDto(30.1234567d, 120.7654321d)));
     }
 

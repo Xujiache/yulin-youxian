@@ -5,6 +5,7 @@ import com.xianda.freshdelivery.common.CurrentUserContext;
 import com.xianda.freshdelivery.delivery.common.DeliveryErrorCode;
 import com.xianda.freshdelivery.delivery.common.DeliveryException;
 import com.xianda.freshdelivery.delivery.common.DeliveryTaskStatus;
+import com.xianda.freshdelivery.delivery.common.EvidenceUrlSigner;
 import com.xianda.freshdelivery.delivery.common.GeoPoint;
 import com.xianda.freshdelivery.delivery.dto.GeoPointDto;
 import com.xianda.freshdelivery.delivery.dto.InstructionRequest;
@@ -49,6 +50,7 @@ public class WxTrackingService {
     private final TrackingPorts ports;
     private final Clock clock;
     private final List<String> subscribeTemplateIds;
+    private final EvidenceUrlSigner evidenceUrlSigner;
 
     @Autowired
     public WxTrackingService(
@@ -57,10 +59,11 @@ public class WxTrackingService {
             LocationQueryService locationQueryService,
             TrackingOrderAccessPort orderAccessPort,
             DeliveryEventStream eventStream,
-            TrackingPorts ports
+            TrackingPorts ports,
+            EvidenceUrlSigner evidenceUrlSigner
     ) {
         this(taskDao, riderDao, locationQueryService, orderAccessPort, eventStream, ports,
-                Clock.system(TrackingTimes.STORE_ZONE), SUBSCRIBE_TEMPLATE_IDS);
+                Clock.system(TrackingTimes.STORE_ZONE), SUBSCRIBE_TEMPLATE_IDS, evidenceUrlSigner);
     }
 
     public WxTrackingService(
@@ -70,10 +73,11 @@ public class WxTrackingService {
             TrackingOrderAccessPort orderAccessPort,
             DeliveryEventStream eventStream,
             TrackingPorts ports,
-            Clock clock
+            Clock clock,
+            EvidenceUrlSigner evidenceUrlSigner
     ) {
         this(taskDao, riderDao, locationQueryService, orderAccessPort, eventStream, ports, clock,
-                SUBSCRIBE_TEMPLATE_IDS);
+                SUBSCRIBE_TEMPLATE_IDS, evidenceUrlSigner);
     }
 
     WxTrackingService(
@@ -84,8 +88,10 @@ public class WxTrackingService {
             DeliveryEventStream eventStream,
             TrackingPorts ports,
             Clock clock,
-            List<String> subscribeTemplateIds
+            List<String> subscribeTemplateIds,
+            EvidenceUrlSigner evidenceUrlSigner
     ) {
+        this.evidenceUrlSigner = evidenceUrlSigner;
         this.taskDao = taskDao;
         this.riderDao = riderDao;
         this.locationQueryService = locationQueryService;
@@ -142,12 +148,17 @@ public class WxTrackingService {
      *
      * 只在真正送达后返回：还没送到就把照片给顾客毫无意义，而且骑手可能只是提前拍了张门牌。
      * 退回和取消也不给 —— 那两种情况货没到顾客手上，给张照片只会引起误会。
+     *
+     * 下发的是签过名的限时地址：小程序渲染图片时带不了 Authorization 头，
+     * 而这个目录又不能公开，否则谁拿到路径都能看别人家门口的照片。
      */
     private List<String> deliveryPhotos(TrackingTaskDao.WxTaskRow task, DeliveryTaskStatus status) {
         if (status != DeliveryTaskStatus.DELIVERED) {
             return List.of();
         }
-        return taskDao.deliveredEvidenceUrls(task.id());
+        return taskDao.deliveredEvidenceUrls(task.id()).stream()
+                .map(evidenceUrlSigner::sign)
+                .toList();
     }
 
     /** 已评价时带回星级与标签，小程序据此显示评价结果而不是「去评价」 */

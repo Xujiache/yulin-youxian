@@ -65,6 +65,9 @@ import com.yulin.rider.core.model.TaskEvent
 import com.yulin.rider.feature.task.data.NextStep
 import com.yulin.rider.feature.task.data.TaskCardUi
 import com.yulin.rider.feature.task.data.TaskRepository
+import com.yulin.rider.feature.task.data.TransitionResult
+import com.yulin.rider.feature.task.data.riderMessage
+import com.yulin.rider.feature.task.data.runTransition
 import com.yulin.rider.feature.task.util.RiderFormats
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -88,15 +91,22 @@ class TaskDetailViewModel(app: Application, private val taskId: Long) : AndroidV
         }
     }
 
+    private val _error = MutableStateFlow<String?>(null)
+    /** 上一次推进没排进队列的原因；成功时自动清空。 */
+    val error: StateFlow<String?> = _error
+
     fun advance(step: NextStep) = viewModelScope.launch {
-        when (step) {
-            NextStep.ACCEPT -> repository.accept(taskId)
-            NextStep.DEPART -> repository.depart(taskId)
-            NextStep.ARRIVE -> repository.arrive(taskId)
-            // 无波次的单在详情页也要能取货，之前 PICKUP 落到 else 分支被吞掉
-            NextStep.PICKUP -> repository.pickupTask(taskId)
-            else -> Unit
+        val result = runTransition {
+            when (step) {
+                NextStep.ACCEPT -> repository.accept(taskId)
+                NextStep.DEPART -> repository.depart(taskId)
+                NextStep.ARRIVE -> repository.arrive(taskId)
+                // 无波次的单在详情页也要能取货，之前 PICKUP 落到 else 分支被吞掉
+                NextStep.PICKUP -> repository.pickupTask(taskId)
+                else -> TransitionResult.Queued
+            }
         }
+        _error.value = result.riderMessage
     }
 
     companion object {
@@ -126,6 +136,7 @@ fun TaskDetailScreen(
     )
     val task by viewModel.task.collectAsState()
     val detail by viewModel.detail.collectAsState()
+    val error by viewModel.error.collectAsState()
     val current = task
 
     if (current == null) {
@@ -142,6 +153,7 @@ fun TaskDetailScreen(
     TaskDetailContent(
         task = current,
         detail = detail,
+        error = error,
         modifier = modifier,
         onBack = onBack,
         onOpenMap = onOpenMap,
@@ -161,6 +173,7 @@ fun TaskDetailScreen(
 private fun TaskDetailContent(
     task: TaskCardUi,
     detail: TaskDetail? = null,
+    error: String? = null,
     modifier: Modifier = Modifier,
     onBack: () -> Unit = {},
     onOpenMap: () -> Unit = {},
@@ -179,6 +192,8 @@ private fun TaskDetailContent(
         onBack = onBack,
         bottomBar = {
             MtBottomActionBar(
+                hint = error,
+                hintTone = StatusTone.DANGER,
                 secondaryActions = {
                     if (!phone.isNullOrBlank()) {
                         MtGhostAction("联系", FreshIconType.PHONE) {

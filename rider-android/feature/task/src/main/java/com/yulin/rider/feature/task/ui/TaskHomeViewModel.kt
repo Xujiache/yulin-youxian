@@ -9,6 +9,10 @@ import com.yulin.rider.feature.task.data.SyncFailureLog
 import com.yulin.rider.feature.task.data.TaskBoard
 import com.yulin.rider.feature.task.data.TaskRepository
 import com.yulin.rider.feature.task.data.TaskSection
+import com.yulin.rider.feature.task.data.TransitionResult
+import com.yulin.rider.feature.task.data.riderMessage
+import com.yulin.rider.feature.task.data.runTransition
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -25,6 +29,8 @@ data class TaskHomeUiState(
     val hasSyncFailure: Boolean = false,
     /** 被服务端最终拒绝、已经回滚掉的动作。必须让骑手看见，否则单子会悄悄退回去。 */
     val syncFailures: List<SyncFailure> = emptyList(),
+    /** 卡片上直接点的动作没排进队列时的原因。静默失败的话骑手会以为已经做完了。 */
+    val actionError: String? = null,
 )
 
 class TaskHomeViewModel(app: Application) : AndroidViewModel(app) {
@@ -90,17 +96,37 @@ class TaskHomeViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun retrySync() {
-        viewModelScope.launch { runCatching { repository.retryStuck() } }
+    /** 手动重试后要给个交代：还剩几条没上去，不然骑手只会反复点这条横幅。 */
+    fun retrySync() = viewModelScope.launch {
+        val outcome = try {
+            repository.retryStuck()
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            null
+        }
+        val remaining = outcome?.let { it.stuck + it.failed } ?: 0
+        _state.value = _state.value.copy(
+            actionError = if (remaining > 0) "还有 $remaining 条操作没能上报，联网后会自动再试" else null,
+        )
     }
 
-    fun accept(taskId: Long) = viewModelScope.launch { repository.accept(taskId) }
+    fun dismissActionError() {
+        _state.value = _state.value.copy(actionError = null)
+    }
 
-    fun depart(taskId: Long) = viewModelScope.launch { repository.depart(taskId) }
+    fun accept(taskId: Long) = advance { repository.accept(taskId) }
 
-    fun arrive(taskId: Long) = viewModelScope.launch { repository.arrive(taskId) }
+    fun depart(taskId: Long) = advance { repository.depart(taskId) }
 
-    fun pickupTask(taskId: Long) = viewModelScope.launch { repository.pickupTask(taskId) }
+    fun arrive(taskId: Long) = advance { repository.arrive(taskId) }
+
+    fun pickupTask(taskId: Long) = advance { repository.pickupTask(taskId) }
+
+    private fun advance(block: suspend () -> TransitionResult) = viewModelScope.launch {
+        val result = runTransition(block)
+        _state.value = _state.value.copy(actionError = result.riderMessage)
+    }
 
     private fun firstNonEmpty(board: TaskBoard): TaskSection =
         TaskSection.entries.firstOrNull { board.count(it) > 0 } ?: TaskSection.IN_PROGRESS

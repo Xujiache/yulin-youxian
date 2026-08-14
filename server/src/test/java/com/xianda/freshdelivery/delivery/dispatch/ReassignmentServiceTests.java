@@ -3,6 +3,7 @@ package com.xianda.freshdelivery.delivery.dispatch;
 import static com.xianda.freshdelivery.delivery.dispatch.DispatchTestSupport.NOW;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -193,6 +194,35 @@ class ReassignmentServiceTests {
         assertEquals(1L, dao.task(1L).riderId());
         assertEquals(10L, dao.task(1L).waveId());
         assertTrue(dao.waves().isEmpty());
+    }
+
+    @Test
+    void 带时段的单改派后不会被塞进别的时段那趟车() {
+        givenBusyOwnerAndIdleRescuer();
+        dao.putTask(DispatchTestSupport.task(1)
+                .status("ASSIGNED").rider(1L).wave(10L)
+                .slotLabel("19:00-20:00")
+                .atMeters(600)
+                .dueAt(NOW.plusSeconds(1000))
+                .etaAt(NOW.plusSeconds(950))
+                .build());
+        long afternoonWaveId = dao.createSlotWave(2L, java.time.LocalDate.from(NOW), "14:00-15:00", NOW);
+
+        reassignmentService.scan(context());
+
+        Long newWaveId = dao.task(1L).waveId();
+        assertNotEquals(afternoonWaveId, newWaveId);
+        assertEquals("19:00-20:00", dao.waveSlot(newWaveId));
+    }
+
+    @Test
+    void 不带时段的单仍然并入目标骑手已有的波次() {
+        givenBusyOwnerAndIdleRescuer();
+        long existingWaveId = dao.createWave(2L, java.time.LocalDate.from(NOW), NOW);
+
+        reassignmentService.scan(context());
+
+        assertEquals(existingWaveId, dao.task(1L).waveId());
     }
 
     private void givenBusyOwnerAndIdleRescuer() {

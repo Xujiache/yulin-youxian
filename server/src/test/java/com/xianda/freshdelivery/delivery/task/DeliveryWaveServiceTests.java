@@ -105,6 +105,35 @@ class DeliveryWaveServiceTests {
     }
 
     @Test
+    void waveWaitingForTheRiderToComeBackRefusesEditsAndCancellation() {
+        long delivered = pendingTask(1001L, "XD001");
+        long waveId = harness.waveService.createWave(
+                new WaveCreateRequest(RIDER_ID, List.of(delivered)), TaskOperator.admin("A")
+        );
+        harness.taskService.assignTask(delivered, RIDER_ID, waveId, "AUTO", 0.9, null);
+        harness.taskService.accept(RIDER_ID, delivered, new TaskActionRequest("evt-a1", null, null));
+        harness.taskDao.updateStatus(delivered, "ACCEPTED", "PICKED_UP", TaskTimes.now());
+        harness.taskService.depart(RIDER_ID, delivered, new TaskActionRequest("evt-d1", null, null));
+        harness.taskService.deliver(RIDER_ID, delivered,
+                new com.xianda.freshdelivery.delivery.dto.DeliverRequest("evt-x1", null, null, null, List.of(), "DOOR"));
+        assertEquals(DeliveryWaveService.STATUS_RETURNING, harness.waveService.requireWave(waveId).status());
+        long extra = pendingTask(1002L, "XD002");
+
+        assertEquals(DeliveryErrorCode.TASK_STATUS_NOT_ALLOWED, assertThrows(DeliveryException.class,
+                () -> harness.waveService.appendTasks(waveId, List.of(extra), TaskOperator.admin("A"))).code());
+        assertEquals(DeliveryErrorCode.TASK_STATUS_NOT_ALLOWED, assertThrows(DeliveryException.class,
+                () -> harness.waveService.resequence(
+                        waveId, List.of(delivered), false, TaskOperator.admin("A"))).code());
+        assertEquals(DeliveryErrorCode.TASK_STATUS_NOT_ALLOWED, assertThrows(DeliveryException.class,
+                () -> harness.waveService.cancelWave(waveId, "运力调整", TaskOperator.admin("A"))).code());
+
+        // 取消被挡下来，已送达的单还挂在波次上 —— 摘掉了骑手就再也确认不了回店。
+        assertEquals(waveId, harness.taskService.requireTask(delivered).waveId());
+        assertEquals(1, harness.waveStopDao.findByWaveId(waveId).size());
+        assertEquals(DeliveryWaveService.STATUS_RETURNING, harness.waveService.requireWave(waveId).status());
+    }
+
+    @Test
     void progressCountsClosedAndDeliveredTasks() {
         long first = pendingTask(1001L, "XD001");
         long second = pendingTask(1002L, "XD002");

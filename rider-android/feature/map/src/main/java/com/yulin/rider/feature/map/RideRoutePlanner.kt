@@ -9,6 +9,7 @@ import com.amap.api.navi.enums.TravelStrategy
 import com.amap.api.navi.model.NaviPoi
 import com.yulin.rider.core.model.GeoPoint
 import kotlinx.coroutines.CancellableContinuation
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -49,9 +50,17 @@ internal object RideRoutePlanner {
         end: GeoPoint,
     ): List<GeoPoint> = mutex.withLock {
         withTimeoutOrNull(CALC_TIMEOUT_MILLIS) {
-            runCatching { calculateInternal(context, start, wayPoints, end) }
-                .onFailure { Log.d(TAG, "端上算路失败，退回直线", it) }
-                .getOrDefault(emptyList())
+            // 协程取消必须原样抛出:withTimeoutOrNull 靠 TimeoutCancellationException 收口,
+            // 被 runCatching 吞掉的话超时就变成「算路失败」，而页面销毁时的取消也会被
+            // 当成一次失败继续往下走
+            try {
+                calculateInternal(context, start, wayPoints, end)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                Log.d(TAG, "端上算路失败，退回直线", error)
+                emptyList()
+            }
         }.orEmpty()
     }
 
@@ -112,14 +121,12 @@ internal object RideRoutePlanner {
         onFailure: (Int) -> Unit,
         onInitialized: () -> Unit,
     ): AMapNaviListener {
-        val handler = InvocationHandler { _, method, args ->
+        val handler = InvocationHandler { proxy, method, args ->
+            objectMethodOnProxy(proxy, method.name, args)?.let { return@InvocationHandler it }
             when (method.name) {
                 "onCalculateRouteSuccess" -> onSuccess()
                 "onCalculateRouteFailure" -> onFailure(errorCodeOf(args))
                 "onInitNaviSuccess" -> onInitialized()
-                "hashCode" -> return@InvocationHandler System.identityHashCode(this)
-                "equals" -> return@InvocationHandler false
-                "toString" -> return@InvocationHandler "RideRoutePlannerListener"
             }
             null
         }
@@ -129,13 +136,30 @@ internal object RideRoutePlanner {
             handler,
         ) as AMapNaviListener
     }
+}
 
-    /** 失败回调有两个重载：一个给 int 错误码，一个给结果对象。 */
-    private fun errorCodeOf(args: Array<out Any?>?): Int {
-        val first = args?.firstOrNull() ?: return -1
-        if (first is Int) return first
-        return runCatching {
-            first.javaClass.getMethod("getErrorCode").invoke(first) as? Int
-        }.getOrNull() ?: -1
+/**
+ * equals / hashCode 必须落在 proxy 这个参数上，不能用 InvocationHandler 外层的 this
+ * （那是 RideRoutePlanner 这个单例，所有代理会共享一个 hashCode）。
+ * removeAMapNaviListener 走的是 List.remove 的 equals 语义：equals 恒 false 时
+ * 三处移除全是空操作 —— 监听器无限累积、continuation 跟着泄漏，
+ * 而且下一次算路会被 N 个历史监听器同时收到，各自再发一次 requestRide 互相打断。
+ *
+ * @return null 表示不是 Object 的这三个方法，交回业务分支。
+ */
+internal fun objectMethodOnProxy(proxy: Any, methodName: String, args: Array<out Any?>?): Any? =
+    when (methodName) {
+        "hashCode" -> System.identityHashCode(proxy)
+        "equals" -> proxy === args?.firstOrNull()
+        "toString" -> "RideRoutePlannerListener"
+        else -> null
     }
+
+/** 失败回调有两个重载：一个给 int 错误码，一个给结果对象。 */
+private fun errorCodeOf(args: Array<out Any?>?): Int {
+    val first = args?.firstOrNull() ?: return -1
+    if (first is Int) return first
+    return runCatching {
+        first.javaClass.getMethod("getErrorCode").invoke(first) as? Int
+    }.getOrNull() ?: -1
 }

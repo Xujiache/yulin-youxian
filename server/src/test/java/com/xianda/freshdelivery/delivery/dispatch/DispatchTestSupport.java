@@ -79,9 +79,9 @@ final class DispatchTestSupport {
         return new DispatchTaskRow(task.taskId(), task.taskNo(), waveId, riderId, status, task.addressDetail(),
                 task.lat(), task.lng(), task.areaLabel(), task.buildingLabel(), task.groupKey(), task.floorNo(),
                 task.roomNo(), task.itemCount(), task.totalWeightKg(), task.coldChainLevel(), task.deliveryDate(),
-                task.windowStartAt(), task.windowEndAt(), task.promisedAt(), task.etaAt(), task.extraTimeSeconds(),
-                task.pickedReadyAt(), task.holdUntilAt(), task.reassignCount(), task.priority(),
-                task.handoffSeconds());
+                task.slotLabel(), task.windowStartAt(), task.windowEndAt(), task.promisedAt(), task.etaAt(),
+                task.extraTimeSeconds(), task.pickedReadyAt(), task.holdUntilAt(), task.reassignCount(),
+                task.priority(), task.handoffSeconds());
     }
 
     static final class TaskBuilder {
@@ -101,6 +101,7 @@ final class DispatchTestSupport {
         private double totalWeightKg = 3.0d;
         private String coldChainLevel = "NORMAL";
         private LocalDate deliveryDate = LocalDate.from(NOW);
+        private String slotLabel;
         private LocalDateTime windowStartAt = NOW.minusSeconds(1800);
         private LocalDateTime windowEndAt = NOW.plusSeconds(3600);
         private LocalDateTime promisedAt = NOW.plusSeconds(3600);
@@ -171,6 +172,11 @@ final class DispatchTestSupport {
             return this;
         }
 
+        TaskBuilder slotLabel(String value) {
+            this.slotLabel = value;
+            return this;
+        }
+
         TaskBuilder window(LocalDateTime start, LocalDateTime end) {
             this.windowStartAt = start;
             this.windowEndAt = end;
@@ -206,7 +212,7 @@ final class DispatchTestSupport {
         DispatchTaskRow build() {
             return new DispatchTaskRow(taskId, "PS-TEST-" + taskId, waveId, riderId, status, addressDetail,
                     lat, lng, areaLabel, buildingLabel, groupKey, floorNo, roomNo, itemCount, totalWeightKg,
-                    coldChainLevel, deliveryDate, windowStartAt, windowEndAt, promisedAt, etaAt,
+                    coldChainLevel, deliveryDate, slotLabel, windowStartAt, windowEndAt, promisedAt, etaAt,
                     0, pickedReadyAt, holdUntilAt, reassignCount, priority, handoffSeconds);
         }
     }

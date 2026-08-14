@@ -41,6 +41,7 @@ import com.yulin.rider.core.designsystem.MtAction
 import com.yulin.rider.core.designsystem.MtBottomActionBar
 import com.yulin.rider.core.designsystem.MtCard
 import com.yulin.rider.core.designsystem.MtDivider
+import com.yulin.rider.core.designsystem.MtInfoBar
 import com.yulin.rider.core.designsystem.MtMetric
 import com.yulin.rider.core.designsystem.MtPrimaryButton
 import com.yulin.rider.core.designsystem.MtScaffold
@@ -53,25 +54,81 @@ import com.yulin.rider.feature.task.data.TaskCardUi
 import com.yulin.rider.feature.task.data.TaskRepository
 import com.yulin.rider.feature.task.data.TaskStatus
 import com.yulin.rider.feature.task.data.WaveUi
+import com.yulin.rider.feature.task.data.riderMessage
+import com.yulin.rider.feature.task.data.runTransition
 import com.yulin.rider.feature.task.ui.components.tone
 import com.yulin.rider.feature.task.util.RiderFormats
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
+/** 这一波能不能收尾，以及底部要给骑手说明什么。null 表示这趟还有活要干。 */
+internal data class WaveClosing(val hint: String, val exceptionCount: Int)
+
+/**
+ * 判据是「没有任何一单还等着骑手推进」，而不是「全部落到终态」。
+ *
+ * 骑手上报「顾客联系不上」之后那一单是 EXCEPTION，等调度解除，他这边已经无事可做，
+ * 可 EXCEPTION 不在 DELIVERED/RETURNED/CANCELLED 里 —— 按终态判的话「我已回店」永远不出现，
+ * 这一波收不了尾，调度台也就发不出下一个时段。
+ *
+ * 站点为空时返回 null:这种波次进不到本页(buildBoard 会把没有站点的波次滤掉)，
+ * 真出现了也不该让骑手替一趟空路线签收尾。
+ */
+internal fun waveClosing(stops: List<TaskCardUi>): WaveClosing? {
+    if (stops.isEmpty() || stops.any { it.nextStep.actionable }) return null
+    val exceptions = stops.count { it.displayStatus == TaskStatus.EXCEPTION }
+    val hint = when {
+        exceptions > 0 -> "本趟有 $exceptions 单异常等调度处理，回到门店点一下先把这趟收尾"
+        stops.all { it.displayStatus == TaskStatus.CANCELLED } ->
+            "本趟订单已全部取消，回到门店点一下，调度台才会发下一个时段"
+        else -> "这趟送完了，回到门店后点一下，调度台才会发下一个时段"
+    }
+    return WaveClosing(hint, exceptions)
+}
+
 class WaveDetailViewModel(app: Application, private val waveId: Long) : AndroidViewModel(app) {
     private val repository = TaskRepository.get(app)
     private val _wave = MutableStateFlow<WaveUi?>(null)
     val wave: StateFlow<WaveUi?> = _wave
+
+    private val _error = MutableStateFlow<String?>(null)
+    val error: StateFlow<String?> = _error
+
+    /**
+     * 回店在任务上没有可乐观更新的状态，界面看不出「已经点过了」。
+     * 本地标记加上按 waveId 固定的幂等键，连点不会再变成好几条 RETURN_WAVE。
+     */
+    private val _returnSubmitted = MutableStateFlow(false)
+    val returnSubmitted: StateFlow<Boolean> = _returnSubmitted
+
+    private val _accepting = MutableStateFlow(false)
+    val accepting: StateFlow<Boolean> = _accepting
 
     init {
         viewModelScope.launch { repository.observeWave(waveId).collect { _wave.value = it } }
         viewModelScope.launch { repository.refresh() }
     }
 
-    fun acceptWave() = viewModelScope.launch { repository.acceptWave(waveId) }
+    fun dismissError() {
+        _error.value = null
+    }
 
-    fun returnWave() = viewModelScope.launch { repository.returnWave(waveId) }
+    fun acceptWave() = viewModelScope.launch {
+        if (_accepting.value) return@launch
+        _accepting.value = true
+        _error.value = runTransition { repository.acceptWave(waveId) }.riderMessage
+        _accepting.value = false
+    }
+
+    fun returnWave() = viewModelScope.launch {
+        if (_returnSubmitted.value) return@launch
+        _returnSubmitted.value = true
+        val result = runTransition { repository.returnWave(waveId) }
+        _error.value = result.riderMessage
+        // 没排进队列就把标记退回去，否则骑手连重试的入口都没有
+        if (!result.queued) _returnSubmitted.value = false
+    }
 }
 
 @Composable
@@ -86,6 +143,9 @@ fun WaveDetailScreen(
         factory = waveFactory(waveId),
     )
     val wave by viewModel.wave.collectAsState()
+    val error by viewModel.error.collectAsState()
+    val returnSubmitted by viewModel.returnSubmitted.collectAsState()
+    val accepting by viewModel.accepting.collectAsState()
     val current = wave
     if (current == null) {
         FreshStackScaffold(title = "波次路线", modifier = modifier) { insets ->
@@ -99,27 +159,35 @@ fun WaveDetailScreen(
     }
     WaveDetailContent(
         wave = current,
+        error = error,
+        returnSubmitted = returnSubmitted,
+        accepting = accepting,
         modifier = modifier,
         onBack = onBack,
         onOpenTask = onOpenTask,
         onAcceptWave = viewModel::acceptWave,
         onReturnWave = viewModel::returnWave,
+        onDismissError = viewModel::dismissError,
     )
 }
 
 @Composable
 private fun WaveDetailContent(
     wave: WaveUi,
+    error: String? = null,
+    returnSubmitted: Boolean = false,
+    accepting: Boolean = false,
     modifier: Modifier = Modifier,
     onBack: () -> Unit = {},
     onOpenTask: (Long) -> Unit = {},
     onAcceptWave: () -> Unit = {},
     onReturnWave: () -> Unit = {},
+    onDismissError: () -> Unit = {},
 ) {
     val completed = wave.wave.completedCount >= wave.wave.taskCount
     // 时段批次制：整波单一次性发下来，一单一单点接单在店门口太慢
     val pendingAccept = wave.stops.count { it.card.status == TaskStatus.ASSIGNED }
-    val allDone = wave.stops.isNotEmpty() && wave.stops.all { TaskStatus.isFinished(it.card.status) }
+    val closing = waveClosing(wave.stops)
     MtScaffold(
         title = "本趟路线",
         subtitle = wave.wave.waveNo,
@@ -127,20 +195,25 @@ private fun WaveDetailContent(
         onBack = onBack,
         bottomBar = {
             when {
-                pendingAccept > 0 -> MtBottomActionBar {
+                pendingAccept > 0 -> MtBottomActionBar(hint = error, hintTone = StatusTone.DANGER) {
                     MtPrimaryButton(
-                        text = "一键接单（$pendingAccept 单）",
+                        text = if (accepting) "正在记录…" else "一键接单（$pendingAccept 单）",
                         action = MtAction.ACCEPT,
                         modifier = Modifier.weight(1f),
+                        enabled = !accepting,
                         onClick = onAcceptWave,
                     )
                 }
 
-                allDone -> MtBottomActionBar(hint = "这趟送完了，回到门店后点一下，调度台才会发下一个时段") {
+                closing != null -> MtBottomActionBar(
+                    hint = error ?: closing.hint,
+                    hintTone = if (error != null) StatusTone.DANGER else StatusTone.WARNING,
+                ) {
                     MtPrimaryButton(
-                        text = "我已回店",
+                        text = if (returnSubmitted) "回店已记录，等待同步" else "我已回店",
                         action = MtAction.ACCEPT,
                         modifier = Modifier.weight(1f),
+                        enabled = !returnSubmitted,
                         onClick = onReturnWave,
                     )
                 }
@@ -157,6 +230,16 @@ private fun WaveDetailContent(
             ),
             verticalArrangement = Arrangement.spacedBy(FreshSpacing.Xs),
         ) {
+            error?.let { message ->
+                item {
+                    MtInfoBar(
+                        text = message,
+                        tone = StatusTone.DANGER,
+                        icon = FreshIconType.ERROR,
+                        onDismiss = onDismissError,
+                    )
+                }
+            }
             item {
                 MtCard {
                     Row(

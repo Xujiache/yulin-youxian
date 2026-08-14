@@ -352,7 +352,23 @@ public class DeliveryTaskService {
                 request == null ? null : request.clientEventId(),
                 request == null ? null : request.clientEventAt(),
                 request == null ? null : request.location(),
-                null, Map.of(), null);
+                null, Map.of(), this::ensurePickedUpBeforeDeparture);
+    }
+
+    /**
+     * 发车前必须已经取货。
+     *
+     * 状态机上 EXCEPTION → DELIVERING 是给调度员解除异常后继续送用的，
+     * 但发车接口和它共用一套转换判定，于是那条边顺带成了一条绕过取货的旁路。
+     * 取货时刻是顾客侧轨迹和交接耗时的起点，缺了它这两样都算不出来。
+     */
+    private void ensurePickedUpBeforeDeparture(DeliveryTask task) {
+        if (!DeliveryTaskStatus.PICKED_UP.name().equals(task.status())) {
+            throw new DeliveryException(
+                    DeliveryErrorCode.TASK_STATUS_NOT_ALLOWED,
+                    "发车前必须先完成取货，当前状态：" + stateMachine.statusOf(task).displayName()
+            );
+        }
     }
 
     public TaskCardDto arrive(long riderId, long taskId, TaskActionRequest request) {
@@ -532,6 +548,7 @@ public class DeliveryTaskService {
             String clientAction
     ) {
         DeliveryTaskStatus current = stateMachine.statusOf(task);
+        ensureExceptionHandledBeforeResume(task, current, target);
         List<DeliveryTaskStatus> path = stateMachine.resolvePath(current, target);
         LocalDateTime now = TaskTimes.now();
         DeliveryTask cursor = task;
@@ -561,18 +578,55 @@ public class DeliveryTaskService {
         return cursor;
     }
 
+    /**
+     * 异常单没销掉就不许回到中间态。
+     *
+     * EXCEPTION 出边里的 ACCEPTED/PICKED_UP/ARRIVED 是给 resolveException 单步恢复准备的，
+     * 但 applyTransition 是骑手接口的公共入口，不拦的话骑手自己点接单/取货/到达就能把任务
+     * 推出异常态：异常单还停在 OPEN、current_exception_id 也不会清，顾客在已送达的订单上
+     * 仍看到「配送遇到异常」。终态不拦，货退回或整单作废本来就是异常的合法出口。
+     */
+    private void ensureExceptionHandledBeforeResume(
+            DeliveryTask task,
+            DeliveryTaskStatus current,
+            DeliveryTaskStatus target
+    ) {
+        if (current != DeliveryTaskStatus.EXCEPTION || target.isTerminal()) {
+            return;
+        }
+        if (task.currentExceptionId() != null) {
+            throw new DeliveryException(
+                    DeliveryErrorCode.TASK_STATUS_NOT_ALLOWED,
+                    "异常尚未处理，请等调度员处理后再继续配送"
+            );
+        }
+    }
+
     private void applySideEffects(DeliveryTask task, DeliveryTaskStatus to, LocalDateTime now) {
         switch (to) {
             case ASSIGNED -> taskDao.updateTimestamp(task.id(), "assigned_at", now);
-            case ACCEPTED -> taskDao.updateTimestamp(task.id(), "accepted_at", now);
-            case PICKED_UP -> taskDao.updateTimestamp(task.id(), "picked_up_at", now);
+            // 履约时间戳一律只写第一次。「挂异常 → 调度员点继续」会重走一遍中间态，
+            // 无条件覆盖会把真实的接单/取货/到达时刻改写成异常解除时刻，
+            // 交接耗时、取货到送达的时长跟着一起失真。
+            case ACCEPTED -> {
+                if (task.acceptedAt() == null) {
+                    taskDao.updateTimestamp(task.id(), "accepted_at", now);
+                }
+            }
+            case PICKED_UP -> {
+                if (task.pickedUpAt() == null) {
+                    taskDao.updateTimestamp(task.id(), "picked_up_at", now);
+                }
+            }
             case DELIVERING -> {
                 if (task.departedAt() == null) {
                     taskDao.updateTimestamp(task.id(), "departed_at", now);
                 }
             }
             case ARRIVED -> {
-                taskDao.updateTimestamp(task.id(), "arrived_at", now);
+                if (task.arrivedAt() == null) {
+                    taskDao.updateTimestamp(task.id(), "arrived_at", now);
+                }
                 waveStopDao.markActualArrive(task.id(), now);
             }
             case DELIVERED -> {
@@ -711,6 +765,8 @@ public class DeliveryTaskService {
      */
     public List<TaskCardDto> returnToStore(long riderId, long waveId, TaskActionRequest request) {
         GeoPointDto location = request == null ? null : request.location();
+        String clientEventId = request == null ? null : request.clientEventId();
+        LocalDateTime clientEventAt = TaskTimes.parse(request == null ? null : request.clientEventAt());
         unitOfWork.run(() -> {
             DeliveryWave wave = waveDao.findByIdForUpdate(waveId).orElseThrow(
                     () -> new DeliveryException(DeliveryErrorCode.TASK_NOT_FOUND, "波次不存在：" + waveId)
@@ -721,13 +777,22 @@ public class DeliveryTaskService {
             if (DeliveryWaveService.STATUS_COMPLETED.equals(wave.status())) {
                 return;
             }
-            List<DeliveryTask> unfinished = taskDao.findByWaveId(waveId).stream()
+            // 只有跑到「待回店」才有回店可确认。空波次、还没发车的波次都到不了这个状态，
+            // 不校验的话骑手对着一个刚建好的空波次点一下就能把它标成完成。
+            if (!DeliveryWaveService.STATUS_RETURNING.equals(wave.status())) {
+                throw new DeliveryException(DeliveryErrorCode.TASK_STATUS_NOT_ALLOWED,
+                        "波次当前状态[" + wave.status() + "]不是待回店，无法确认回店");
+            }
+            List<DeliveryTask> tasks = taskDao.findByWaveId(waveId);
+            List<DeliveryTask> unfinished = tasks.stream()
                     .filter(task -> !isTerminal(task.status()))
                     .toList();
             if (!unfinished.isEmpty()) {
                 throw new DeliveryException(DeliveryErrorCode.TASK_STATUS_NOT_ALLOWED,
                         "还有 " + unfinished.size() + " 单没有结束，不能确认回店");
             }
+            DeliveryTask anchor = tasks.stream().findFirst().orElseThrow(() -> new DeliveryException(
+                    DeliveryErrorCode.TASK_STATUS_NOT_ALLOWED, "波次里没有任务，无从确认回店"));
             LocalDateTime now = TaskTimes.now();
             waveDao.markReturned(waveId, now);
             Map<String, Object> detail = new LinkedHashMap<>();
@@ -736,8 +801,13 @@ public class DeliveryTaskService {
                 detail.put("lat", location.lat());
                 detail.put("lng", location.lng());
             }
-            taskDao.findByWaveId(waveId).stream().findFirst().ifPresent(task -> eventRecorder.recordNote(
-                    task, TaskOperator.rider(riderId, supportDao.riderName(riderId)), "骑手已回店", detail));
+            // 回店时间是「骑手能不能接下一个时段」的唯一依据，落一条带上报端信息的留痕，
+            // 事后对不上账时能查是谁在哪儿点的。
+            eventRecorder.record(
+                    anchor, DeliveryTaskEventRecorder.TYPE_NOTE, anchor.status(), anchor.status(),
+                    TaskOperator.rider(riderId, supportDao.riderName(riderId)), "骑手已回店", location,
+                    clientEventId, clientEventAt, detail, "RETURN_TO_STORE"
+            );
         });
         return currentWaveCards(waveId);
     }
@@ -1012,9 +1082,11 @@ public class DeliveryTaskService {
         DeliveryTask updated = unitOfWork.commit(() -> {
             DeliveryTask task = requireTaskForUpdate(taskId);
             LocalDateTime now = TaskTimes.now();
+            // 先摘异常单再转状态：applyTransition 那道「异常没处理完不许回中间态」的闸门
+            // 拦的是骑手，调度员走到这里异常已经处理完了。
+            taskDao.updateCurrentException(task.id(), null, now);
             DeliveryTask afterTransition = applyTransition(
-                    task, target, operator, note, null, null, null, detail, null);
-            taskDao.updateCurrentException(afterTransition.id(), null, now);
+                    requireTask(task.id()), target, operator, note, null, null, null, detail, null);
             return requireTask(afterTransition.id());
         });
         orderStatusBridge.syncPendingForTask(taskId);

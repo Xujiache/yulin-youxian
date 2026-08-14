@@ -53,7 +53,8 @@ class WxDeliveryActionTests {
                 new TrackingTestSupport.FixedOrderAccess(ORDER_ID),
                 new DeliveryEventStream(() -> 0L),
                 ports,
-                TrackingTestSupport.clock(NOW));
+                TrackingTestSupport.clock(NOW),
+                TrackingTestSupport.urlSigner());
 
         TrackingTestSupport.insertRider(jdbcTemplate, RIDER_ID, "张伟", NOW.minusDays(7));
         TrackingTestSupport.insertTask(jdbcTemplate, new TrackingTestSupport.TaskFixtureBuilder()
@@ -85,6 +86,48 @@ class WxDeliveryActionTests {
         assertTrue(detail.contains("tmpl-a"));
         assertTrue(detail.contains("openid-test-user"));
         assertEquals(false, detail.contains("forged-template"));
+    }
+
+    @Test
+    void 送达照片下发的是能直接渲染的限时签名地址() {
+        jdbcTemplate.update("""
+                INSERT INTO delivery_evidence
+                    (task_id, rider_id, evidence_type, file_url, captured_at)
+                VALUES (?, ?, 'DELIVERED', '/uploads/delivery/202608/proof.jpg', ?)
+                """, TASK_ID, RIDER_ID, java.sql.Timestamp.valueOf(NOW.minusMinutes(2)));
+
+        List<String> photos = wxTrackingService.tracking(ORDER_ID).deliveryPhotos();
+
+        assertEquals(1, photos.size());
+        String photo = photos.get(0);
+        assertTrue(photo.startsWith("/uploads/delivery/202608/proof.jpg?"), photo);
+        // 小程序 <image> 带不了请求头，票据必须能让拦截器凭 URL 本身放行
+        String query = photo.substring(photo.indexOf('?') + 1);
+        String expires = null;
+        String signature = null;
+        for (String pair : query.split("&")) {
+            int equals = pair.indexOf('=');
+            if (pair.startsWith("e=")) {
+                expires = pair.substring(equals + 1);
+            } else if (pair.startsWith("s=")) {
+                signature = pair.substring(equals + 1);
+            }
+        }
+        assertTrue(TrackingTestSupport.urlSigner()
+                .verify("/uploads/delivery/202608/proof.jpg", expires, signature));
+    }
+
+    @Test
+    void 未送达时不下发任何照片() {
+        jdbcTemplate.update("UPDATE delivery_task SET status = 'DELIVERING', delivered_at = NULL WHERE id = ?",
+                TASK_ID);
+        jdbcTemplate.update("""
+                INSERT INTO delivery_evidence
+                    (task_id, rider_id, evidence_type, file_url, captured_at)
+                VALUES (?, ?, 'DELIVERED', '/uploads/delivery/202608/early.jpg', ?)
+                """, TASK_ID, RIDER_ID, java.sql.Timestamp.valueOf(NOW.minusMinutes(2)));
+
+        assertTrue(wxTrackingService.tracking(ORDER_ID).deliveryPhotos().isEmpty());
     }
 
     @Test
@@ -189,6 +232,7 @@ class WxDeliveryActionTests {
                 new DeliveryEventStream(() -> 0L),
                 ports,
                 TrackingTestSupport.clock(NOW),
-                templateIds);
+                templateIds,
+                TrackingTestSupport.urlSigner());
     }
 }

@@ -47,14 +47,15 @@
               :value="rider.id"
             />
           </ElSelect>
-          <ElInput
+          <ElSelect
             v-model="slotLabel"
             clearable
-            placeholder="按配送时段筛选"
+            placeholder="全部配送时段"
             class="filter-item"
             @change="reload"
-            @clear="reload"
-          />
+          >
+            <ElOption v-for="item in slotOptions" :key="item" :label="item" :value="item" />
+          </ElSelect>
           <ElButton @click="resetFilters">重置筛选</ElButton>
         </div>
         <div class="fresh-toolbar__right">
@@ -125,7 +126,7 @@
             <div class="wave-actions">
               <ElButton size="small" @click="goDetail(row)">详情</ElButton>
               <ElButton
-                v-if="row.status !== 'COMPLETED' && row.status !== 'CANCELLED'"
+                v-if="canCancel(row)"
                 size="small"
                 type="danger"
                 plain
@@ -156,6 +157,7 @@
 
 <script setup lang="ts">
   import { ElMessage, ElMessageBox } from 'element-plus'
+  import { getDeliverySlots } from '@/api/admin'
   import {
     cancelWave,
     getRiders,
@@ -183,12 +185,35 @@
   const loading = ref(false)
   const waves = ref<WaveSummary[]>([])
   const riders = ref<AdminRider[]>([])
+  const slotDict = ref<string[]>([])
   const page = ref(1)
   const pageSize = ref(20)
   const total = ref(0)
 
   const progressOf = (row: WaveSummary) =>
     row.taskCount > 0 ? Math.round((row.completedCount / row.taskCount) * 100) : 0
+
+  /**
+   * 服务端按 slot_label 精确匹配，手打「14:00」永远查不到「14:00-16:00」，
+   * 所以候选值只能取真实存在过的字面量：时段字典 + 当前页出现过的历史时段。
+   */
+  const slotOptions = computed(() => {
+    const labels = new Set(slotDict.value)
+    waves.value.forEach((wave) => {
+      const label = (wave.slotLabel || '').trim()
+      if (label) labels.add(label)
+    })
+    // 选中值可能来自别的日期或翻页前的结果，留住它才不会一刷新就从下拉里消失
+    if (slotLabel.value) labels.add(slotLabel.value)
+    return [...labels].sort((left, right) => left.localeCompare(right))
+  })
+
+  /**
+   * RETURNING 表示单已全部送达、只差骑手回店。此时取消会把已送达任务从波次摘下、
+   * 删掉站点记录，骑手再也无法确认回店，而且「未完成的任务会退回待派队列」也不成立。
+   */
+  const canCancel = (row: WaveSummary) =>
+    row.status !== 'COMPLETED' && row.status !== 'CANCELLED' && row.status !== 'RETURNING'
 
   const loadWaves = async () => {
     loading.value = true
@@ -197,7 +222,7 @@
         date: date.value || undefined,
         status: status.value || undefined,
         riderId: riderId.value,
-        slotLabel: slotLabel.value.trim() || undefined,
+        slotLabel: slotLabel.value || undefined,
         page: page.value,
         pageSize: pageSize.value
       })
@@ -216,6 +241,17 @@
       riders.value = result.items || []
     } catch {
       riders.value = []
+    }
+  }
+
+  const loadSlotDict = async () => {
+    try {
+      const result = await getDeliverySlots()
+      // 停用的时段仍可能挂着历史波次，筛选场景不按 available 过滤
+      slotDict.value = (result.items || []).map((slot) => slot.label).filter(Boolean)
+    } catch {
+      // 字典取不到就只靠当前列表出现过的时段兜底，不影响波次列表本身
+      slotDict.value = []
     }
   }
 
@@ -259,7 +295,7 @@
   }
 
   onMounted(async () => {
-    await Promise.all([loadWaves(), loadRiders()])
+    await Promise.all([loadWaves(), loadRiders(), loadSlotDict()])
   })
 </script>
 

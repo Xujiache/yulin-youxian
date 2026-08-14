@@ -126,7 +126,10 @@ class ExceptionReportViewModel(app: Application, private val taskId: Long) : And
                 }
 
                 is OnlineSubmit.BusinessFailure -> {
-                    evidenceRepository.complete(online.evidences)
+                    // 照片必须留着。业务失败多半是异常类型选错或任务状态不对，
+                    // 改完再提交一次就能过；这时把本地文件删掉，重试必然再失败，
+                    // 而骑手已经离开那个门口，这张照片补不回来了。
+                    // 已经传上去的那几张仍带着 uploadedId，重试不会重传。
                     _state.value = _state.value.copy(submitting = false, error = online.message)
                 }
 
@@ -168,7 +171,7 @@ class ExceptionReportViewModel(app: Application, private val taskId: Long) : And
                     return if (upload.code == ApiCaller.NETWORK_ERROR_CODE) {
                         OnlineSubmit.Offline(evidences)
                     } else {
-                        OnlineSubmit.BusinessFailure(upload.message, evidences)
+                        OnlineSubmit.BusinessFailure(upload.message)
                     }
                 }
                 RiderResult.Loading -> return OnlineSubmit.Offline(evidences)
@@ -194,7 +197,7 @@ class ExceptionReportViewModel(app: Application, private val taskId: Long) : And
             is RiderResult.Failure -> if (result.code == ApiCaller.NETWORK_ERROR_CODE) {
                 OnlineSubmit.Offline(evidences)
             } else {
-                OnlineSubmit.BusinessFailure(result.message, evidences)
+                OnlineSubmit.BusinessFailure(result.message)
             }
 
             RiderResult.Loading -> OnlineSubmit.Offline(evidences)
@@ -253,9 +256,6 @@ class ExceptionReportViewModel(app: Application, private val taskId: Long) : And
     private sealed interface OnlineSubmit {
         data class Success(val result: ExceptionResult) : OnlineSubmit
         data class Offline(val evidences: List<EvidenceRecord>) : OnlineSubmit
-        data class BusinessFailure(
-            val message: String,
-            val evidences: List<EvidenceRecord>,
-        ) : OnlineSubmit
+        data class BusinessFailure(val message: String) : OnlineSubmit
     }
 }

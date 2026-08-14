@@ -154,6 +154,7 @@ final class DispatchFakes {
         private final Map<Long, DispatchTaskRow> tasks = new LinkedHashMap<>();
         private final Map<Long, RiderCandidateRow> riders = new LinkedHashMap<>();
         private final Map<Long, DispatchWaveRow> waves = new LinkedHashMap<>();
+        private final Map<Long, String> waveSlots = new LinkedHashMap<>();
         private final List<Message> messages = new ArrayList<>();
         private long waveSequence;
 
@@ -278,11 +279,38 @@ final class DispatchFakes {
         }
 
         @Override
+        public synchronized Optional<DispatchWaveRow> findAppendableSlotWave(
+                long riderId, LocalDate deliveryDate, String slotLabel) {
+            return waves.values().stream()
+                    .filter(wave -> wave.riderId() != null && wave.riderId() == riderId)
+                    .filter(DispatchWaveRow::openForAppend)
+                    .filter(wave -> java.util.Objects.equals(wave.deliveryDate(), deliveryDate))
+                    .filter(wave -> java.util.Objects.equals(waveSlots.get(wave.waveId()), slotLabel))
+                    .max(Comparator.comparingLong(DispatchWaveRow::waveId));
+        }
+
+        @Override
         public synchronized long createWave(Long riderId, LocalDate deliveryDate, LocalDateTime now) {
             long waveId = ++waveSequence;
             waves.put(waveId, new DispatchWaveRow(waveId, "BC-TEST-" + waveId, riderId,
                     riderId == null ? "PLANNING" : "ASSIGNED", deliveryDate, 0));
             return waveId;
+        }
+
+        @Override
+        public synchronized long createSlotWave(
+                Long riderId, LocalDate deliveryDate, String slotLabel, LocalDateTime now) {
+            long waveId = createWave(riderId, deliveryDate, now);
+            waveSlots.put(waveId, slotLabel);
+            return waveId;
+        }
+
+        synchronized void putWaveSlot(long waveId, String slotLabel) {
+            waveSlots.put(waveId, slotLabel);
+        }
+
+        synchronized String waveSlot(long waveId) {
+            return waveSlots.get(waveId);
         }
 
         @Override

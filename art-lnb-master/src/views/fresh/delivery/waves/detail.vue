@@ -187,6 +187,8 @@
     return [
       { label: '波次状态', value: waveStatusText(wave.value?.status) },
       { label: '骑手', value: wave.value?.riderName || '未指派' },
+      // 老波次不是按时段发的，没有 slotLabel
+      { label: '配送时段', value: wave.value?.slotLabel || '—' },
       {
         label: '站点数',
         value: `${wave.value?.completedCount ?? 0}/${wave.value?.taskCount ?? 0}`
@@ -198,6 +200,11 @@
       {
         label: '规划时长',
         value: humanDuration(plan?.totalDurationSeconds ?? wave.value?.planDurationSeconds)
+      },
+      // 状态为 RETURNING 时这里是空的，正好说明「送完了但还没回店」
+      {
+        label: '回店时间',
+        value: wave.value?.returnedAt ? clockText(wave.value.returnedAt) : '—'
       },
       { label: '优化器', value: plan?.optimizerName || wave.value?.optimizerName || '—' },
       { label: '距离矩阵', value: plan?.matrixProvider || wave.value?.matrixProvider || '—' },

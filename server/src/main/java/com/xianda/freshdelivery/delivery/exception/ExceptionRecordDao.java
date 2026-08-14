@@ -55,15 +55,22 @@ public class ExceptionRecordDao {
         this.jdbcTemplate = jdbcTemplate;
     }
 
-    public long insert(DeliveryExceptionRecord record, LocalDateTime now) {
+    /**
+     * 幂等键必须和记录本身同一条 INSERT 落库。
+     *
+     * 先插入再补一条 UPDATE 的写法，会让并发的同键上报都插入成功，
+     * 直到后来的那条 UPDATE 撞上唯一索引才失败，对骑手端表现为 500 而不是重放。
+     */
+    public long insert(DeliveryExceptionRecord record, String clientEventId, LocalDateTime now) {
+        String idempotencyKey = clientEventId == null || clientEventId.isBlank() ? null : clientEventId.trim();
         KeyHolder keyHolder = new GeneratedKeyHolder();
         jdbcTemplate.update(connection -> {
             PreparedStatement statement = connection.prepareStatement("""
                     INSERT INTO delivery_exception
                         (exception_no, task_id, wave_id, rider_id, order_id, exception_type, severity, status,
-                         source, description, lat, lng, hold_until_at, rider_exempt, client_event_at,
-                         created_at, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                         source, description, lat, lng, hold_until_at, rider_exempt, client_event_id,
+                         client_event_at, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """, GENERATED_ID);
             statement.setString(1, record.exceptionNo());
             setNullableLong(statement, 2, record.taskId());
@@ -79,9 +86,10 @@ public class ExceptionRecordDao {
             setNullableDouble(statement, 12, record.lng());
             statement.setTimestamp(13, JdbcValues.timestamp(record.holdUntilAt()));
             statement.setBoolean(14, !Boolean.FALSE.equals(record.riderExempt()));
-            statement.setTimestamp(15, JdbcValues.timestamp(record.clientEventAt()));
-            statement.setTimestamp(16, JdbcValues.timestamp(now));
+            statement.setString(15, idempotencyKey);
+            statement.setTimestamp(16, JdbcValues.timestamp(record.clientEventAt()));
             statement.setTimestamp(17, JdbcValues.timestamp(now));
+            statement.setTimestamp(18, JdbcValues.timestamp(now));
             return statement;
         }, keyHolder);
         return JdbcValues.generatedId(keyHolder);
@@ -114,15 +122,6 @@ public class ExceptionRecordDao {
         return jdbcTemplate.query(
                 "SELECT " + COLUMNS + " FROM delivery_exception WHERE client_event_id = ?",
                 ROW_MAPPER, clientEventId.trim()).stream().findFirst();
-    }
-
-    public void markClientEventId(long exceptionId, String clientEventId) {
-        if (clientEventId == null || clientEventId.isBlank()) {
-            return;
-        }
-        jdbcTemplate.update(
-                "UPDATE delivery_exception SET client_event_id = ? WHERE id = ?",
-                clientEventId.trim(), exceptionId);
     }
 
     public List<DeliveryExceptionRecord> findByRider(long riderId, String status, int limit, int offset) {

@@ -29,6 +29,8 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.compose)
 
     implementation(libs.amap.navi3d)
+
+    testImplementation("junit:junit:4.13.2")
 }
 
 kotlin {

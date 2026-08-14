@@ -1,5 +1,6 @@
 package com.xianda.freshdelivery.delivery.tracking;
 
+import com.xianda.freshdelivery.delivery.common.EvidenceUrlSigner;
 import com.xianda.freshdelivery.delivery.repository.DeliveryTestDatabase;
 import java.sql.Timestamp;
 import java.time.Clock;
@@ -17,6 +18,11 @@ import org.springframework.jdbc.core.JdbcTemplate;
 final class TrackingTestSupport {
 
     private TrackingTestSupport() {
+    }
+
+    /** 固定密钥，测试里要能自己把签发的地址再验回来。 */
+    static EvidenceUrlSigner urlSigner() {
+        return new EvidenceUrlSigner("tracking-test-secret", 1800L);
     }
 
     static JdbcTemplate database(String name) {
@@ -98,12 +104,26 @@ final class TrackingTestSupport {
     }
 
     static void insertWave(JdbcTemplate jdbcTemplate, long waveId, Long riderId, LocalDate deliveryDate) {
+        insertWave(jdbcTemplate, waveId, riderId, deliveryDate, "DELIVERING", 0, 0, null);
+    }
+
+    static void insertWave(
+            JdbcTemplate jdbcTemplate,
+            long waveId,
+            Long riderId,
+            LocalDate deliveryDate,
+            String status,
+            int taskCount,
+            int completedCount,
+            LocalDateTime planReturnAt
+    ) {
         jdbcTemplate.update("""
                         INSERT INTO delivery_wave (id, wave_no, rider_id, status, delivery_date, task_count,
-                                                   completed_count)
-                        VALUES (?, ?, ?, 'DELIVERING', ?, 0, 0)
+                                                   completed_count, plan_return_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                         """,
-                waveId, "BC%08d".formatted(waveId), riderId, java.sql.Date.valueOf(deliveryDate));
+                waveId, "BC%08d".formatted(waveId), riderId, status, java.sql.Date.valueOf(deliveryDate),
+                taskCount, completedCount, timestamp(planReturnAt));
     }
 
     static void insertWaveStop(JdbcTemplate jdbcTemplate, long waveId, long taskId, int seqNo) {

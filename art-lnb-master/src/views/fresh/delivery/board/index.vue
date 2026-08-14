@@ -317,6 +317,8 @@
             :value="option.value"
           />
         </ElSelect>
+        <span class="muted">待派池快照 {{ taskPickerSource.length }} 单，不随看板刷新变动</span>
+        <ElButton link type="primary" @click="syncTaskPicker()">同步最新</ElButton>
       </div>
       <ElTable
         ref="taskPickerTableRef"
@@ -363,7 +365,7 @@
 </template>
 
 <script setup lang="ts">
-  import { ElMessage, ElMessageBox } from 'element-plus'
+  import { ElMessage, ElMessageBox, type ElTable } from 'element-plus'
   import { useFullscreen } from '@vueuse/core'
   import {
     assignTask,
@@ -465,11 +467,20 @@
   const taskPickerSelection = ref<AdminTaskCard[]>([])
   // 选了时段就走「发车」：一个时段的单一次性给一个骑手，服务端会校验时段一致
   const taskPickerSlot = ref('')
-  const taskPickerTableRef = ref()
+  const taskPickerTableRef = ref<InstanceType<typeof ElTable>>()
+  /**
+   * 弹窗打开那一刻的待派池快照。不直接用 pendingTasks 有两个原因：
+   *
+   * 一是它被左侧队列的关键字 / 温层 / 远单筛选削过，照它发车只会发出时段里的一部分，
+   * 剩下的静默留在池子里，「一个时段整批发出去」就不成立了；
+   * 二是它每次重算都产出新数组实例，ElTable 发现 data 换了实例就清空勾选，
+   * SSE 推送和降级轮询会把调度员正在勾的单一次次抹掉。
+   */
+  const taskPickerSource = ref<AdminTaskCard[]>([])
 
   const pendingSlotOptions = computed(() => {
     const counts = new Map<string, number>()
-    pendingTasks.value.forEach((task) => {
+    taskPickerSource.value.forEach((task) => {
       const slot = (task.slotLabel || '').trim()
       if (slot) counts.set(slot, (counts.get(slot) || 0) + 1)
     })
@@ -480,9 +491,27 @@
 
   const taskPickerTasks = computed(() =>
     taskPickerSlot.value
-      ? pendingTasks.value.filter((task) => (task.slotLabel || '').trim() === taskPickerSlot.value)
-      : pendingTasks.value
+      ? taskPickerSource.value.filter(
+          (task) => (task.slotLabel || '').trim() === taskPickerSlot.value
+        )
+      : taskPickerSource.value
   )
+
+  /**
+   * 用当前待派池重建快照，已经不在池子里的勾选自然掉队，还在的补回去。
+   * 服务端拒绝发车时只给一句话、不点名任务，所以只能整份对齐。
+   */
+  const syncTaskPicker = async () => {
+    const kept = new Set(taskPickerSelection.value.map((task) => task.taskId))
+    taskPickerSource.value = (board.value?.queues.pending || []).slice().sort(byHoldUntilAsc)
+    await nextTick()
+    const table = taskPickerTableRef.value
+    if (!table) return
+    table.clearSelection()
+    taskPickerTasks.value
+      .filter((task) => kept.has(task.taskId))
+      .forEach((task) => table.toggleRowSelection(task, true))
+  }
 
   /** 选定时段后默认全选：店主的意图就是把这个时段整批发出去，不必再逐条勾。 */
   const onTaskPickerSlotChange = async () => {
@@ -490,8 +519,8 @@
     const table = taskPickerTableRef.value
     if (!table) return
     table.clearSelection()
-    if (!taskPickerSlot.value) return
-    taskPickerTasks.value.forEach((task: AdminTaskCard) => table.toggleRowSelection(task, true))
+    // 表格数据已经按时段过滤过，全选与逐行勾选等价，但只触发一次 selection-change
+    if (taskPickerSlot.value) table.toggleAllSelection()
   }
 
   // ==================== 实时通道 ====================
@@ -741,6 +770,13 @@
       .includes(text)
   }
 
+  /** 待派队列的展示顺序：压单到期早的排在前面 */
+  const byHoldUntilAsc = (a: AdminTaskCard, b: AdminTaskCard) => {
+    const left = parseTime(a.holdUntilAt)
+    const right = parseTime(b.holdUntilAt)
+    return (Number.isNaN(left) ? 0 : left) - (Number.isNaN(right) ? 0 : right)
+  }
+
   const pendingTasks = computed(() => {
     const list = (board.value?.queues.pending || []).filter((task) => {
       if (!matchText(task, pendingKeyword.value)) return false
@@ -749,11 +785,7 @@
       if (pendingFarOnly.value && !isFarDelivery(task)) return false
       return true
     })
-    return list.sort((a, b) => {
-      const left = parseTime(a.holdUntilAt)
-      const right = parseTime(b.holdUntilAt)
-      return (Number.isNaN(left) ? 0 : left) - (Number.isNaN(right) ? 0 : right)
-    })
+    return list.sort(byHoldUntilAsc)
   })
 
   const riskTasks = computed(() => {
@@ -1039,12 +1071,15 @@
 
   // ==================== 骑手动作 ====================
 
-  const openTaskPicker = (rider: RiderBoardCard) => {
+  const openTaskPicker = async (rider: RiderBoardCard) => {
     if (isFatiguePaused(rider, now.value)) return
     taskPickerRider.value = rider
     taskPickerSelection.value = []
     taskPickerSlot.value = ''
     taskPickerVisible.value = true
+    // ElDialog 默认不销毁内容，上一个骑手留在表格里的勾选必须显式清掉，
+    // 否则界面上打着勾、按钮却写「派 0 单」，再勾一行就把旧选择一起派出去了
+    await syncTaskPicker()
   }
 
   const onTaskPickerSelect = (rows: AdminTaskCard[]) => {
@@ -1086,6 +1121,9 @@
     } catch (error) {
       if (error !== 'cancel' && error !== 'close') {
         ElMessage.error(error instanceof Error ? error.message : slot ? '发车失败' : '批量派单失败')
+        // 服务端最常见的拒绝理由就是「任务已经不在待发状态」，不同步列表原样重试必然撞同一个错
+        await loadBoard(true)
+        await syncTaskPicker()
       }
     } finally {
       assigning.value = false

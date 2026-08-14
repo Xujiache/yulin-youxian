@@ -29,6 +29,13 @@ import org.springframework.stereotype.Service;
  */
 @Service
 public class SlotDispatchService {
+    /**
+     * 一次发车最多带的任务数，对齐 {@code DeliveryTaskService.MAX_ORDER_IDS_PER_QUERY} 的先例。
+     *
+     * 没有上限时一个请求就能锁住整张 delivery_task，把发车事务撑成长事务。
+     */
+    public static final int MAX_TASKS_PER_DISPATCH = 100;
+
     private static final Logger log = LoggerFactory.getLogger(SlotDispatchService.class);
 
     private final DispatchDao dispatchDao;
@@ -36,17 +43,23 @@ public class SlotDispatchService {
     private final WaveRoutingPort waveRoutingPort;
     private final TaskUnitOfWork unitOfWork;
     private final DispatchEngine dispatchEngine;
+    private final RiderScoringService scoringService;
+    private final DispatchSettings settings;
 
     public SlotDispatchService(DispatchDao dispatchDao,
                                TaskAssignmentPort assignmentPort,
                                WaveRoutingPort waveRoutingPort,
                                TaskUnitOfWork unitOfWork,
-                               DispatchEngine dispatchEngine) {
+                               DispatchEngine dispatchEngine,
+                               RiderScoringService scoringService,
+                               DispatchSettings settings) {
         this.dispatchDao = dispatchDao;
         this.assignmentPort = assignmentPort;
         this.waveRoutingPort = waveRoutingPort;
         this.unitOfWork = unitOfWork;
         this.dispatchEngine = dispatchEngine;
+        this.scoringService = scoringService;
+        this.settings = settings;
     }
 
     public SlotDispatchResult dispatch(SlotDispatchCommand command) {
@@ -57,6 +70,10 @@ public class SlotDispatchService {
                 : command.taskIds().stream().filter(Objects::nonNull).distinct().toList();
         if (taskIds.isEmpty()) {
             throw new DeliveryException(DeliveryErrorCode.TASK_NOT_FOUND, "taskIds 不能为空");
+        }
+        if (taskIds.size() > MAX_TASKS_PER_DISPATCH) {
+            throw new DeliveryException(DeliveryErrorCode.TASK_STATUS_NOT_ALLOWED,
+                    "一次发车最多 " + MAX_TASKS_PER_DISPATCH + " 单，当前 " + taskIds.size() + " 单");
         }
         if (dispatchDao.findRider(command.riderId()).isEmpty()) {
             throw new DeliveryException(DeliveryErrorCode.NO_AVAILABLE_RIDER,
@@ -111,12 +128,22 @@ public class SlotDispatchService {
             throw new DeliveryException(DeliveryErrorCode.NO_AVAILABLE_RIDER,
                     "骑手记录被并发修改，请重试：" + command.riderId());
         }
+        // 锁上之后再读，才不会拿着一份「刚才还在岗」的旧快照做门禁判断
+        RiderCandidateRow rider = dispatchDao.findRider(command.riderId())
+                .orElseThrow(() -> new DeliveryException(DeliveryErrorCode.NO_AVAILABLE_RIDER,
+                        "骑手不存在或已注销：" + command.riderId()));
+        ensureRiderAssignable(rider, now);
 
         SlotKey slot = requireSameSlot(locked, command);
 
         Optional<DispatchWaveRow> appendable =
                 dispatchDao.findAppendableSlotWave(command.riderId(), slot.date(), slot.label());
         boolean append = appendable.isPresent();
+        List<DispatchTaskRow> waveTasks = append
+                ? dispatchDao.findTasksByWave(appendable.get().waveId())
+                : List.of();
+        ensureCapacity(rider, locked, waveTasks, command.confirmOverload());
+
         long waveId = append
                 ? appendable.get().waveId()
                 : dispatchDao.createSlotWave(command.riderId(), slot.date(), slot.label(), now);
@@ -132,6 +159,82 @@ public class SlotDispatchService {
         }
         dispatchDao.refreshWaveAggregates(waveId, now);
         return new Committed(waveId, !append, slot.date(), slot.label(), assigned);
+    }
+
+    /**
+     * 「店主已经决定好给谁」不等于什么骑手都能收。
+     *
+     * 疲劳停派是 GB/T 46862-2025 的合规红线，自动派单和人工指派都不允许 force 绕过；
+     * 停用账号和不在岗的骑手连登录取货都做不到，单发过去只会烂在那儿没人管。
+     * 这三项在按时段发车这条路径上没有理由变成例外。
+     */
+    private void ensureRiderAssignable(RiderCandidateRow rider, LocalDateTime now) {
+        if (rider.fatiguePaused(now)) {
+            throw new DeliveryException(DeliveryErrorCode.RIDER_FATIGUE_SUSPENDED,
+                    "骑手处于疲劳停派期（至 " + rider.dispatchPausedUntil()
+                            + "），按 GB/T 46862-2025 合规要求不能派单");
+        }
+        if (!rider.active()) {
+            throw new DeliveryException(DeliveryErrorCode.RIDER_SUSPENDED,
+                    "骑手账号状态为 " + rider.accountStatus() + "，不能派单：" + rider.riderId());
+        }
+        if (!rider.onDuty()) {
+            throw new DeliveryException(DeliveryErrorCode.RIDER_OFF_DUTY,
+                    "骑手当前不在岗（" + rider.workStatus() + "），不能派单：" + rider.riderId());
+        }
+    }
+
+    /**
+     * 超限默认拒绝，但留一个显式确认的出口。
+     *
+     * 一个时段备好的货本来就可能超过按即时单调出来的并发和载重上限，硬拒会把这个功能废掉；
+     * 默认放行又会让骑手拿到一车装不下的货，路线、ETA 和顾客那边的「预计送达」跟着一起失真。
+     * 折中成把具体数字报回去让店主自己认，认了再带 confirmOverload 发一次。
+     */
+    private void ensureCapacity(RiderCandidateRow rider,
+                                List<DispatchTaskRow> incoming,
+                                List<DispatchTaskRow> waveTasks,
+                                boolean confirmed) {
+        List<String> overloads = new ArrayList<>();
+        int waveCount = waveTasks.size() + incoming.size();
+        if (waveCount > settings.maxTasksPerWave()) {
+            overloads.add("波次单量 " + waveCount + " 超过上限 " + settings.maxTasksPerWave());
+        }
+        double waveWeightKg = totalWeightKg(waveTasks) + totalWeightKg(incoming);
+        if (waveWeightKg > settings.maxWaveWeightKg()) {
+            overloads.add("波次载重 " + round1(waveWeightKg) + "kg 超过上限 "
+                    + round1(settings.maxWaveWeightKg()) + "kg");
+        }
+
+        List<DispatchTaskRow> active = dispatchDao.findActiveTasksByRider(rider.riderId());
+        int maxConcurrent = scoringService.effectiveMaxConcurrent(rider);
+        int riderCount = active.size() + incoming.size();
+        if (riderCount > maxConcurrent) {
+            overloads.add("骑手在手单量 " + riderCount + " 超过并发上限 " + maxConcurrent);
+        }
+        double riderWeightKg = totalWeightKg(active) + totalWeightKg(incoming);
+        if (rider.capacityWeightKg() > 0d && riderWeightKg > rider.capacityWeightKg()) {
+            overloads.add("骑手在手载重 " + round1(riderWeightKg) + "kg 超过载具上限 "
+                    + round1(rider.capacityWeightKg()) + "kg");
+        }
+
+        if (overloads.isEmpty()) {
+            return;
+        }
+        if (!confirmed) {
+            throw new DeliveryException(DeliveryErrorCode.RIDER_CONCURRENCY_LIMIT,
+                    "这一波超出承载上限：" + String.join("；", overloads)
+                            + "。确认仍要这么发请带 confirmOverload=true");
+        }
+        log.warn("时段发车经店主确认后超限下发，骑手 {}：{}", rider.riderId(), overloads);
+    }
+
+    private static double totalWeightKg(List<DispatchTaskRow> tasks) {
+        return tasks.stream().mapToDouble(DispatchTaskRow::totalWeightKg).sum();
+    }
+
+    private static double round1(double value) {
+        return Math.round(value * 10d) / 10d;
     }
 
     /**
@@ -206,7 +309,12 @@ public class SlotDispatchService {
     private record Committed(long waveId, boolean waveCreated, LocalDate deliveryDate,
                              String slotLabel, List<Long> taskIds) {}
 
-    public record SlotDispatchCommand(Long riderId, String slotLabel, List<Long> taskIds) {}
+    public record SlotDispatchCommand(Long riderId, String slotLabel, List<Long> taskIds,
+                                      boolean confirmOverload) {
+        public SlotDispatchCommand(Long riderId, String slotLabel, List<Long> taskIds) {
+            this(riderId, slotLabel, taskIds, false);
+        }
+    }
 
     public record SlotDispatchResult(long waveId, boolean waveCreated, long riderId,
                                      String deliveryDate, String slotLabel, List<Long> taskIds) {}

@@ -106,6 +106,28 @@ class DeliveryTaskStateMachineTests {
     }
 
     @Test
+    void exceptionHubNoLongerLetsAnUnpickedTaskJumpStraightToDelivering() {
+        // 「已派单 →（异常）→ 配送中」曾是一条合法路径，骑手对没取的货点发车就能整波跳过取货。
+        for (DeliveryTaskStatus from : List.of(DeliveryTaskStatus.ASSIGNED, DeliveryTaskStatus.ACCEPTED)) {
+            DeliveryException exception = assertThrows(
+                    DeliveryException.class,
+                    () -> stateMachine.resolvePath(from, DeliveryTaskStatus.DELIVERING),
+                    from + "->DELIVERING"
+            );
+            assertEquals(DeliveryErrorCode.TASK_STATUS_NOT_ALLOWED, exception.code());
+        }
+        assertEquals(
+                List.of(DeliveryTaskStatus.DELIVERING),
+                stateMachine.resolvePath(DeliveryTaskStatus.PICKED_UP, DeliveryTaskStatus.DELIVERING)
+        );
+        // 调度员解除异常后继续送仍然是单步的，那条边没被动过。
+        assertEquals(
+                List.of(DeliveryTaskStatus.DELIVERING),
+                stateMachine.resolvePath(DeliveryTaskStatus.EXCEPTION, DeliveryTaskStatus.DELIVERING)
+        );
+    }
+
+    @Test
     void resolvePathRejectsPickedUpTransferBackToPending() {
         DeliveryException exception = assertThrows(
                 DeliveryException.class,

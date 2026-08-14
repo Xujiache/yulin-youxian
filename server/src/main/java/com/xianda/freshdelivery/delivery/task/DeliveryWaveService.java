@@ -123,9 +123,7 @@ public class DeliveryWaveService {
 
     public void appendTasks(long waveId, List<Long> taskIds, TaskOperator operator) {
         DeliveryWave wave = requireWave(waveId);
-        if (STATUS_COMPLETED.equals(wave.status()) || STATUS_CANCELLED.equals(wave.status())) {
-            throw new DeliveryException(DeliveryErrorCode.TASK_STATUS_NOT_ALLOWED, "波次已结束，无法追加任务");
-        }
+        ensureOpenForEdit(wave, "追加任务");
         List<Long> ids = taskIds == null ? List.of() : taskIds.stream().filter(Objects::nonNull).distinct().toList();
         if (ids.isEmpty()) {
             return;
@@ -141,9 +139,7 @@ public class DeliveryWaveService {
         unitOfWork.run(() -> {
             DeliveryWave lockedWave = waveDao.findByIdForUpdate(waveId).orElseThrow(
                     () -> new DeliveryException(DeliveryErrorCode.TASK_NOT_FOUND, "波次不存在：" + waveId));
-            if (STATUS_COMPLETED.equals(lockedWave.status()) || STATUS_CANCELLED.equals(lockedWave.status())) {
-                throw new DeliveryException(DeliveryErrorCode.TASK_STATUS_NOT_ALLOWED, "波次已结束，无法追加任务");
-            }
+            ensureOpenForEdit(lockedWave, "追加任务");
             int lockedCount = waveStopDao.findByWaveId(waveId).size();
             if (maxTasks > 0 && lockedCount + ids.size() > maxTasks) {
                 throw new DeliveryException(DeliveryErrorCode.TASK_STATUS_NOT_ALLOWED, "波次容量已被其他操作占用");
@@ -167,9 +163,7 @@ public class DeliveryWaveService {
 
     public void resequence(long waveId, List<Long> taskIds, boolean byRider, TaskOperator operator) {
         DeliveryWave wave = requireWave(waveId);
-        if (STATUS_COMPLETED.equals(wave.status()) || STATUS_CANCELLED.equals(wave.status())) {
-            throw new DeliveryException(DeliveryErrorCode.TASK_STATUS_NOT_ALLOWED, "波次已结束，无法调整顺序");
-        }
+        ensureOpenForEdit(wave, "调整顺序");
         List<Long> ids = taskIds == null ? List.of() : taskIds.stream().filter(Objects::nonNull).distinct().toList();
         if (ids.isEmpty()) {
             throw new DeliveryException(DeliveryErrorCode.TASK_NOT_FOUND, "调整顺序需要提供任务列表");
@@ -182,9 +176,7 @@ public class DeliveryWaveService {
         unitOfWork.run(() -> {
             DeliveryWave lockedWave = waveDao.findByIdForUpdate(waveId).orElseThrow(
                     () -> new DeliveryException(DeliveryErrorCode.TASK_NOT_FOUND, "波次不存在：" + waveId));
-            if (STATUS_COMPLETED.equals(lockedWave.status()) || STATUS_CANCELLED.equals(lockedWave.status())) {
-                throw new DeliveryException(DeliveryErrorCode.TASK_STATUS_NOT_ALLOWED, "波次已结束，无法调整顺序");
-            }
+            ensureOpenForEdit(lockedWave, "调整顺序");
             if (byRider && (operator == null || operator.operatorId() == null
                     || lockedWave.riderId() == null || !lockedWave.riderId().equals(operator.operatorId()))) {
                 throw new DeliveryException(DeliveryErrorCode.TASK_NOT_OWNED_BY_RIDER, "波次不属于当前骑手");
@@ -219,12 +211,14 @@ public class DeliveryWaveService {
         if (STATUS_CANCELLED.equals(wave.status())) {
             return;
         }
+        ensureCancellable(wave);
         unitOfWork.run(() -> {
             DeliveryWave lockedWave = waveDao.findByIdForUpdate(waveId).orElseThrow(
                     () -> new DeliveryException(DeliveryErrorCode.TASK_NOT_FOUND, "波次不存在：" + waveId));
             if (STATUS_CANCELLED.equals(lockedWave.status())) {
                 return;
             }
+            ensureCancellable(lockedWave);
             List<DeliveryTask> tasks = taskDao.findByWaveIdForUpdate(waveId);
             LocalDateTime now = TaskTimes.now();
             waveDao.updateStatus(waveId, STATUS_CANCELLED, now);
@@ -390,6 +384,39 @@ public class DeliveryWaveService {
     public DeliveryWave requireWave(long waveId) {
         return waveDao.findById(waveId)
                 .orElseThrow(() -> new DeliveryException(DeliveryErrorCode.TASK_NOT_FOUND, "波次不存在：" + waveId));
+    }
+
+    /**
+     * RETURNING 和 COMPLETED/CANCELLED 一样不能再编辑。
+     *
+     * 到了待回店，波次里的单已经全部终结、骑手在往回骑。这时候追加或改顺序都改不到
+     * 他实际要走的路，只会让波次统计和 ETA 与现场脱节。
+     */
+    private static void ensureOpenForEdit(DeliveryWave wave, String action) {
+        if (STATUS_COMPLETED.equals(wave.status()) || STATUS_CANCELLED.equals(wave.status())) {
+            throw new DeliveryException(DeliveryErrorCode.TASK_STATUS_NOT_ALLOWED, "波次已结束，无法" + action);
+        }
+        if (STATUS_RETURNING.equals(wave.status())) {
+            throw new DeliveryException(
+                    DeliveryErrorCode.TASK_STATUS_NOT_ALLOWED,
+                    "波次内的单已全部送达、骑手正在回店，无法" + action + "，请另建波次"
+            );
+        }
+    }
+
+    /**
+     * 待回店的波次不接受取消。
+     *
+     * 取消会把任务从波次上摘下来并删掉站点记录，而此时这些单已经送达 ——
+     * 结果是送达记录失去波次归属，骑手手上那趟车也永远确认不了回店。
+     */
+    private static void ensureCancellable(DeliveryWave wave) {
+        if (STATUS_RETURNING.equals(wave.status())) {
+            throw new DeliveryException(
+                    DeliveryErrorCode.TASK_STATUS_NOT_ALLOWED,
+                    "波次内的单已全部送达、骑手正在回店，此时取消会丢掉已送达单的波次归属，请等骑手确认回店"
+            );
+        }
     }
 
     private static Map<String, Object> waveDetail(long waveId, int seqNo) {

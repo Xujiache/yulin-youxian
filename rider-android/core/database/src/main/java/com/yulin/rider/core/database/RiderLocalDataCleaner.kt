@@ -44,6 +44,8 @@ class RiderLocalDataCleaner @Inject constructor(
             database.locationBufferDao().clear()
         }
         if (hasUnsynced) return
+        // 同步失败横幅里带着任务号，留到下一个骑手登录还挂在首页上
+        AccountScopedStores.clearAll()
         withContext(Dispatchers.IO) {
             EVIDENCE_DIRECTORIES.forEach { name ->
                 runCatching { File(context.filesDir, name).deleteRecursively() }

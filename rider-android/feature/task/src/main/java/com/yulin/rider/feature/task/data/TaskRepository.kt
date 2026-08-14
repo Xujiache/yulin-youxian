@@ -1,7 +1,9 @@
 package com.yulin.rider.feature.task.data
 
 import android.content.Context
+import android.util.Log
 import com.yulin.rider.core.common.RiderResult
+import com.yulin.rider.core.database.EvidenceRecord
 import com.yulin.rider.core.database.TaskCacheEntity
 import com.yulin.rider.core.database.WaveCacheEntity
 import com.yulin.rider.core.database.di.RiderDatabases
@@ -15,6 +17,7 @@ import com.yulin.rider.core.model.WaveRoute
 import com.yulin.rider.core.network.RiderApis
 import com.yulin.rider.feature.task.TaskFeature
 import com.yulin.rider.feature.task.util.RiderFormats
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
@@ -58,6 +61,71 @@ data class TaskBoard(
 
     fun count(section: TaskSection): Int = section(section).size
 }
+
+/**
+ * 一次状态流转的入队结果。
+ *
+ * 入队本身是会失败的(照片文件没了、本机存储写不进去),而调用方紧接着就要跳页或清草稿,
+ * 光靠「没抛异常」判断不出来 —— 之前照片缺失会一路抛到 viewModelScope 把 App 打崩,
+ * 骑手每次重进这一单都再崩一次。
+ */
+sealed interface TransitionResult {
+
+    /** 已进离线队列,可以往下走。 */
+    data object Queued : TransitionResult
+
+    /** 幂等键已在队列里:重复点击,界面不用再动。 */
+    data object Duplicate : TransitionResult
+
+    /**
+     * 凭证照片在入队前就已经读不到了(被系统清理、写盘失败)。
+     * [remainingPhotoPaths] 是还在的那几张,界面据此收掉失效缩略图,骑手只补拍缺的。
+     */
+    data class EvidenceMissing(
+        val lostCount: Int,
+        val remainingPhotoPaths: List<String>,
+    ) : TransitionResult
+
+    /** 其余失败(数据库、存储),[message] 直接给骑手看。 */
+    data class Failed(val message: String) : TransitionResult
+
+    val queued: Boolean get() = this is Queued || this is Duplicate
+}
+
+/** 给骑手看的失败原因;成功时为 null。 */
+val TransitionResult.riderMessage: String?
+    get() = when (this) {
+        TransitionResult.Queued, TransitionResult.Duplicate -> null
+        is TransitionResult.EvidenceMissing -> "有 $lostCount 张凭证照片已失效，请重拍后再提交"
+        is TransitionResult.Failed -> message
+    }
+
+/**
+ * 流转调用的统一兜底。
+ *
+ * 入队要碰本机数据库和文件系统,异常直接打到 viewModelScope 的默认处理器上就是崩溃,
+ * 而且骑手每次重进这一单都会再崩一次。协程取消必须原样抛回去,
+ * 否则页面销毁时的取消会被当成一次「操作失败」弹给骑手。
+ */
+suspend fun runTransition(block: suspend () -> TransitionResult): TransitionResult = try {
+    block()
+} catch (cancelled: CancellationException) {
+    throw cancelled
+} catch (error: Exception) {
+    Log.w("RiderTransition", "流转入队失败", error)
+    TransitionResult.Failed("操作没能记录下来，请退出重试")
+}
+
+/**
+ * 这条待同步动作是否与某张卡片有关。
+ *
+ * 任务级动作(单任务取货、送达)入队时也会补上所属 waveId,所以只按 waveId 匹配的话,
+ * 一单在同步就把整趟十几张卡全标成「同步中 / 同步异常」。
+ * 只有 taskId 为空的才是真正的波次级动作,那时整波确实都在等它。
+ */
+internal fun PendingAction.concerns(taskId: Long, waveId: Long?): Boolean =
+    payload.taskId == taskId ||
+        (payload.taskId == null && waveId != null && payload.waveId == waveId)
 
 /**
  * 任务数据入口。
@@ -178,14 +246,18 @@ class TaskRepository private constructor(private val appContext: Context) {
 
     // ---- 状态流转:一律先入队再乐观更新,让骑手能马上做下一单 ----
 
-    suspend fun accept(taskId: Long) = transition(PendingActionTypes.ACCEPT, taskId = taskId)
+    suspend fun accept(taskId: Long): TransitionResult =
+        transition(PendingActionTypes.ACCEPT, taskId = taskId)
 
-    suspend fun depart(taskId: Long) = transition(PendingActionTypes.DEPART, taskId = taskId)
+    suspend fun depart(taskId: Long): TransitionResult =
+        transition(PendingActionTypes.DEPART, taskId = taskId)
 
-    suspend fun arrive(taskId: Long) = transition(PendingActionTypes.ARRIVE, taskId = taskId)
+    suspend fun arrive(taskId: Long): TransitionResult =
+        transition(PendingActionTypes.ARRIVE, taskId = taskId)
 
     /** 单任务取货。没有波次的单走这条，否则会一直卡在「已接单」。 */
-    suspend fun pickupTask(taskId: Long) = transition(PendingActionTypes.PICKUP, taskId = taskId)
+    suspend fun pickupTask(taskId: Long): TransitionResult =
+        transition(PendingActionTypes.PICKUP, taskId = taskId)
 
     /**
      * 整波次接单。
@@ -193,23 +265,35 @@ class TaskRepository private constructor(private val appContext: Context) {
      * 时段批次制下一波就是一个时段的全部单，骑手没有挑单余地，
      * 在店里一单一单点纯属浪费时间，尤其十几单的时候。
      */
-    suspend fun acceptWave(waveId: Long) {
+    suspend fun acceptWave(waveId: Long): TransitionResult {
         val target = taskDao.findByWave(waveId)
             .filter { it.status == TaskStatus.ASSIGNED }
             .map { it.taskId }
-        transition(
+        return transition(
             actionType = PendingActionTypes.ACCEPT_WAVE,
             waveId = waveId,
             optimisticTaskIds = target,
         )
     }
 
-    /** 骑手确认回店。这一波收尾，调度台才能发下一个时段。 */
-    suspend fun returnWave(waveId: Long) {
-        transition(actionType = PendingActionTypes.RETURN_WAVE, waveId = waveId)
-    }
+    /**
+     * 骑手确认回店。这一波收尾，调度台才能发下一个时段。
+     *
+     * 幂等键按 waveId 固定:回店没有可乐观更新的任务状态,界面点下去看不出变化,
+     * 骑手一定会连点。用随机 UUID 的话每一下都是一条新的 RETURN_WAVE,
+     * 后面几条必然被服务端拒,首页就挂出好几条失败横幅。
+     */
+    suspend fun returnWave(waveId: Long): TransitionResult = transition(
+        actionType = PendingActionTypes.RETURN_WAVE,
+        waveId = waveId,
+        clientEventId = returnWaveEventId(waveId),
+    )
 
-    suspend fun pickupWave(waveId: Long, checkedTaskIds: List<Long>, actualPackageCount: Int) {
+    suspend fun pickupWave(
+        waveId: Long,
+        checkedTaskIds: List<Long>,
+        actualPackageCount: Int,
+    ): TransitionResult {
         // 乐观更新只能覆盖服务端真正会改的那几单：勾选的、且当前是「已接单」的。
         // 原来是整波次一把梭，结果没接单的、已经送达的都会被本地改成「已取货」，
         // 而服务端根本没动它们，界面就和真实状态脱节了。
@@ -218,7 +302,7 @@ class TaskRepository private constructor(private val appContext: Context) {
             .filter { checkedTaskIds.isEmpty() || it.taskId in checkedTaskIds }
             .filter { it.status == TaskStatus.ACCEPTED }
             .map { it.taskId }
-        transition(
+        return transition(
             actionType = PendingActionTypes.PICKUP,
             waveId = waveId,
             optimisticTaskIds = target,
@@ -231,7 +315,7 @@ class TaskRepository private constructor(private val appContext: Context) {
         photoPaths: List<String>,
         receiveMethod: ReceiveMethod,
         verifyCode: String?,
-    ) = transition(
+    ): TransitionResult = transition(
         actionType = PendingActionTypes.DELIVER,
         taskId = taskId,
         photoPaths = photoPaths,
@@ -253,17 +337,23 @@ class TaskRepository private constructor(private val appContext: Context) {
         photoPaths: List<String> = emptyList(),
         evidenceType: String? = null,
         optimisticTaskIds: List<Long> = listOfNotNull(taskId),
+        clientEventId: String = UUID.randomUUID().toString(),
         extra: (TaskTransitionRequest) -> TaskTransitionRequest = { it },
-    ) {
+    ): TransitionResult {
+        val evidence = prepareEvidence(photoPaths)
+        if (evidence.lostCount > 0) {
+            // 凭证不全的送达迟早在争议回查里出事,宁可当场让骑手补拍。
+            // 关键是别把这条动作排进队列:排进去只会在服务端被拒,然后静默回滚。
+            return TransitionResult.EvidenceMissing(evidence.lostCount, evidence.survivedPaths)
+        }
+
         val location: GeoPoint? = TaskFeature.currentLocation()
         val currentRows = optimisticTaskIds.mapNotNull { taskDao.findTask(it) }
         val actionWaveId = waveId ?: taskId?.let { id -> taskDao.findTask(id)?.waveId }
-        val evidenceRecords = photoPaths.map { path ->
-            RiderDatabases.evidenceRegistry(appContext).prepare(path)
-        }
+        val evidenceRecords = evidence.records
         val request = extra(
             TaskTransitionRequest(
-                clientEventId = UUID.randomUUID().toString(),
+                clientEventId = clientEventId,
                 clientEventAt = RiderFormats.nowServerLocal(),
                 location = location,
             )
@@ -294,7 +384,7 @@ class TaskRepository private constructor(private val appContext: Context) {
                     )
                 },
             )
-        ) ?: return
+        ) ?: return TransitionResult.Duplicate
 
         // 乐观状态同时写进缓存:进程被杀重启后骑手看到的仍是他按过的那一步。
         // 必须排在重放调度之前,否则重放先成功会把还没写下的乐观标记清掉。
@@ -304,7 +394,46 @@ class TaskRepository private constructor(private val appContext: Context) {
             taskDao.markLocalStatus(current.taskId, next, TaskStatus.text(next), now)
         }
         queue.scheduleSync()
+        return TransitionResult.Queued
     }
+
+    /**
+     * 凭证入账。
+     *
+     * [com.yulin.rider.core.database.EvidenceRegistry.prepare] 是一条硬 require,
+     * 文件被系统清掉或长度为 0 就抛。单张照片出问题不该把整次送达带崩,
+     * 这里逐张降级:能读的照常入账,读不到的记下来交给调用方处理。
+     */
+    private suspend fun prepareEvidence(photoPaths: List<String>): PreparedEvidence {
+        if (photoPaths.isEmpty()) return PreparedEvidence()
+        val registry = RiderDatabases.evidenceRegistry(appContext)
+        val records = mutableListOf<EvidenceRecord>()
+        val survived = mutableListOf<String>()
+        var lost = 0
+        for (path in photoPaths) {
+            val record = try {
+                registry.prepare(path)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                Log.w(TAG, "凭证文件已失效，跳过这张：$path", error)
+                null
+            }
+            if (record == null) {
+                lost++
+            } else {
+                records += record
+                survived += path
+            }
+        }
+        return PreparedEvidence(records, survived, lost)
+    }
+
+    private data class PreparedEvidence(
+        val records: List<EvidenceRecord> = emptyList(),
+        val survivedPaths: List<String> = emptyList(),
+        val lostCount: Int = 0,
+    )
 
     // ---- 缓存 ⇄ UI 模型 ----
 
@@ -350,10 +479,7 @@ class TaskRepository private constructor(private val appContext: Context) {
         val card = runCatching { json.decodeFromString(TaskCard.serializer(), entity.payloadJson) }
             .getOrNull() ?: return null
         // 缓存里的 status 已经含乐观更新;队列只用来判断「在同步中 / 卡住了」
-        val related = pending.filter {
-            it.payload.taskId == entity.taskId ||
-                (entity.waveId != null && it.payload.waveId == entity.waveId)
-        }
+        val related = pending.filter { it.concerns(entity.taskId, entity.waveId) }
         return TaskCardUi(
             // statusText 跟着 status 一起取本地缓存值:乐观更新时 markLocalStatus 会把两者一起改,
             // 只覆盖 status 会让文案停留在服务端的上一个状态。
@@ -386,11 +512,16 @@ class TaskRepository private constructor(private val appContext: Context) {
     )
 
     companion object {
+        private const val TAG = "TaskRepository"
+
         @Volatile
         private var instance: TaskRepository? = null
 
         fun get(context: Context): TaskRepository = instance ?: synchronized(this) {
             instance ?: TaskRepository(context.applicationContext).also { instance = it }
         }
+
+        /** 一波只回一次店,幂等键跟着 waveId 走,连点和进程重启都落在同一条动作上。 */
+        internal fun returnWaveEventId(waveId: Long): String = "RETURN_WAVE-$waveId"
     }
 }

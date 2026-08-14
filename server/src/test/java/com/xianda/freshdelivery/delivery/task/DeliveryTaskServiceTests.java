@@ -276,6 +276,48 @@ class DeliveryTaskServiceTests {
     }
 
     @Test
+    void 空波次不能被骑手一键标成完成() {
+        // 空波次里没有「未结束的单」，原来这一条就直接把它置成 COMPLETED 了，连留痕都没有。
+        long taskId = pendingTask(1001L, "XD001");
+        long waveId = harness.waveService.createWave(
+                new WaveCreateRequest(RIDER_ID, List.of(taskId)), TaskOperator.admin("A")
+        );
+        harness.waveDao.updateRider(waveId, RIDER_ID, TaskTimes.now());
+        harness.taskDao.updateWave(taskId, null, TaskTimes.now());
+
+        DeliveryException exception = assertThrows(
+                DeliveryException.class,
+                () -> harness.taskService.returnToStore(
+                        RIDER_ID, waveId, new TaskActionRequest("evt-rt-empty", null, null))
+        );
+
+        assertEquals(DeliveryErrorCode.TASK_STATUS_NOT_ALLOWED, exception.code());
+        assertEquals("ASSIGNED", harness.waveDao.findById(waveId).orElseThrow().status());
+        assertNull(harness.waveDao.findById(waveId).orElseThrow().returnedAt());
+    }
+
+    @Test
+    void 确认回店会按上报端标识落一条留痕() {
+        long taskId = pendingTask(1001L, "XD001");
+        long waveId = harness.waveService.createWave(
+                new WaveCreateRequest(RIDER_ID, List.of(taskId)), TaskOperator.admin("A")
+        );
+        harness.taskService.assignTask(taskId, RIDER_ID, waveId, "MANUAL", null, null);
+        harness.taskService.accept(RIDER_ID, taskId, new TaskActionRequest("evt-a-rt", null, null));
+        harness.taskService.pickupWave(RIDER_ID, waveId, new PickupRequest("evt-p-rt", null, null, List.of(), 1));
+        harness.taskService.depart(RIDER_ID, taskId, new TaskActionRequest("evt-d-rt", null, null));
+        harness.taskService.deliver(RIDER_ID, taskId,
+                new DeliverRequest("evt-dl-rt", null, null, null, List.of(), "DOOR"));
+
+        harness.taskService.returnToStore(
+                RIDER_ID, waveId, new TaskActionRequest("evt-rt-audit", "2026-08-11T16:05:00", null));
+
+        assertEquals("COMPLETED", harness.waveDao.findById(waveId).orElseThrow().status());
+        assertEquals(1, harness.eventCountByClientEventId("evt-rt-audit"),
+                "回店时间是能不能发下一个时段的唯一依据，必须留痕");
+    }
+
+    @Test
     void 整波次接单把全部已派单转成已接单() {
         long first = pendingTask(1001L, "XD001");
         long second = pendingTask(1002L, "XD002");
@@ -643,6 +685,83 @@ class DeliveryTaskServiceTests {
         harness.taskService.resolveException(taskId, "CONTINUE", "货已补齐", "调度员A");
 
         assertEquals("ACCEPTED", harness.taskStatus(taskId));
+    }
+
+    @Test
+    void departRefusesATaskThatHasNotBeenPickedUp() {
+        // 骑手对着还没取的货点「发车」，整波取货就被跳过了：picked_up_at 为空，
+        // 顾客整程看不到骑手位置，波次也不会 markStarted。
+        long taskId = pendingTask(1001L, "XD001");
+        harness.taskService.assignTask(taskId, RIDER_ID, null, "AUTO", 0.9, null);
+        harness.taskService.accept(RIDER_ID, taskId, new TaskActionRequest("evt-acc-d", null, null));
+
+        DeliveryException exception = assertThrows(
+                DeliveryException.class,
+                () -> harness.taskService.depart(RIDER_ID, taskId, new TaskActionRequest("evt-dep-d", null, null))
+        );
+
+        assertEquals(DeliveryErrorCode.TASK_STATUS_NOT_ALLOWED, exception.code());
+        assertEquals("ACCEPTED", harness.taskStatus(taskId));
+        assertNull(harness.taskService.requireTask(taskId).pickedUpAt());
+        assertNull(harness.taskService.requireTask(taskId).departedAt());
+    }
+
+    @Test
+    void riderCannotPushATaskOutOfExceptionWhileTheExceptionIsStillOpen() {
+        long taskId = deliveringTask(1001L, "XD001");
+        harness.taskService.enterException(taskId, 91L);
+
+        for (Runnable riderAction : List.<Runnable>of(
+                () -> harness.taskService.accept(RIDER_ID, taskId, new TaskActionRequest("evt-x-acc", null, null)),
+                () -> harness.taskService.pickup(RIDER_ID, taskId, new TaskActionRequest("evt-x-pick", null, null)),
+                () -> harness.taskService.arrive(RIDER_ID, taskId, new TaskActionRequest("evt-x-arr", null, null)),
+                () -> harness.taskService.depart(RIDER_ID, taskId, new TaskActionRequest("evt-x-dep", null, null))
+        )) {
+            DeliveryException exception = assertThrows(DeliveryException.class, riderAction::run);
+            assertEquals(DeliveryErrorCode.TASK_STATUS_NOT_ALLOWED, exception.code());
+        }
+
+        assertEquals("EXCEPTION", harness.taskStatus(taskId));
+        assertEquals(91L, harness.taskService.requireTask(taskId).currentExceptionId(),
+                "异常单没被调度员处理，current_exception_id 不能被骑手顺手清掉");
+    }
+
+    @Test
+    void riderCanStillReturnOrCloseATaskThatIsStuckInException() {
+        // 货退回是异常的合法出口，不能被上面那道闸门一起挡掉。
+        long taskId = deliveringTask(1001L, "XD001");
+        harness.taskService.enterException(taskId, 92L);
+
+        TaskCardDto card = harness.taskService.markReturned(
+                RIDER_ID, taskId, new ReturnRequest("evt-x-ret", null, null, "顾客拒收", List.of()));
+
+        assertEquals("RETURNED", card.status());
+    }
+
+    @Test
+    void exceptionRecoveryKeepsTheOriginalFulfilmentTimestamps() {
+        // 「挂异常 → 调度员点继续」会重走一遍中间态。真实的接单/取货/到达时刻被改写成
+        // 异常解除时刻之后，交接耗时和取货到送达的时长就都不是现场发生的事了。
+        long taskId = deliveringTask(1001L, "XD001");
+        harness.taskService.arrive(RIDER_ID, taskId, new TaskActionRequest("evt-arr-ts", null, null));
+        java.time.LocalDateTime acceptedAt = java.time.LocalDateTime.of(2026, 8, 11, 14, 0, 0);
+        java.time.LocalDateTime pickedUpAt = java.time.LocalDateTime.of(2026, 8, 11, 14, 10, 0);
+        java.time.LocalDateTime arrivedAt = java.time.LocalDateTime.of(2026, 8, 11, 14, 35, 0);
+        harness.jdbcTemplate.update(
+                "UPDATE delivery_task SET accepted_at = ?, picked_up_at = ?, arrived_at = ? WHERE id = ?",
+                java.sql.Timestamp.valueOf(acceptedAt),
+                java.sql.Timestamp.valueOf(pickedUpAt),
+                java.sql.Timestamp.valueOf(arrivedAt),
+                taskId);
+
+        harness.taskService.enterException(taskId, 93L);
+        harness.taskService.resolveException(taskId, "CONTINUE", "顾客已联系上", "调度员A");
+
+        DeliveryTask task = harness.taskService.requireTask(taskId);
+        assertEquals("ARRIVED", task.status());
+        assertEquals(acceptedAt, task.acceptedAt());
+        assertEquals(pickedUpAt, task.pickedUpAt());
+        assertEquals(arrivedAt, task.arrivedAt());
     }
 
     @Test

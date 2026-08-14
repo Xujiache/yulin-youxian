@@ -70,7 +70,8 @@ export interface DeliveryTaskCard {
   customerRemark: string
   deliveryInstruction: string
   highlightNotes: string[]
-  slotLabel: string
+  /** 预约时段。delivery_task.slot_label 可空，老单没有时段 */
+  slotLabel: string | null
   promisedAt: string
   etaAt: string | null
   remainingSeconds: number | null

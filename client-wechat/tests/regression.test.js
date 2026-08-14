@@ -11,6 +11,7 @@ const {
   shouldContinueUnavailableTracking,
   trackingPollDelayMs
 } = require("../pages/order-detail/tracking");
+const { normalizeAssetUrl } = require("../api/normalize");
 const { homeNavigationPlan } = require("../utils/navigation");
 const { normalizeLotteryState } = require("../api/marketing");
 const { normalizeOrderDetail } = require("../api/orders");
@@ -302,4 +303,24 @@ test("order detail turns relative gift images into absolute urls", () => {
   assert.equal(detail.lotteryResult.imageUrl, "https://api.test/assets/products/carrot.png");
   assert.equal(detail.lotteryResult.gifts[0].imageUrl, "https://api.test/assets/products/tomato.png");
   assert.deepEqual(normalizeOrderDetail({}).gifts, []);
+});
+
+test("delivery evidence photos keep their signature after normalization", () => {
+  const signed = "/uploads/delivery/202608/proof.jpg?e=1786000000&s=Ab-_9xYz";
+  const delivery = normalizeTracking({
+    hasDelivery: true,
+    taskStatus: "DELIVERED",
+    deliveryPhotos: [signed, "  " + signed + "  ", "", null]
+  });
+
+  // 签名和有效期必须一字不差地留在 src 上，否则拦截器只会回 401，页面就是一排破图
+  assert.deepEqual(delivery.deliveryPhotos, [
+    `https://api.test${signed}`,
+    `https://api.test${signed}`
+  ]);
+  assert.equal(normalizeAssetUrl(signed), `https://api.test${signed}`);
+  assert.equal(
+    normalizeAssetUrl("https://cdn.test/uploads/delivery/202608/proof.jpg?e=1&s=x"),
+    "https://cdn.test/uploads/delivery/202608/proof.jpg?e=1&s=x"
+  );
 });

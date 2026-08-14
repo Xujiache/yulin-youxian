@@ -51,7 +51,8 @@ public class AdminDispatchController extends DeliveryTaskControllerSupport {
         return ApiResponse.ok(slotDispatchService.dispatch(new SlotDispatchService.SlotDispatchCommand(
                 request == null ? null : request.riderId(),
                 request == null ? null : request.slotLabel(),
-                request == null ? null : request.taskIds())));
+                request == null ? null : request.taskIds(),
+                request != null && Boolean.TRUE.equals(request.confirmOverload()))));
     }
 
     @PostMapping("/tasks/{taskId}/assign")

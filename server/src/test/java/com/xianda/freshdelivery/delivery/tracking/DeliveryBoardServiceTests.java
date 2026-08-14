@@ -93,6 +93,34 @@ class DeliveryBoardServiceTests {
     }
 
     @Test
+    void riderWaitingToComeBackToTheStoreIsNotShownAsIdle() {
+        // 单全送完了但人还在最后一个顾客门口，未终结任务数是 0 ——
+        // 漏掉「待回店」波次的话，调度台上他和真正空闲的骑手长得一模一样。
+        TrackingTestSupport.insertWave(jdbcTemplate, 700L, RIDER_ID, NOW.toLocalDate(),
+                "RETURNING", 2, 2, NOW.plusMinutes(12));
+        TrackingTestSupport.insertTask(jdbcTemplate, new TrackingTestSupport.TaskFixtureBuilder()
+                .taskId(9401L).orderId(5401L).waveId(700L).riderId(RIDER_ID).status("DELIVERED")
+                .destination(30.12, 120.76).deliveredAt(NOW.minusMinutes(4)).build());
+        TrackingTestSupport.insertTask(jdbcTemplate, new TrackingTestSupport.TaskFixtureBuilder()
+                .taskId(9402L).orderId(5402L).status("PENDING")
+                .destination(30.12, 120.76).promisedAt(NOW.plusHours(3)).build());
+
+        DeliveryBoardDto board = boardService.board();
+
+        DeliveryBoardDto.RiderBoardCardDto rider = board.riders().get(0);
+        assertEquals(700L, rider.currentWaveId());
+        assertEquals("RETURNING", rider.currentWaveStatus());
+        assertEquals(true, rider.returningToStore());
+        assertEquals(0, rider.currentTaskCount());
+        assertEquals("2026-08-11T15:52:00", rider.planReturnAt());
+        assertTrue(board.queues().idleRiders().isEmpty(), "待回店的骑手不能出现在空闲队列里");
+        assertEquals(0, board.summary().availableRiderCount());
+        assertEquals(1, board.summary().returningRiderCount());
+        assertEquals(1, board.waves().size());
+        assertEquals("RETURNING", board.waves().get(0).status());
+    }
+
+    @Test
     void todaySummaryCountsDeliveriesByDeliveredAtNotByCustomerDeliveryDate() {
         TrackingTestSupport.insertTask(jdbcTemplate, new TrackingTestSupport.TaskFixtureBuilder()
                 .taskId(9301L).orderId(5301L).riderId(RIDER_ID).status("DELIVERED")
