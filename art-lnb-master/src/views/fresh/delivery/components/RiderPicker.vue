@@ -174,6 +174,16 @@
     selectedId.value = null
   }
 
+  watch(
+    () => [props.modelValue, props.recommendedRiderId, props.candidates, props.now] as const,
+    ([open, recommended]) => {
+      if (!open || !recommended) return
+      const row = rows.value.find((item) => item.rider.riderId === recommended)
+      if (!row || row.blockReason || row.blockers.length > 0) return
+      selectedId.value = recommended
+    }
+  )
+
   const confirm = () => {
     if (!selectedId.value) return
     if (props.requireReason && !reason.value.trim()) {

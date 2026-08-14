@@ -31,6 +31,7 @@ export interface AMapInstance {
   ): void
   setCenter(position: [number, number]): void
   setZoom(zoom: number): void
+  setMapStyle?(style: string): void
   resize?(): void
 }
 

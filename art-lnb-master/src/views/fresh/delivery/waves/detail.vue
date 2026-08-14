@@ -38,7 +38,7 @@
           </div>
         </template>
         <ElEmpty v-if="stops.length === 0" description="该波次还没有站点" />
-        <div class="stop-list">
+        <div v-else class="stop-list">
           <div
             v-for="(stop, index) in stops"
             :key="stop.taskId"
@@ -100,6 +100,7 @@
             :track-path="trackPath"
             :stops="stopMarkers"
             :origin="origin"
+            :fallback-center="storeCenter"
             :cursor="cursor"
             height="360px"
           />
@@ -132,7 +133,7 @@
   import DeliveryMap from '../components/DeliveryMap.vue'
   import TrackReplay from '../components/TrackReplay.vue'
   import { pickAmapConfig } from '../composables/useAmap'
-  import { clockText, distanceText, humanDuration, waveStatusText } from '../utils'
+  import { clockText, distanceText, humanDuration, isValidGeoPoint, storeCenterFromConfigs, waveStatusText } from '../utils'
 
   defineOptions({ name: 'FreshDeliveryWaveDetail' })
 
@@ -154,10 +155,12 @@
   const amapConfig = computed(() => pickAmapConfig(configs.value))
   const amapKey = computed(() => amapConfig.value.key)
   const amapSecurityCode = computed(() => amapConfig.value.securityCode)
+  const storeCenter = computed(() => storeCenterFromConfigs(configs.value))
 
   const origin = computed<GeoPoint | null>(() => {
     const point = wave.value?.route?.origin
-    return point ? { lat: point.lat, lng: point.lng } : null
+    if (isValidGeoPoint(point)) return { lat: point.lat, lng: point.lng }
+    return storeCenter.value
   })
 
   /**
@@ -165,16 +168,20 @@
    * route.polyline 是后端编码折线，编码方式随 matrixProvider 变化，这里不做解码。
    */
   const routePath = computed<GeoPoint[]>(() => {
-    const points = stops.value.map((stop) => stop.location).filter(Boolean)
+    const points = stops.value.map((stop) => stop.location).filter(isValidGeoPoint)
     return origin.value ? [origin.value, ...points] : points
   })
 
   const trackPath = computed<GeoPoint[]>(() =>
-    (wave.value?.track || []).map((point) => ({ lat: point.lat, lng: point.lng }))
+    (wave.value?.track || [])
+      .map((point) => ({ lat: point.lat, lng: point.lng }))
+      .filter(isValidGeoPoint)
   )
 
   const stopMarkers = computed(() =>
-    stops.value.map((stop, index) => ({ seqNo: index + 1, location: stop.location }))
+    stops.value
+      .filter((stop) => isValidGeoPoint(stop.location))
+      .map((stop, index) => ({ seqNo: stop.seqNo || index + 1, location: stop.location }))
   )
 
   const sequenceDirty = computed(() => {
@@ -205,10 +212,7 @@
       {
         label: '回店时间',
         value: wave.value?.returnedAt ? clockText(wave.value.returnedAt) : '—'
-      },
-      { label: '优化器', value: plan?.optimizerName || wave.value?.optimizerName || '—' },
-      { label: '距离矩阵', value: plan?.matrixProvider || wave.value?.matrixProvider || '—' },
-      { label: '规划版本', value: plan?.planVersion !== undefined ? `v${plan.planVersion}` : '—' }
+      }
     ]
   })
 
@@ -261,7 +265,11 @@
 
   const loadConfigs = async () => {
     try {
-      configs.value = await getDeliveryConfigs('amap')
+      const [amapItems, storeItems] = await Promise.all([
+        getDeliveryConfigs('amap'),
+        getDeliveryConfigs('STORE')
+      ])
+      configs.value = [...amapItems, ...storeItems]
     } catch {
       configs.value = []
     }
@@ -334,7 +342,7 @@
 
   .wave-summary {
     display: grid;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
     gap: 12px;
   }
 
@@ -344,7 +352,7 @@
 
   .wave-summary__value {
     margin-top: 8px;
-    color: #007a39;
+    color: var(--el-color-primary);
     font-size: 18px;
     font-weight: 700;
     overflow-wrap: anywhere;
@@ -352,14 +360,20 @@
 
   .wave-body {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     gap: 16px;
     align-items: start;
+  }
+
+  .wave-body > .fresh-card {
+    align-self: start;
+    height: fit-content;
   }
 
   .wave-side {
     display: grid;
     gap: 16px;
+    min-width: 0;
   }
 
   .stop-list {

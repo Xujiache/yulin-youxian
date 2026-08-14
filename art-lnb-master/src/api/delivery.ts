@@ -72,6 +72,8 @@ export interface DeliveryTaskCard {
   highlightNotes: string[]
   /** 预约时段。delivery_task.slot_label 可空，老单没有时段 */
   slotLabel: string | null
+  /** 配送日 yyyy-MM-dd。与 slotLabel 一起标识「哪一天的哪个时段」 */
+  deliveryDate?: string | null
   promisedAt: string
   etaAt: string | null
   remainingSeconds: number | null
@@ -385,6 +387,14 @@ export interface DispatchSuggestResult {
 export function suggestDispatch(taskIds: number[]) {
   return request.post<DispatchSuggestResult>({
     url: '/api/admin/delivery/dispatch/suggest',
+    data: { taskIds }
+  })
+}
+
+/** 把一批任务当成一个簇打分，给「发本时段」用 */
+export function suggestDispatchCluster(taskIds: number[]) {
+  return request.post<DispatchSuggestion>({
+    url: '/api/admin/delivery/dispatch/suggest-cluster',
     data: { taskIds }
   })
 }

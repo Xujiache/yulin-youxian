@@ -5,9 +5,11 @@
  * 这里统一按本地时间解析；金额一律是分，展示时除以 100。
  */
 import type {
+  DeliveryConfigItem,
   DeliveryTaskCard,
   DeliveryTaskStatus,
   FatigueLevel,
+  GeoPoint,
   OvertimeRisk,
   RiderBoardCard
 } from '@/api/delivery'
@@ -48,6 +50,26 @@ export const distanceText = (meters?: number | null) => {
   return value >= 1000 ? `${(value / 1000).toFixed(2)} km` : `${Math.round(value)} m`
 }
 
+/** 可用来画点和定视野的坐标。缺值、0,0、越界都丢掉。 */
+export const isValidGeoPoint = (
+  point?: { lat?: number | null; lng?: number | null } | null
+): point is GeoPoint => {
+  if (!point) return false
+  const lat = Number(point.lat)
+  const lng = Number(point.lng)
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return false
+  if (lat === 0 && lng === 0) return false
+  return Math.abs(lat) <= 90 && Math.abs(lng) <= 180
+}
+
+export const storeCenterFromConfigs = (items: DeliveryConfigItem[]): GeoPoint | null => {
+  const valueOf = (key: string) =>
+    items.find((item) => String(item.key || '').toLowerCase() === key)?.value
+  const lat = Number(valueOf('store.lat'))
+  const lng = Number(valueOf('store.lng'))
+  return isValidGeoPoint({ lat, lng }) ? { lat, lng } : null
+}
+
 /** 解析后端时间字符串，失败返回 NaN */
 export const parseTime = (value?: string | null): number => {
   if (!value) return Number.NaN
@@ -71,6 +93,117 @@ export const dateTimeText = (value?: string | null) => {
   if (Number.isNaN(time)) return '—'
   const date = new Date(time)
   return `${pad2(date.getMonth() + 1)}-${pad2(date.getDate())} ${pad2(date.getHours())}:${pad2(date.getMinutes())}`
+}
+
+const WEEKDAYS = ['日', '一', '二', '三', '四', '五', '六']
+
+export const SLOT_NONE_KEY = '__none__'
+
+export interface SlotDateParts {
+  y: number
+  m: number
+  d: number
+}
+
+/** 从 yyyy-MM-dd 或 ISO 时间串里取出日历日 */
+export const parseIsoDate = (value?: string | null): SlotDateParts | null => {
+  const match = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (!match) return null
+  return { y: Number(match[1]), m: Number(match[2]), d: Number(match[3]) }
+}
+
+const formatIsoDate = (parts: SlotDateParts) =>
+  `${parts.y}-${pad2(parts.m)}-${pad2(parts.d)}`
+
+/** 任务配送日：优先 deliveryDate，没有就用承诺时间那天 */
+export const taskDeliveryDate = (task: {
+  deliveryDate?: string | null
+  promisedAt?: string | null
+}): string => {
+  const direct = parseIsoDate(task.deliveryDate)
+  if (direct) return formatIsoDate(direct)
+  const promised = parseIsoDate(task.promisedAt)
+  if (promised) return formatIsoDate(promised)
+  return ''
+}
+
+/** 从「明日 10:00-11:00」这类文案里抽出钟点区间 */
+export const slotTimeRange = (slotLabel?: string | null): string => {
+  const raw = (slotLabel || '').trim()
+  if (!raw) return ''
+  const match = raw.match(/(\d{1,2}):(\d{2})\s*[-~～到至]\s*(\d{1,2}):(\d{2})/)
+  if (match) {
+    return `${pad2(Number(match[1]))}:${match[2]}-${pad2(Number(match[3]))}:${match[4]}`
+  }
+  return raw.replace(/^(今日|今天|明日|明天)\s*/, '').trim() || raw
+}
+
+export const slotStartMinutes = (slotLabel?: string | null): number => {
+  const range = slotTimeRange(slotLabel)
+  const match = range.match(/^(\d{2}):(\d{2})/)
+  if (!match) return 24 * 60
+  return Number(match[1]) * 60 + Number(match[2])
+}
+
+/** 8月15日（周六）；跨年时带年份 */
+export const formatChineseDate = (isoDate: string, now = Date.now()): string => {
+  const parsed = parseIsoDate(isoDate)
+  if (!parsed) return ''
+  const date = new Date(parsed.y, parsed.m - 1, parsed.d)
+  const weekday = WEEKDAYS[date.getDay()]
+  const nowDate = new Date(now)
+  const yearPrefix = parsed.y !== nowDate.getFullYear() ? `${parsed.y}年` : ''
+  return `${yearPrefix}${parsed.m}月${parsed.d}日（周${weekday}）`
+}
+
+export const relativeDayLabel = (isoDate: string, now = Date.now()): string => {
+  const parsed = parseIsoDate(isoDate)
+  if (!parsed) return ''
+  const target = Date.UTC(parsed.y, parsed.m - 1, parsed.d)
+  const current = new Date(now)
+  const today = Date.UTC(current.getFullYear(), current.getMonth(), current.getDate())
+  const diff = Math.round((target - today) / 86_400_000)
+  if (diff === 0) return '今日'
+  if (diff === 1) return '明日'
+  if (diff === 2) return '后天'
+  if (diff === -1) return '昨日'
+  return ''
+}
+
+/** 8月15日（周六）10:00-11:00 */
+export const formatSlotDateTitle = (
+  deliveryDate: string,
+  slotLabel?: string | null,
+  now = Date.now()
+): string => {
+  const datePart = formatChineseDate(deliveryDate, now)
+  const timePart = slotTimeRange(slotLabel)
+  if (datePart && timePart) return `${datePart} ${timePart}`
+  if (datePart) return `${datePart} 未标时段`
+  return timePart || slotLabel || '未标时段'
+}
+
+export const slotGroupKey = (task: {
+  deliveryDate?: string | null
+  promisedAt?: string | null
+  slotLabel?: string | null
+}): string => {
+  const date = taskDeliveryDate(task) || 'undated'
+  const slot = (task.slotLabel || '').trim() || SLOT_NONE_KEY
+  return `${date}#${slot}`
+}
+
+export const parseSlotGroupKey = (key: string): { date: string; slot: string } => {
+  const index = key.indexOf('#')
+  if (index < 0) {
+    return { date: '', slot: key === SLOT_NONE_KEY ? '' : key }
+  }
+  const date = key.slice(0, index)
+  const slot = key.slice(index + 1)
+  return {
+    date: date === 'undated' ? '' : date,
+    slot: slot === SLOT_NONE_KEY ? '' : slot
+  }
 }
 
 /** 2026-08-11 15:40:22 */

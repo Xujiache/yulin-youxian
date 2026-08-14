@@ -32,7 +32,7 @@
       <span>{{ task.itemCount }} 件 · {{ Number(task.totalWeightKg || 0).toFixed(1) }} kg</span>
       <span>承诺 {{ clockText(task.promisedAt) }}</span>
       <span v-if="task.etaAt">ETA {{ clockText(task.etaAt) }}</span>
-      <span v-if="task.slotLabel">{{ task.slotLabel }}</span>
+      <span v-if="task.slotLabel && !simple">{{ task.slotLabel }}</span>
     </div>
 
     <div v-if="mode === 'risk'" class="queue-card__meta">
@@ -43,12 +43,34 @@
       <span v-if="task.seqNo && task.totalStops">第 {{ task.seqNo }}/{{ task.totalStops }} 站</span>
     </div>
 
-    <div v-if="mode === 'pending' && recommendText" class="queue-card__suggest">
+    <div v-if="mode === 'pending' && recommendText && !simple" class="queue-card__suggest">
       {{ recommendText }}
     </div>
 
-    <div class="queue-card__actions">
-      <template v-if="mode === 'pending'">
+    <div
+      class="queue-card__actions"
+      :class="{ 'queue-card__actions--simple': simple }"
+      @mousedown.stop
+    >
+      <template v-if="mode === 'pending' && simple">
+        <ElButton size="small" type="primary" :loading="busy" @click="emit('assign-now', task)">
+          立即派单
+        </ElButton>
+        <ElDropdown trigger="click" @command="onPendingCommand">
+          <ElButton size="small">
+            更多
+            <ArtSvgIcon icon="ri:arrow-down-s-line" class="queue-card__more-icon" />
+          </ElButton>
+          <template #dropdown>
+            <ElDropdownMenu>
+              <ElDropdownItem command="assign-to">指派给…</ElDropdownItem>
+              <ElDropdownItem command="view-suggest">查看建议</ElDropdownItem>
+              <ElDropdownItem command="cancel" divided>取消任务</ElDropdownItem>
+            </ElDropdownMenu>
+          </template>
+        </ElDropdown>
+      </template>
+      <template v-else-if="mode === 'pending'">
         <ElButton size="small" type="primary" :loading="busy" @click="emit('assign-now', task)">
           立即派单
         </ElButton>
@@ -89,8 +111,10 @@
       now: number
       suggestion?: DispatchSuggestion | null
       busy?: boolean
+      /** 调度台待派：主按钮 + 更多菜单，避免每张卡排四个按钮 */
+      simple?: boolean
     }>(),
-    { suggestion: null, busy: false }
+    { suggestion: null, busy: false, simple: false }
   )
 
   const emit = defineEmits<{
@@ -148,10 +172,14 @@
     return ''
   })
 
+  const onPendingCommand = (command: 'assign-to' | 'view-suggest' | 'cancel') => {
+    emit(command, props.task)
+  }
+
   const onDragStart = (event: DragEvent) => {
     if (props.mode !== 'pending') return
     dragging.value = true
-    event.dataTransfer?.setData('text/plain', String(props.task.taskId))
+    event.dataTransfer?.setData('text/plain', `task:${props.task.taskId}`)
     if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move'
     emit('drag-start', props.task)
   }
@@ -267,6 +295,11 @@
       padding-right: 8px;
       padding-left: 8px;
     }
+  }
+
+  .queue-card__more-icon {
+    margin-left: 2px;
+    font-size: 14px;
   }
 
   @keyframes queue-blink {

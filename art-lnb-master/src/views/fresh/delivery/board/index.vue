@@ -4,8 +4,7 @@
       <div>
         <h1 class="fresh-page__title">配送调度台</h1>
         <p class="fresh-page__desc">
-          四列队列看板（待派积压、超时风险、未关闭异常、在岗骑手）+
-          地图辅助面板。不用地图也能完成全部派单。
+          先选几月几号的配送时段，再选骑手发车；也可把单张任务卡拖到骑手。
         </p>
       </div>
       <div class="board-actions">
@@ -19,15 +18,6 @@
           立即重连
         </ElButton>
         <span class="board-clock">{{ clockDisplay }}</span>
-        <div v-if="autoDispatchConfig" class="board-switch">
-          <span>自动派单</span>
-          <ElSwitch
-            :model-value="autoDispatchOn"
-            :loading="autoDispatchSaving"
-            @change="toggleAutoDispatch"
-          />
-        </div>
-        <ElButton :loading="dispatchRunning" @click="runDispatch">手动触发调度</ElButton>
         <ElButton type="primary" :loading="loading" @click="loadBoard()">刷新</ElButton>
         <ElButton @click="toggleFullscreen">{{ isFullscreen ? '退出全屏' : '全屏' }}</ElButton>
       </div>
@@ -59,13 +49,22 @@
     />
 
     <div class="board-body" :class="{ 'board-body--full': mapCollapsed }">
-      <div v-loading="loading && !board" class="board-queues">
+      <div v-loading="loading && !board" class="board-queues" :class="{ 'board-queues--extra': showSideQueues }">
         <section class="queue-col" :class="{ 'queue-col--focus': focus === 'pending' }">
           <header class="queue-col__head">
             <span class="queue-col__dot queue-col__dot--pending"></span>
             <strong>待派积压</strong>
             <ElTag size="small" type="danger" effect="light">{{ pendingTasks.length }}</ElTag>
-            <span class="queue-col__hint">按压单到期升序，可直接拖到骑手卡片派单</span>
+            <span class="queue-col__hint">先选时段，再选骑手</span>
+            <ElButton
+              class="queue-col__action"
+              type="primary"
+              size="small"
+              :disabled="pendingSlotGroups.length === 0"
+              @click="openSlotWizard()"
+            >
+              发时段
+            </ElButton>
           </header>
           <div class="queue-col__filter">
             <ElInput
@@ -83,33 +82,76 @@
           </div>
           <div class="queue-col__body">
             <ElEmpty
-              v-if="pendingTasks.length === 0"
+              v-if="pendingSlotGroups.length === 0"
               :image-size="56"
               :description="board ? '没有待派任务，积压已清空' : '暂无数据'"
             />
-            <TaskQueueCard
-              v-for="task in pendingTasks"
-              :key="task.taskId"
-              :task="task"
-              mode="pending"
-              :now="now"
-              :suggestion="suggestionMap[task.taskId] || null"
-              @assign-now="handleAssignNow"
-              @assign-to="handleAssignTo"
-              @view-suggest="handleViewSuggest"
-              @cancel="handleCancelTask"
-              @drag-start="draggingTask = $event"
-              @drag-end="draggingTask = null"
-            />
+            <div v-for="group in pendingSlotGroups" :key="group.key" class="slot-group">
+              <header
+                class="slot-group__head"
+                :class="{ 'slot-group__head--dragging': draggingSlotKey === group.key }"
+                :draggable="true"
+                @dragstart="onSlotDragStart(group, $event)"
+                @dragend="onSlotDragEnd"
+              >
+                <strong>{{ group.title }}</strong>
+                <ElTag
+                  v-if="relativeDayLabel(group.deliveryDate, now)"
+                  size="small"
+                  type="success"
+                  effect="light"
+                >
+                  {{ relativeDayLabel(group.deliveryDate, now) }}
+                </ElTag>
+                <ElTag size="small" type="danger" effect="light">{{ group.allTasks.length }} 单</ElTag>
+                <span class="slot-group__meta">{{ group.weightText }}</span>
+                <div class="slot-group__actions" @mousedown.stop @click.stop>
+                  <ElButton
+                    size="small"
+                    type="primary"
+                    :loading="assigning && slotDispatchingKey === group.key"
+                    @click="handleSendSlot(group)"
+                  >
+                    发本时段
+                  </ElButton>
+                  <ElButton
+                    size="small"
+                    :loading="assigning && slotDispatchingKey === group.key"
+                    @click="dispatchSlotByRecommend(group)"
+                  >
+                    按推荐发
+                  </ElButton>
+                </div>
+              </header>
+              <TaskQueueCard
+                v-for="task in group.tasks"
+                :key="task.taskId"
+                :task="task"
+                mode="pending"
+                simple
+                :now="now"
+                :suggestion="suggestionMap[task.taskId] || null"
+                @assign-now="handleAssignNow"
+                @assign-to="handleAssignTo"
+                @view-suggest="handleViewSuggest"
+                @cancel="handleCancelTask"
+                @drag-start="draggingTask = $event"
+                @drag-end="draggingTask = null"
+              />
+            </div>
           </div>
         </section>
 
-        <section class="queue-col" :class="{ 'queue-col--focus': focus === 'risk' }">
+        <section
+          v-if="riskTasks.length > 0 || focus === 'risk'"
+          class="queue-col"
+          :class="{ 'queue-col--focus': focus === 'risk' }"
+        >
           <header class="queue-col__head">
             <span class="queue-col__dot queue-col__dot--risk"></span>
             <strong>在途超时风险</strong>
             <ElTag size="small" type="warning" effect="light">{{ riskTasks.length }}</ElTag>
-            <span class="queue-col__hint">按剩余时间升序，不足 5 分钟标红</span>
+            <span class="queue-col__hint">不足 5 分钟标红</span>
           </header>
           <div class="queue-col__filter">
             <ElInput
@@ -153,7 +195,11 @@
           </div>
         </section>
 
-        <section class="queue-col" :class="{ 'queue-col--focus': focus === 'exception' }">
+        <section
+          v-if="exceptions.length > 0 || focus === 'exception'"
+          class="queue-col"
+          :class="{ 'queue-col--focus': focus === 'exception' }"
+        >
           <header class="queue-col__head">
             <span class="queue-col__dot queue-col__dot--exception"></span>
             <strong>未关闭异常</strong>
@@ -161,7 +207,6 @@
             <span class="queue-col__hint">按严重度降序</span>
           </header>
           <div class="queue-col__filter">
-            <span class="muted">看板仅返回异常任务卡，处理详情请进入异常页</span>
             <ElButton size="small" type="primary" plain @click="goExceptions">
               进入异常处理
             </ElButton>
@@ -186,7 +231,7 @@
             <span class="queue-col__dot queue-col__dot--rider"></span>
             <strong>在岗骑手</strong>
             <ElTag size="small" type="primary" effect="light">{{ riders.length }}</ElTag>
-            <span class="queue-col__hint">按负载升序，空闲在最上</span>
+            <span class="queue-col__hint">负载低的在上</span>
           </header>
           <div class="queue-col__filter">
             <ElInput v-model="riderKeyword" size="small" clearable placeholder="姓名 / 工号" />
@@ -201,12 +246,13 @@
               :rider="rider"
               :now="now"
               :wave="waveOf(rider)"
-              :drag-active="Boolean(draggingTask)"
+              :drag-active="Boolean(draggingTask) || Boolean(draggingSlotKey)"
               @dispatch="openTaskPicker"
               @track="goRiderDetail"
               @message="openRiderMessage"
               @force-off="handleForceOff"
               @drop-task="handleDropTask"
+              @drop-slot="handleDropSlot"
             />
           </div>
         </section>
@@ -225,6 +271,7 @@
           :tasks="mapSnapshot.tasks"
           :active-rider-id="activeRiderId"
           :active-task-id="activeTaskId"
+          :fallback-center="storeCenter"
           height="calc(100% - 40px)"
           @select="onMapSelect"
         />
@@ -255,6 +302,20 @@
       :loading="suggestLoading"
       :submitting="assigning"
       @confirm="onPickerConfirm"
+    />
+
+    <SlotDispatchWizard
+      v-model="slotWizardVisible"
+      :groups="pendingSlotGroups"
+      :riders="pickerRiders"
+      :candidates="activeSuggestion?.candidates || []"
+      :recommended-rider-id="activeSuggestion?.recommendedRiderId || null"
+      :now="now"
+      :initial-key="slotWizardInitialKey"
+      :loading="suggestLoading"
+      :submitting="assigning"
+      @select-slot="onWizardSelectSlot"
+      @confirm="onWizardConfirm"
     />
 
     <RiderMessageDialog v-model="messageVisible" :rider="messageRider" />
@@ -328,8 +389,10 @@
       >
         <ElTableColumn type="selection" width="46" />
         <ElTableColumn label="任务号" prop="taskNo" width="170" />
-        <ElTableColumn label="时段" width="130">
-          <template #default="{ row }">{{ row.slotLabel || '—' }}</template>
+        <ElTableColumn label="时段" width="200">
+          <template #default="{ row }">
+            {{ formatSlotDateTitle(taskDeliveryDate(row), row.slotLabel, now) }}
+          </template>
         </ElTableColumn>
         <ElTableColumn label="地址" min-width="220">
           <template #default="{ row }">
@@ -378,9 +441,8 @@
     getDeliveryConfigs,
     getDeliveryMap,
     reassignTask,
-    runDispatchNow,
     suggestDispatch,
-    updateDeliveryConfigs,
+    suggestDispatchCluster,
     type AdminTaskCard,
     type BoardWaveBrief,
     type DeliveryBoardData,
@@ -397,23 +459,41 @@
   import RiderBoardCardItem from '../components/RiderBoardCard.vue'
   import RiderMessageDialog from '../components/RiderMessageDialog.vue'
   import RiderPicker from '../components/RiderPicker.vue'
+  import SlotDispatchWizard from '../components/SlotDispatchWizard.vue'
   import TaskQueueCard from '../components/TaskQueueCard.vue'
   import { pickAmapConfig } from '../composables/useAmap'
   import { useDeliveryStream } from '../composables/useDeliveryStream'
   import {
     clockText,
     distanceText,
+    formatSlotDateTitle,
     isColdChain,
     isFarDelivery,
     isFatiguePaused,
     isOnRoadStatus,
+    parseSlotGroupKey,
     parseTime,
+    relativeDayLabel,
     riderBlockReason,
     secondsUntil,
+    slotGroupKey,
+    slotStartMinutes,
+    storeCenterFromConfigs,
+    taskDeliveryDate,
     blockerText
   } from '../utils'
 
   defineOptions({ name: 'FreshDeliveryBoard' })
+
+  interface PendingSlotGroup {
+    key: string
+    slotLabel: string
+    deliveryDate: string
+    title: string
+    allTasks: AdminTaskCard[]
+    tasks: AdminTaskCard[]
+    weightText: string
+  }
 
   const router = useRouter()
 
@@ -424,9 +504,7 @@
   const mapSnapshot = ref<DeliveryMapSnapshot>({ riders: [], tasks: [] })
   const configs = ref<DeliveryConfigItem[]>([])
   const loading = ref(false)
-  const dispatchRunning = ref(false)
   const assigning = ref(false)
-  const autoDispatchSaving = ref(false)
 
   /** 与服务端对齐后的当前时间（毫秒），倒计时全部基于它 */
   const now = ref(Date.now())
@@ -445,11 +523,13 @@
   const riderKeyword = ref('')
   const riderAvailableOnly = ref(false)
 
-  const mapCollapsed = ref(false)
+  const mapCollapsed = ref(true)
   const activeRiderId = ref<number | null>(null)
   const activeTaskId = ref<number | null>(null)
 
   const draggingTask = ref<AdminTaskCard | null>(null)
+  const draggingSlotKey = ref('')
+  const slotDispatchingKey = ref('')
   const suggestionMap = ref<Record<number, DispatchSuggestion>>({})
   const activeSuggestion = ref<DispatchSuggestion | null>(null)
   const activeTask = ref<AdminTaskCard | null>(null)
@@ -458,6 +538,8 @@
 
   const pickerVisible = ref(false)
   const pickerMode = ref<'assign' | 'reassign'>('assign')
+  const slotWizardVisible = ref(false)
+  const slotWizardInitialKey = ref('')
 
   const messageVisible = ref(false)
   const messageRider = ref<{ riderId: number; riderNo: string; name: string } | null>(null)
@@ -482,23 +564,39 @@
   const taskPickerSource = ref<AdminTaskCard[]>([])
 
   const pendingSlotOptions = computed(() => {
-    const counts = new Map<string, number>()
+    const groups = new Map<string, { date: string; slot: string; count: number }>()
     taskPickerSource.value.forEach((task) => {
       const slot = (task.slotLabel || '').trim()
-      if (slot) counts.set(slot, (counts.get(slot) || 0) + 1)
+      if (!slot) return
+      const key = slotGroupKey(task)
+      const existing = groups.get(key)
+      if (existing) {
+        existing.count += 1
+        return
+      }
+      groups.set(key, { date: taskDeliveryDate(task), slot, count: 1 })
     })
-    return [...counts.entries()]
-      .sort(([left], [right]) => left.localeCompare(right))
-      .map(([value, count]) => ({ value, label: `${value}（${count} 单）` }))
+    return [...groups.entries()]
+      .sort(([, left], [, right]) => {
+        const dateDiff = (left.date || '9999').localeCompare(right.date || '9999')
+        if (dateDiff !== 0) return dateDiff
+        return slotStartMinutes(left.slot) - slotStartMinutes(right.slot)
+      })
+      .map(([value, item]) => ({
+        value,
+        label: `${formatSlotDateTitle(item.date, item.slot, now.value)}（${item.count} 单）`
+      }))
   })
 
-  const taskPickerTasks = computed(() =>
-    taskPickerSlot.value
-      ? taskPickerSource.value.filter(
-          (task) => (task.slotLabel || '').trim() === taskPickerSlot.value
-        )
-      : taskPickerSource.value
-  )
+  const taskPickerTasks = computed(() => {
+    if (!taskPickerSlot.value) return taskPickerSource.value
+    const { date, slot } = parseSlotGroupKey(taskPickerSlot.value)
+    return taskPickerSource.value.filter((task) => {
+      if ((task.slotLabel || '').trim() !== slot) return false
+      if (!date) return true
+      return taskDeliveryDate(task) === date
+    })
+  })
 
   /**
    * 用当前待派池重建快照，已经不在池子里的勾选自然掉队，还在的补回去。
@@ -622,67 +720,7 @@
   const amapConfig = computed(() => pickAmapConfig(configs.value))
   const amapKey = computed(() => amapConfig.value.key)
   const amapSecurityCode = computed(() => amapConfig.value.securityCode)
-
-  /** dispatch.enabled 是自动派单总开关（03 §配置表），找不到时退回同类 BOOL 开关 */
-  const autoDispatchConfig = computed(
-    () =>
-      configs.value.find((item) => item.key === 'dispatch.enabled') ||
-      configs.value.find(
-        (item) => item.valueType === 'BOOL' && /^dispatch\.(auto_dispatch|enabled)/i.test(item.key)
-      )
-  )
-
-  const autoDispatchOn = computed(() => {
-    const value = String(autoDispatchConfig.value?.value || '').toLowerCase()
-    return value === 'true' || value === '1'
-  })
-
-  const toggleAutoDispatch = async () => {
-    const config = autoDispatchConfig.value
-    if (!config) return
-    const next = !autoDispatchOn.value
-    try {
-      await ElMessageBox.confirm(
-        next
-          ? '开启后系统会按压单窗口自动派单，是否继续？'
-          : '关闭后所有任务都需要人工派单，是否继续？',
-        next ? '开启自动派单' : '关闭自动派单',
-        { type: 'warning' }
-      )
-      autoDispatchSaving.value = true
-      await updateDeliveryConfigs([{ key: config.key, value: String(next) }])
-      config.value = String(next)
-      ElMessage.success(next ? '自动派单已开启' : '自动派单已关闭')
-    } catch (error) {
-      if (error !== 'cancel' && error !== 'close') {
-        ElMessage.error(error instanceof Error ? error.message : '操作失败')
-      }
-    } finally {
-      autoDispatchSaving.value = false
-    }
-  }
-
-  const runDispatch = async () => {
-    try {
-      await ElMessageBox.confirm(
-        '确认立即执行一次调度循环？系统会按当前运力重新分配待派任务。',
-        '手动触发调度',
-        {
-          type: 'warning'
-        }
-      )
-      dispatchRunning.value = true
-      await runDispatchNow()
-      ElMessage.success('调度已触发')
-      await loadBoard(true)
-    } catch (error) {
-      if (error !== 'cancel' && error !== 'close') {
-        ElMessage.error(error instanceof Error ? error.message : '操作失败')
-      }
-    } finally {
-      dispatchRunning.value = false
-    }
-  }
+  const storeCenter = computed(() => storeCenterFromConfigs(configs.value))
 
   // ==================== 指标与队列 ====================
 
@@ -791,6 +829,50 @@
     return list.sort(byHoldUntilAsc)
   })
 
+  const matchesPendingFilters = (task: AdminTaskCard) => {
+    if (!matchText(task, pendingKeyword.value)) return false
+    if (pendingCold.value === 'cold' && !isColdChain(task)) return false
+    if (pendingCold.value === 'normal' && isColdChain(task)) return false
+    if (pendingFarOnly.value && !isFarDelivery(task)) return false
+    return true
+  }
+
+  const pendingSlotGroups = computed<PendingSlotGroup[]>(() => {
+    const grouped = new Map<string, AdminTaskCard[]>()
+    for (const task of board.value?.queues.pending || []) {
+      const key = slotGroupKey(task)
+      const list = grouped.get(key)
+      if (list) list.push(task)
+      else grouped.set(key, [task])
+    }
+    return [...grouped.entries()]
+      .map(([key, allTasks]) => {
+        const { date, slot } = parseSlotGroupKey(key)
+        const visible = allTasks.filter(matchesPendingFilters).sort(byHoldUntilAsc)
+        const weight = allTasks.reduce((sum, task) => sum + Number(task.totalWeightKg || 0), 0)
+        return {
+          key,
+          slotLabel: slot,
+          deliveryDate: date,
+          title: formatSlotDateTitle(date, slot, now.value),
+          allTasks,
+          tasks: visible,
+          weightText: `${weight.toFixed(1)} kg`
+        }
+      })
+      .filter((group) => group.tasks.length > 0)
+      .sort((left, right) => {
+        const dateDiff = (left.deliveryDate || '9999').localeCompare(right.deliveryDate || '9999')
+        if (dateDiff !== 0) return dateDiff
+        const timeDiff = slotStartMinutes(left.slotLabel) - slotStartMinutes(right.slotLabel)
+        if (timeDiff !== 0) return timeDiff
+        return left.slotLabel.localeCompare(right.slotLabel, 'zh-CN')
+      })
+  })
+
+  const findSlotGroup = (slotKey: string) =>
+    pendingSlotGroups.value.find((group) => group.key === slotKey) || null
+
   const riskTasks = computed(() => {
     const list = (board.value?.queues.overtimeRisk || []).filter((task) => {
       if (!matchText(task, riskKeyword.value)) return false
@@ -810,6 +892,14 @@
       .slice()
       .sort((a, b) => parseTime(a.createdAt) - parseTime(b.createdAt))
   })
+
+  const showSideQueues = computed(
+    () =>
+      riskTasks.value.length > 0 ||
+      exceptions.value.length > 0 ||
+      focus.value === 'risk' ||
+      focus.value === 'exception'
+  )
 
   const riders = computed(() => {
     const text = riderKeyword.value.trim().toLowerCase()
@@ -984,9 +1074,9 @@
   }
 
   const onPickerConfirm = async (payload: { riderId: number; reason: string }) => {
+    const rider = board.value?.riders.find((item) => item.riderId === payload.riderId)
     const task = activeTask.value
     if (!task) return
-    const rider = board.value?.riders.find((item) => item.riderId === payload.riderId)
     const candidate =
       activeSuggestion.value?.candidates.find((item) => item.riderId === payload.riderId) || null
     try {
@@ -1072,6 +1162,147 @@
     }
   }
 
+  const onSlotDragStart = (group: PendingSlotGroup, event: DragEvent) => {
+    draggingSlotKey.value = group.key
+    draggingTask.value = null
+    event.dataTransfer?.setData('text/plain', `slot:${group.key}`)
+    if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move'
+  }
+
+  const onSlotDragEnd = () => {
+    draggingSlotKey.value = ''
+  }
+
+  const fetchClusterSuggestion = async (taskIds: number[]) => {
+    suggestLoading.value = true
+    try {
+      const suggestion = await suggestDispatchCluster(taskIds)
+      activeSuggestion.value = suggestion
+      return suggestion
+    } catch (error) {
+      activeSuggestion.value = null
+      ElMessage.error(error instanceof Error ? error.message : '派单建议获取失败')
+      return null
+    } finally {
+      suggestLoading.value = false
+    }
+  }
+
+  const sendSlotToRider = async (
+    group: PendingSlotGroup,
+    rider: RiderBoardCard,
+    options: { skipConfirm?: boolean } = {}
+  ) => {
+    const blockReason = riderBlockReason(rider, now.value)
+    if (blockReason) {
+      ElMessage.warning(`${rider.name} 当前不可接单：${blockReason}`)
+      return
+    }
+    const taskIds = group.allTasks.map((task) => task.taskId)
+    const totalWeight = group.allTasks.reduce(
+      (sum, task) => sum + Number(task.totalWeightKg || 0),
+      0
+    )
+    const slot = group.slotLabel
+    const slotTitle = group.title
+    slotDispatchingKey.value = group.key
+    assigning.value = true
+    try {
+      if (!options.skipConfirm) {
+        await ElMessageBox.confirm(
+          slot
+            ? `把「${slotTitle}」全部 ${taskIds.length} 单（合计 ${totalWeight.toFixed(1)} kg）发给 ${rider.name}？`
+            : `这 ${taskIds.length} 单没有预约时段，将派给 ${rider.name} 并创建波次。`,
+          slot ? '按时段发车' : '批量派单',
+          {
+            type: 'warning',
+            confirmButtonText: slot ? '确认发车' : '确认派单',
+            cancelButtonText: '取消'
+          }
+        )
+      }
+      if (slot) {
+        await dispatchSlotWithOverloadConfirm({
+          riderId: rider.riderId,
+          slotLabel: slot,
+          taskIds
+        })
+        ElMessage.success(`「${slotTitle}」已发给 ${rider.name}`)
+      } else {
+        await batchAssignTasks({ taskIds, riderId: rider.riderId })
+        ElMessage.success(`已派给 ${rider.name}`)
+      }
+      pickerVisible.value = false
+      slotWizardVisible.value = false
+      await loadBoard(true)
+    } catch (error) {
+      if (error !== 'cancel' && error !== 'close') {
+        ElMessage.error(error instanceof Error ? error.message : '发车失败')
+        await loadBoard(true)
+      }
+    } finally {
+      assigning.value = false
+      slotDispatchingKey.value = ''
+    }
+  }
+
+  const openSlotWizard = (group?: PendingSlotGroup) => {
+    slotWizardInitialKey.value = group?.key || ''
+    slotWizardVisible.value = true
+    if (group) {
+      fetchClusterSuggestion(group.allTasks.map((task) => task.taskId))
+    } else {
+      activeSuggestion.value = null
+    }
+  }
+
+  const onWizardSelectSlot = (groupKey: string) => {
+    const group = findSlotGroup(groupKey)
+    if (!group) return
+    fetchClusterSuggestion(group.allTasks.map((task) => task.taskId))
+  }
+
+  const onWizardConfirm = async (payload: { groupKey: string; riderId: number }) => {
+    const group = findSlotGroup(payload.groupKey)
+    const rider = board.value?.riders.find((item) => item.riderId === payload.riderId)
+    if (!group || !rider) return
+    await sendSlotToRider(group, rider, { skipConfirm: true })
+  }
+
+  const recommendedEligible = (suggestion: DispatchSuggestion | null) => {
+    if (!suggestion?.recommendedRiderId) return null
+    const candidate = suggestion.candidates.find(
+      (item) => item.riderId === suggestion.recommendedRiderId
+    )
+    if (!candidate || candidate.blockers.length > 0) return null
+    const rider = board.value?.riders.find((item) => item.riderId === candidate.riderId)
+    if (!rider || riderBlockReason(rider, now.value)) return null
+    return rider
+  }
+
+  const dispatchSlotByRecommend = async (group: PendingSlotGroup) => {
+    const suggestion = await fetchClusterSuggestion(group.allTasks.map((task) => task.taskId))
+    const rider = recommendedEligible(suggestion)
+    if (!rider) {
+      ElMessage.warning('系统暂无可用推荐骑手，请手动选择')
+      openSlotWizard(group)
+      return
+    }
+    await sendSlotToRider(group, rider)
+  }
+
+  const handleSendSlot = (group: PendingSlotGroup) => {
+    openSlotWizard(group)
+  }
+
+  const handleDropSlot = async (payload: { riderId: number; slotKey: string }) => {
+    const group = findSlotGroup(payload.slotKey)
+    draggingSlotKey.value = ''
+    const rider = board.value?.riders.find((item) => item.riderId === payload.riderId)
+    if (!group || !rider) return
+    await sendSlotToRider(group, rider)
+  }
+
   // ==================== 骑手动作 ====================
 
   const openTaskPicker = async (rider: RiderBoardCard) => {
@@ -1121,11 +1352,15 @@
       0
     )
     const slot = taskPickerSlot.value
+    const slotMeta = slot ? parseSlotGroupKey(slot) : { date: '', slot: '' }
+    const slotTitle = slot
+      ? formatSlotDateTitle(slotMeta.date, slotMeta.slot, now.value)
+      : ''
     const taskIds = taskPickerSelection.value.map((task) => task.taskId)
     try {
       await ElMessageBox.confirm(
         slot
-          ? `把「${slot}」这一波 ${taskIds.length} 单（合计 ${totalWeight.toFixed(1)} kg）发给 ${rider.name}？发车后骑手可一键接单并到店取货。`
+          ? `把「${slotTitle}」这一波 ${taskIds.length} 单（合计 ${totalWeight.toFixed(1)} kg）发给 ${rider.name}？发车后骑手可一键接单并到店取货。`
           : `把 ${taskIds.length} 个任务（合计 ${totalWeight.toFixed(1)} kg）派给 ${rider.name} 并创建波次？`,
         slot ? '按时段发车' : '批量派单',
         {
@@ -1136,8 +1371,12 @@
       )
       assigning.value = true
       if (slot) {
-        await dispatchSlotWithOverloadConfirm({ riderId: rider.riderId, slotLabel: slot, taskIds })
-        ElMessage.success(`「${slot}」已发车`)
+        await dispatchSlotWithOverloadConfirm({
+          riderId: rider.riderId,
+          slotLabel: slotMeta.slot,
+          taskIds
+        })
+        ElMessage.success(`「${slotTitle}」已发车`)
       } else {
         await batchAssignTasks({ taskIds, riderId: rider.riderId })
         ElMessage.success('批量派单成功')
@@ -1285,6 +1524,7 @@
     stopTimers()
     stopStream()
     draggingTask.value = null
+    draggingSlotKey.value = ''
   }
 
   watch(mapCollapsed, (collapsed) => {
@@ -1320,14 +1560,6 @@
     font-size: 15px;
     font-weight: 700;
     font-variant-numeric: tabular-nums;
-  }
-
-  .board-switch {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    color: var(--art-gray-600);
-    font-size: 13px;
   }
 
   .board-metrics {
@@ -1383,9 +1615,13 @@
 
   .board-queues {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: minmax(320px, 1.35fr) minmax(280px, 1fr);
     gap: 16px;
     min-height: 420px;
+
+    &--extra {
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    }
   }
 
   .queue-col {
@@ -1418,9 +1654,12 @@
   }
 
   .queue-col__hint {
-    margin-left: auto;
     color: var(--art-gray-500);
     font-size: 12px;
+  }
+
+  .queue-col__action {
+    margin-left: auto;
   }
 
   .queue-col__dot {
@@ -1470,6 +1709,44 @@
     max-height: 46vh;
     padding: 12px 14px;
     overflow-y: auto;
+  }
+
+  .slot-group {
+    display: grid;
+    gap: 8px;
+    padding: 8px;
+    border: 1px dashed var(--art-border-color);
+    border-radius: 10px;
+    background: var(--el-fill-color-lighter);
+  }
+
+  .slot-group__head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    cursor: grab;
+
+    strong {
+      color: var(--art-gray-900);
+      font-size: 14px;
+    }
+
+    &--dragging {
+      opacity: 0.65;
+    }
+  }
+
+  .slot-group__meta {
+    color: var(--art-gray-500);
+    font-size: 12px;
+  }
+
+  .slot-group__actions {
+    margin-left: auto;
+    display: flex;
+    gap: 6px;
+    cursor: default;
   }
 
   .board-map {

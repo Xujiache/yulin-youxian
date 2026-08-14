@@ -410,7 +410,7 @@
   }
 
   const goCategories = () => {
-    router.push('/fresh/categories')
+    router.push('/fresh/catalog/categories')
   }
 
   onMounted(async () => {

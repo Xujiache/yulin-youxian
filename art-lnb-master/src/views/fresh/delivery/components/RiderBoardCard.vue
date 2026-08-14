@@ -142,6 +142,7 @@
   const emit = defineEmits<{
     (event: 'dispatch' | 'track' | 'message' | 'force-off', rider: RiderBoardCard): void
     (event: 'drop-task', payload: { riderId: number; taskId: number }): void
+    (event: 'drop-slot', payload: { riderId: number; slotKey: string }): void
   }>()
 
   const dropHover = ref(false)
@@ -169,7 +170,12 @@
   const onDrop = (event: DragEvent) => {
     event.preventDefault()
     dropHover.value = false
-    const taskId = Number(event.dataTransfer?.getData('text/plain') || 0)
+    const raw = event.dataTransfer?.getData('text/plain') || ''
+    if (raw.startsWith('slot:')) {
+      emit('drop-slot', { riderId: props.rider.riderId, slotKey: raw.slice(5) })
+      return
+    }
+    const taskId = Number(raw.startsWith('task:') ? raw.slice(5) : raw)
     if (!taskId) return
     emit('drop-task', { riderId: props.rider.riderId, taskId })
   }

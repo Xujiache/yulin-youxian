@@ -134,8 +134,7 @@
   import { useSettingStore } from '@/store/modules/setting'
   import { MenuTypeEnum, MenuWidth } from '@/enums/appEnum'
   import { useMenuStore } from '@/store/modules/menu'
-  import { isIframe } from '@/utils/navigation'
-  import { handleMenuJump } from '@/utils/navigation'
+  import { findMenuByPath, handleMenuJump, isIframe } from '@/utils/navigation'
   import SidebarSubmenu from './widget/SidebarSubmenu.vue'
   import { useCommon } from '@/hooks/core/useCommon'
   import { useWindowSize, useTimeoutFn } from '@vueuse/core'
@@ -176,13 +175,14 @@
   const isMobileScreen = computed(() => width.value < MOBILE_BREAKPOINT)
 
   // 路由相关
-  const firstLevelMenuPath = computed(() => route.matched[0]?.path)
   const routerPath = computed(() => String(route.meta.activePath || route.path))
 
   // 菜单数据
   const firstLevelMenus = computed(() => {
     return useMenuStore().menuList.filter((menu) => !menu.meta.isHide)
   })
+  const currentModule = computed(() => findMenuByPath(firstLevelMenus.value, routerPath.value))
+  const firstLevelMenuPath = computed(() => currentModule.value?.path || route.matched[0]?.path)
 
   const menuList = computed(() => {
     const menuStore = useMenuStore()
@@ -198,14 +198,12 @@
       return findIframeMenuList(route.path, allMenus)
     }
 
-    // 处理一级菜单
+    // 处理一级菜单（数据概览等没有子页的模块）
     if (route.meta.isFirstLevel) {
       return []
     }
 
-    // 返回当前顶级路径对应的子菜单
-    const currentTopPath = `/${route.path.split('/')[1]}`
-    const currentMenu = allMenus.find((menu) => menu.path === currentTopPath)
+    const currentMenu = findMenuByPath(allMenus, routerPath.value)
     return currentMenu?.children ?? []
   })
 

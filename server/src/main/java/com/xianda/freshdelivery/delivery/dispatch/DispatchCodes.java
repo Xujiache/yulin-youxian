@@ -25,6 +25,7 @@ public final class DispatchCodes {
     public static final String BATCH_SAME_BUILDING = "SAME_BUILDING";
     public static final String BATCH_SAME_AREA = "SAME_AREA";
     public static final String BATCH_NEARBY = "NEARBY";
+    public static final String BATCH_SLOT_CLUSTER = "SLOT_CLUSTER";
 
     public static final String MODE_AUTO = "AUTO";
     public static final String MODE_MANUAL = "MANUAL";

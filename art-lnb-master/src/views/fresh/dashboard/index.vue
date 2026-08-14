@@ -193,7 +193,7 @@
   }
 
   const goStockOverview = () => {
-    router.push('/fresh/stock-overview')
+    router.push('/fresh/trade/stock-overview')
   }
 
   onMounted(loadSummary)

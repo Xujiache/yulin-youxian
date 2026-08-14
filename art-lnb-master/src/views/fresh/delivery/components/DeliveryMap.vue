@@ -22,12 +22,14 @@
 
 <script setup lang="ts">
   import type { GeoPoint, MapRiderPoint, MapTaskPoint } from '@/api/delivery'
+  import { useSettingStore } from '@/store/modules/setting'
   import {
     loadAmap,
     type AMapInstance,
     type AMapNamespace,
     type AMapOverlay
   } from '../composables/useAmap'
+  import { isValidGeoPoint } from '../utils'
 
   defineOptions({ name: 'DeliveryMap' })
 
@@ -51,6 +53,8 @@
       cursor?: GeoPoint | null
       stops?: StopMarker[]
       origin?: GeoPoint | null
+      /** 没有站点/轨迹时的视野中心，通常是门店。不传的话高德会落到北京。 */
+      fallbackCenter?: GeoPoint | null
       /** 高亮的骑手/任务 */
       activeRiderId?: number | null
       activeTaskId?: number | null
@@ -66,6 +70,7 @@
       cursor: null,
       stops: () => [],
       origin: null,
+      fallbackCenter: null,
       activeRiderId: null,
       activeTaskId: null,
       height: '100%'
@@ -75,6 +80,10 @@
   const emit = defineEmits<{
     (event: 'select', payload: { type: 'rider' | 'task' | 'stop'; id: number }): void
   }>()
+
+  const settingStore = useSettingStore()
+  const { isDark } = storeToRefs(settingStore)
+  const mapStyle = computed(() => (isDark.value ? 'amap://styles/darkblue' : 'amap://styles/normal'))
 
   const router = useRouter()
   const containerRef = ref<HTMLElement>()
@@ -108,9 +117,10 @@
   }
 
   const drawPolyline = (path: GeoPoint[], color: string, dashed: boolean) => {
-    if (!amap || !map || path.length < 2) return
+    const valid = path.filter(isValidGeoPoint)
+    if (!amap || !map || valid.length < 2) return
     const line = new amap.Polyline({
-      path: path.map((point) => [point.lng, point.lat]),
+      path: valid.map((point) => [point.lng, point.lat]),
       strokeColor: color,
       strokeWeight: 5,
       strokeOpacity: 0.85,
@@ -125,7 +135,7 @@
     content: string,
     payload?: { type: 'rider' | 'task' | 'stop'; id: number }
   ) => {
-    if (!amap || !map) return
+    if (!amap || !map || !isValidGeoPoint(point)) return
     const marker = new amap.Marker({
       position: [point.lng, point.lat],
       content,
@@ -136,6 +146,50 @@
       marker.on('click', () => emit('select', payload))
     }
     map.add(marker as AMapOverlay)
+  }
+
+  const contentPoints = (): GeoPoint[] => {
+    const points: GeoPoint[] = []
+    props.stops.forEach((stop) => {
+      if (isValidGeoPoint(stop.location)) points.push(stop.location)
+    })
+    props.trackPath.forEach((point) => {
+      if (isValidGeoPoint(point)) points.push(point)
+    })
+    props.tasks.forEach((task) => {
+      if (isValidGeoPoint(task)) points.push({ lat: task.lat, lng: task.lng })
+    })
+    props.riders.forEach((rider) => {
+      if (isValidGeoPoint(rider)) points.push({ lat: rider.lat, lng: rider.lng })
+    })
+    if (isValidGeoPoint(props.cursor)) points.push(props.cursor)
+    return points
+  }
+
+  const overlayPoints = (): GeoPoint[] => {
+    const points = contentPoints()
+    if (isValidGeoPoint(props.origin)) points.push(props.origin)
+    if (isValidGeoPoint(props.fallbackCenter)) points.push(props.fallbackCenter)
+    return points
+  }
+
+  const fallbackLngLat = (): [number, number] | null => {
+    const first = overlayPoints()[0]
+    return first ? [first.lng, first.lat] : null
+  }
+
+  const applyView = () => {
+    if (!map) return
+    const content = contentPoints()
+    if (content.length > 0) {
+      if (!fitted) {
+        map.setFitView(null, false, [40, 40, 40, 40], 16)
+        fitted = true
+      }
+      return
+    }
+    const center = fallbackLngLat()
+    if (center) map.setCenter(center)
   }
 
   const renderOverlays = () => {
@@ -176,17 +230,7 @@
       addMarker(props.cursor, pinHtml('#F56C6C', '当前', true))
     }
 
-    if (!fitted) {
-      const hasPoint =
-        props.riders.length > 0 ||
-        props.tasks.length > 0 ||
-        props.stops.length > 0 ||
-        props.routePath.length > 0
-      if (hasPoint) {
-        map.setFitView(null, false, [40, 40, 40, 40], 16)
-        fitted = true
-      }
-    }
+    applyView()
   }
 
   const setup = async () => {
@@ -197,10 +241,13 @@
       amap = await loadAmap(props.amapKey, props.securityCode)
       await nextTick()
       if (!containerRef.value) return
+      const center = fallbackLngLat()
       map = new amap.Map(containerRef.value, {
         zoom: 13,
+        ...(center ? { center } : {}),
         resizeEnable: true,
-        viewMode: '2D'
+        viewMode: '2D',
+        mapStyle: mapStyle.value
       })
       fitted = false
       renderOverlays()
@@ -220,7 +267,16 @@
 
   /** 数据源变化时重绘（父组件轮询 /map 时每 5 秒触发一次） */
   watch(
-    () => [props.riders, props.tasks, props.routePath, props.trackPath, props.stops, props.cursor],
+    () => [
+      props.riders,
+      props.tasks,
+      props.routePath,
+      props.trackPath,
+      props.stops,
+      props.cursor,
+      props.origin,
+      props.fallbackCenter
+    ],
     () => renderOverlays(),
     { deep: true }
   )
@@ -236,6 +292,10 @@
       if (key && !map) void setup()
     }
   )
+
+  watch(mapStyle, (style) => {
+    map?.setMapStyle?.(style)
+  })
 
   /** 面板从折叠恢复时容器尺寸变了，需要 resize */
   const resize = () => {

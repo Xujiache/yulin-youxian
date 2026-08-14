@@ -343,6 +343,27 @@ class DispatchEngineTests {
     }
 
     @Test
+    void suggestClusterScoresTheWholeBatchAsOneWaveAndDoesNotAssign() {
+        dao.putTask(DispatchTestSupport.task(1)
+                .address("阳光小区", "3号楼", "阳光小区 3号楼 2单元 501室", "501").atMeters(600).build());
+        dao.putTask(DispatchTestSupport.task(2)
+                .address("兴顺苑", "1号楼", "兴顺苑A区 1号楼 1单元 602室", "602").atMeters(1800).build());
+        dao.putRider(DispatchTestSupport.rider(1).build());
+        dao.putRider(DispatchTestSupport.rider(2).fatiguePausedUntil(NOW.plusSeconds(900)).build());
+
+        var suggestion = manualDispatchService.suggestCluster(java.util.List.of(1L, 2L));
+
+        assertEquals(1L, suggestion.taskId());
+        assertEquals(java.util.List.of(2L), suggestion.batchingHint().mergeWithTaskIds());
+        assertEquals(DispatchCodes.BATCH_SLOT_CLUSTER, suggestion.batchingHint().reason());
+        assertEquals(1L, suggestion.recommendedRiderId());
+        assertEquals(2, suggestion.candidates().size());
+        assertTrue(assignmentPort.assigns().isEmpty());
+        assertEquals("PENDING", dao.task(1L).status());
+        assertEquals("PENDING", dao.task(2L).status());
+    }
+
+    @Test
     void aFailedAssignmentLeavesTheTaskInTheQueueRatherThanLosingIt() {
         dao.putTask(DispatchTestSupport.task(1).atMeters(800).build());
         dao.putRider(DispatchTestSupport.rider(1).build());

@@ -161,6 +161,43 @@ public class ManualDispatchService {
         return new DispatchSuggestResponse(suggestions);
     }
 
+    /**
+     * 把一批任务当成一个簇打分，给「发本时段」弹窗用。
+     * 和 suggest 的差别：suggest 会再按地址拆簇，同一时段里分散的单可能推荐不同骑手；
+     * 这里强制合成一簇，整波只出一个推荐。
+     */
+    public DispatchSuggestDto suggestCluster(List<Long> taskIds) {
+        List<Long> ids = taskIds == null ? List.of() : taskIds.stream().filter(Objects::nonNull).distinct().toList();
+        if (ids.isEmpty()) {
+            return new DispatchSuggestDto(
+                    null,
+                    List.of(),
+                    null,
+                    new DispatchSuggestDto.BatchingHintDto(List.of(), DispatchCodes.BATCH_SLOT_CLUSTER));
+        }
+        LocalDateTime now = dispatchEngine.now();
+        List<DispatchTaskRow> tasks = dispatchDao.findTasksByIds(ids);
+        if (tasks.isEmpty()) {
+            return new DispatchSuggestDto(
+                    null,
+                    List.of(),
+                    null,
+                    new DispatchSuggestDto.BatchingHintDto(List.of(), DispatchCodes.BATCH_SLOT_CLUSTER));
+        }
+        DispatchContext context = dispatchEngine.loadContext(now, dispatchDao.countPendingTasks());
+        TaskCluster cluster = dispatchEngine.buildCluster(tasks, now);
+        List<RiderScore> scores = scoringService.scoreAll(cluster, context, false);
+        Optional<RiderScore> best = scoringService.bestCandidate(scores);
+        List<Long> clusterIds = cluster.taskIds();
+        Long firstId = clusterIds.get(0);
+        List<Long> siblings = clusterIds.stream().filter(id -> !id.equals(firstId)).toList();
+        return new DispatchSuggestDto(
+                firstId,
+                scores.stream().map(ManualDispatchService::toCandidateDto).toList(),
+                best.map(RiderScore::riderId).orElse(null),
+                new DispatchSuggestDto.BatchingHintDto(siblings, DispatchCodes.BATCH_SLOT_CLUSTER));
+    }
+
     public RiskLevel currentRiskOf(long taskId) {
         DispatchTaskRow task = dispatchDao.findTask(taskId)
                 .orElseThrow(() -> new DeliveryException(DeliveryErrorCode.TASK_NOT_FOUND, "配送任务不存在：" + taskId));

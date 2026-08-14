@@ -9,6 +9,7 @@ import com.xianda.freshdelivery.delivery.dispatch.ManualDispatchService;
 import com.xianda.freshdelivery.delivery.dispatch.SlotDispatchService;
 import com.xianda.freshdelivery.delivery.dto.AssignRequest;
 import com.xianda.freshdelivery.delivery.dto.BatchAssignRequest;
+import com.xianda.freshdelivery.delivery.dto.DispatchSuggestDto;
 import com.xianda.freshdelivery.delivery.dto.DispatchSuggestRequest;
 import com.xianda.freshdelivery.delivery.dto.ReassignRequest;
 import com.xianda.freshdelivery.delivery.dto.SlotDispatchRequest;
@@ -89,6 +90,11 @@ public class AdminDispatchController extends DeliveryTaskControllerSupport {
     @PostMapping("/dispatch/suggest")
     public ApiResponse<DispatchSuggestResponse> suggest(@RequestBody DispatchSuggestRequest request) {
         return ApiResponse.ok(manualDispatchService.suggest(request == null ? null : request.taskIds()));
+    }
+
+    @PostMapping("/dispatch/suggest-cluster")
+    public ApiResponse<DispatchSuggestDto> suggestCluster(@RequestBody DispatchSuggestRequest request) {
+        return ApiResponse.ok(manualDispatchService.suggestCluster(request == null ? null : request.taskIds()));
     }
 
     @PostMapping("/dispatch/run-now")

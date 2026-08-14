@@ -143,6 +143,7 @@
             :security-code="amapSecurityCode"
             :track-path="trackPath"
             :cursor="cursor"
+            :fallback-center="storeCenter"
             height="320px"
           />
         </div>
@@ -239,6 +240,7 @@
     isHealthCertExpiringSoon,
     money,
     percent,
+    storeCenterFromConfigs,
     vehicleTypeText,
     workStatusTag,
     workStatusText
@@ -269,6 +271,7 @@
   const amapConfig = computed(() => pickAmapConfig(configs.value))
   const amapKey = computed(() => amapConfig.value.key)
   const amapSecurityCode = computed(() => amapConfig.value.securityCode)
+  const storeCenter = computed(() => storeCenterFromConfigs(configs.value))
   const trackPath = computed<GeoPoint[]>(() =>
     track.value.map((point) => ({ lat: point.lat, lng: point.lng }))
   )
@@ -325,7 +328,11 @@
 
   const loadConfigs = async () => {
     try {
-      configs.value = await getDeliveryConfigs('amap')
+      const [amapItems, storeItems] = await Promise.all([
+        getDeliveryConfigs('amap'),
+        getDeliveryConfigs('STORE')
+      ])
+      configs.value = [...amapItems, ...storeItems]
     } catch {
       configs.value = []
     }

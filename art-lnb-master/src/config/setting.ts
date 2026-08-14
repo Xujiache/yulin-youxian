@@ -27,7 +27,7 @@ import { SystemThemeEnum, MenuThemeEnum, MenuTypeEnum, ContainerWidthEnum } from
  * 系统设置默认值配置
  */
 export const SETTING_DEFAULT_CONFIG = {
-  /** 菜单类型 */
+  /** 菜单类型：经营模块及其二级菜单统一放在左侧导航 */
   menuType: MenuTypeEnum.LEFT,
   /** 菜单展开宽度 */
   menuOpenWidth: 230,
@@ -52,13 +52,13 @@ export const SETTING_DEFAULT_CONFIG = {
   /** 是否显示面包屑 */
   showCrumbs: true,
   /** 是否显示工作台标签 */
-  showWorkTab: true,
+  showWorkTab: false,
   /** 是否显示语言切换 */
-  showLanguage: true,
+  showLanguage: false,
   /** 是否显示进度条 */
   showNprogress: false,
   /** 是否显示设置引导 */
-  showSettingGuide: true,
+  showSettingGuide: false,
   /** 是否显示节日文本 */
   showFestivalText: false,
   /** 是否显示水印 */

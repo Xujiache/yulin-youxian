@@ -58,8 +58,8 @@
                   :model-value="numberOf(item)"
                   :min="item.minValue ?? undefined"
                   :max="item.maxValue ?? undefined"
-                  :step="item.valueType === 'DECIMAL' ? 0.01 : 1"
-                  :precision="item.valueType === 'DECIMAL' ? 2 : 0"
+                  :step="decimalStep(item)"
+                  :precision="decimalPrecision(item)"
                   :disabled="!item.editable"
                   controls-position="right"
                   @change="(value: number | undefined) => setValue(item, value ?? '')"
@@ -169,6 +169,19 @@
   const numberOf = (item: DeliveryConfigItem) => {
     const value = Number(draft.value[item.key])
     return Number.isFinite(value) ? value : undefined
+  }
+
+  const isGeoDecimal = (item: DeliveryConfigItem) =>
+    item.valueType === 'DECIMAL' && /(^|\.)(lat|lng)$/i.test(item.key)
+
+  const decimalPrecision = (item: DeliveryConfigItem) => {
+    if (item.valueType === 'INT') return 0
+    return isGeoDecimal(item) ? 7 : 2
+  }
+
+  const decimalStep = (item: DeliveryConfigItem) => {
+    if (item.valueType === 'INT') return 1
+    return isGeoDecimal(item) ? 0.000001 : 0.01
   }
 
   const setValue = (item: DeliveryConfigItem, value: unknown) => {
