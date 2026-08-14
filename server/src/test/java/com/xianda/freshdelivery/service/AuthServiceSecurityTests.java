@@ -82,38 +82,25 @@ class AuthServiceSecurityTests {
     }
 
     @Test
-    void rateLimitsAdminLoginByNetworkSource() {
+    void doesNotRateLimitAdminLoginWhenDisabled() {
         AuthService service = newService(
                 "admin",
                 STRONG_PASSWORD,
                 false,
-                2,
+                0,
                 Duration.ofHours(8),
                 Duration.ofDays(30)
         );
         AdminLoginRequest invalid = new AdminLoginRequest("admin", "wrong-password");
+        AdminLoginRequest valid = new AdminLoginRequest("admin", STRONG_PASSWORD);
 
-        assertEquals(401, assertThrows(
-                BusinessException.class,
-                () -> service.adminLogin(invalid, "203.0.113.10")
-        ).code());
-        assertEquals(401, assertThrows(
-                BusinessException.class,
-                () -> service.adminLogin(invalid, "203.0.113.10")
-        ).code());
-        assertEquals(AuthService.ADMIN_LOGIN_RATE_LIMITED_CODE, assertThrows(
-                BusinessException.class,
-                () -> service.adminLogin(new AdminLoginRequest("admin", STRONG_PASSWORD), "203.0.113.10")
-        ).code());
-        assertTrue(service.adminLogin(
-                new AdminLoginRequest("admin", STRONG_PASSWORD),
-                "203.0.113.11"
-        ).token().startsWith("admin_"));
-        clock.advance(Duration.ofMinutes(15));
-        assertTrue(service.adminLogin(
-                new AdminLoginRequest("admin", STRONG_PASSWORD),
-                "203.0.113.10"
-        ).token().startsWith("admin_"));
+        for (int i = 0; i < 8; i++) {
+            assertEquals(401, assertThrows(
+                    BusinessException.class,
+                    () -> service.adminLogin(invalid, "203.0.113.10")
+            ).code());
+        }
+        assertTrue(service.adminLogin(valid, "203.0.113.10").token().startsWith("admin_"));
     }
 
     @Test

@@ -55,7 +55,7 @@ public class AuthService {
     private static final Duration MAX_USER_SESSION_TTL = Duration.ofDays(90);
     private static final Duration MAX_ADMIN_SESSION_TTL = Duration.ofHours(24);
     private static final Duration MAX_ADMIN_LOGIN_WINDOW = Duration.ofDays(1);
-    private static final int DEFAULT_ADMIN_LOGIN_ATTEMPT_LIMIT = 5;
+    private static final int DEFAULT_ADMIN_LOGIN_ATTEMPT_LIMIT = 0;
     private static final int MAX_ADMIN_LOGIN_BUCKETS = 4096;
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
     private static final Set<String> INSECURE_CREDENTIAL_PROFILES = Set.of(
@@ -98,7 +98,7 @@ public class AuthService {
             @Value("${auth.profile-storage-path:data/user-profiles.json}") String profileStoragePath,
             @Value("${auth.user.session-ttl-ms:2592000000}") long userSessionTtlMs,
             @Value("${auth.admin.session-ttl-ms:28800000}") long adminSessionTtlMs,
-            @Value("${auth.admin.login-rate-limit.max-attempts:5}") int adminLoginAttemptLimit,
+            @Value("${auth.admin.login-rate-limit.max-attempts:0}") int adminLoginAttemptLimit,
             @Value("${auth.admin.login-rate-limit.window-ms:900000}") long adminLoginWindowMs,
             StateStore stateStore
     ) {
@@ -175,8 +175,8 @@ public class AuthService {
                 MAX_ADMIN_SESSION_TTL,
                 "管理员会话有效期"
         );
-        if (adminLoginAttemptLimit <= 0 || adminLoginAttemptLimit > 100) {
-            throw new IllegalStateException("管理员登录限流次数必须在 1 到 100 之间");
+        if (adminLoginAttemptLimit < 0 || adminLoginAttemptLimit > 100) {
+            throw new IllegalStateException("管理员登录限流次数必须在 0 到 100 之间，0 表示不限流");
         }
         this.adminLoginAttemptLimit = adminLoginAttemptLimit;
         this.adminLoginWindow = requireBounded(
@@ -505,6 +505,9 @@ public class AuthService {
     }
 
     private void checkAdminLoginRate(String clientAddress) {
+        if (adminLoginAttemptLimit <= 0) {
+            return;
+        }
         Instant current = now();
         Instant cutoff = current.minus(adminLoginWindow);
         String key = normalizeClientAddress(clientAddress);

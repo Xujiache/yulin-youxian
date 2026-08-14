@@ -23,6 +23,9 @@ public class BackupMaintenanceInterceptor implements HandlerInterceptor {
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler)
             throws IOException {
         BackupMaintenanceMode.State state = maintenanceMode.state();
+        if (isNonBlockingBackup(state)) {
+            return true;
+        }
         if (state.active() && isAlwaysAllowed(request, state)) {
             return true;
         }
@@ -38,7 +41,7 @@ public class BackupMaintenanceInterceptor implements HandlerInterceptor {
             request.setAttribute(REQUEST_LEASE_ATTRIBUTE, Boolean.TRUE);
             return true;
         }
-        if (isAlwaysAllowed(request, state)) {
+        if (isNonBlockingBackup(state) || isAlwaysAllowed(request, state)) {
             return true;
         }
         response.setStatus(HttpServletResponse.SC_SERVICE_UNAVAILABLE);
@@ -65,6 +68,12 @@ public class BackupMaintenanceInterceptor implements HandlerInterceptor {
             request.removeAttribute(REQUEST_LEASE_ATTRIBUTE);
             maintenanceMode.releaseRequest();
         }
+    }
+
+    private boolean isNonBlockingBackup(BackupMaintenanceMode.State state) {
+        return state.active()
+                && !state.failClosed()
+                && state.operation() == BackupMaintenanceMode.Operation.BACKUP;
     }
 
     private boolean isAlwaysAllowed(HttpServletRequest request, BackupMaintenanceMode.State state) {

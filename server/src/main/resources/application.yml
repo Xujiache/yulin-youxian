@@ -58,7 +58,7 @@ auth:
     additional-password: ${ADMIN_ADDITIONAL_PASSWORD:}
     session-ttl-ms: ${ADMIN_SESSION_TTL_MS:28800000}
     login-rate-limit:
-      max-attempts: ${ADMIN_LOGIN_RATE_LIMIT_MAX_ATTEMPTS:5}
+      max-attempts: ${ADMIN_LOGIN_RATE_LIMIT_MAX_ATTEMPTS:0}
       window-ms: ${ADMIN_LOGIN_RATE_LIMIT_WINDOW_MS:900000}
   user:
     session-ttl-ms: ${AUTH_USER_SESSION_TTL_MS:2592000000}

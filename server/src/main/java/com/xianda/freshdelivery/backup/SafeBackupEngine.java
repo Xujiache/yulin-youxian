@@ -78,6 +78,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 public final class SafeBackupEngine {
     private static final Logger LOGGER = LoggerFactory.getLogger(SafeBackupEngine.class);
     public static final int MANIFEST_VERSION = 2;
+    private static final int FILE_SNAPSHOT_ATTEMPTS = 5;
     private static final int BATCH_SIZE = 2_000;
     private static final int MAX_ARCHIVE_ENTRIES = 20_000;
     private static final long MAX_EXPANDED_BYTES = 20L * 1024 * 1024 * 1024;
@@ -196,15 +197,11 @@ public final class SafeBackupEngine {
     }
 
     public synchronized BackupService.BackupMetadata createManualBackup() {
-        try (BackupMaintenanceMode.Lease ignored = maintenanceMode.enter(BackupMaintenanceMode.Operation.BACKUP)) {
-            return createBackupInternal("MANUAL", true);
-        }
+        return createBackupInternal("MANUAL", false);
     }
 
     public synchronized BackupService.BackupMetadata createAutomaticBackup(String type) {
-        try (BackupMaintenanceMode.Lease ignored = maintenanceMode.enter(BackupMaintenanceMode.Operation.BACKUP)) {
-            return createBackupInternal(type, false);
-        }
+        return createBackupInternal(type, false);
     }
 
     public synchronized List<BackupService.BackupMetadata> listBackups() {
@@ -783,19 +780,31 @@ public final class SafeBackupEngine {
                 throw new IllegalArgumentException("备份文件目标路径非法：" + source.target());
             }
             Files.createDirectories(target.getParent());
+            copySourceFileWithRetry(source, target);
+            snapshots.add(new PendingFile(entryName, source.target(), target));
+        }
+        return snapshots;
+    }
+
+    private void copySourceFileWithRetry(SourceFile source, Path target) throws IOException {
+        for (int attempt = 1; attempt <= FILE_SNAPSHOT_ATTEMPTS; attempt++) {
+            Files.deleteIfExists(target);
             BasicFileAttributes before = Files.readAttributes(
                     source.path(), BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
             Files.copy(source.path(), target);
             BasicFileAttributes after = Files.readAttributes(
                     source.path(), BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
-            if (before.size() != after.size()
-                    || !before.lastModifiedTime().equals(after.lastModifiedTime())
-                    || Files.size(target) != after.size()) {
-                throw new IllegalStateException("备份期间文件发生变化，已拒绝不一致快照：" + source.path());
+            if (before.size() == after.size()
+                    && before.lastModifiedTime().equals(after.lastModifiedTime())
+                    && Files.size(target) == after.size()) {
+                return;
             }
-            snapshots.add(new PendingFile(entryName, source.target(), target));
+            if (attempt < FILE_SNAPSHOT_ATTEMPTS) {
+                LOGGER.warn("备份拷贝时文件仍在变化，重试 {}/{}：{}", attempt, FILE_SNAPSHOT_ATTEMPTS, source.path());
+            } else {
+                LOGGER.warn("备份拷贝时文件持续变化，已保留最后一份快照：{}", source.path());
+            }
         }
-        return snapshots;
     }
 
     private ValidatedArchive extractAndValidate(Path archive) throws IOException {

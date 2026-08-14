@@ -7,12 +7,14 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xianda.freshdelivery.backup.BackupFaultInjector;
+import com.xianda.freshdelivery.backup.BackupMaintenanceInterceptor;
 import com.xianda.freshdelivery.backup.BackupMaintenanceMode;
 import com.xianda.freshdelivery.backup.SafeBackupEngine;
 import com.xianda.freshdelivery.backup.SecureUploadInterceptor;
@@ -107,8 +109,8 @@ class BackupServiceTests {
                     .truncatedTo(ChronoUnit.MINUTES);
             assertTrue(!stamped.isBefore(before) && !stamped.isAfter(after));
             assertTrue(metadata.createdAt().endsWith("+08:00"));
-            verify(printing).regenerateAccessKey();
-            assertTrue(harness.sessions().generation() > 0);
+            verify(printing, never()).regenerateAccessKey();
+            assertEquals(0, harness.sessions().generation());
         } finally {
             harness.service().shutdown();
         }
@@ -167,8 +169,8 @@ class BackupServiceTests {
             assertEquals("archive-proof",
                     Files.readString(customUpload.resolve("202608/proof.jpg"), StandardCharsets.UTF_8));
             assertFalse(Files.exists(customUpload.resolve("extra.jpg")));
-            verify(printing, atLeast(2)).regenerateAccessKey();
-            assertTrue(harness.sessions().generation() >= 2);
+            verify(printing, atLeast(1)).regenerateAccessKey();
+            assertTrue(harness.sessions().generation() >= 1);
         } finally {
             harness.service().shutdown();
         }
@@ -280,7 +282,7 @@ class BackupServiceTests {
     }
 
     @Test
-    void manualBackupRevokesRiderAndAdminSessionsAndRotatesPrintKey() {
+    void manualBackupDoesNotRevokeSessionsOrRotatePrintKey() {
         JdbcTemplate jdbc = completeDatabase();
         jdbc.update("""
                 INSERT INTO rider_session
@@ -295,15 +297,62 @@ class BackupServiceTests {
             assertTrue(harness.sessions().accepts("admin_existing"));
             harness.service().createManualBackup();
 
-            assertEquals(1, jdbc.queryForObject("""
+            assertEquals(0, jdbc.queryForObject("""
                     SELECT COUNT(*) FROM rider_session
-                    WHERE revoked_at IS NOT NULL AND revoke_reason = 'BACKUP_SECURITY_ROTATION'
+                    WHERE revoked_at IS NOT NULL
                     """, Integer.class));
-            assertFalse(harness.sessions().accepts("admin_existing"));
-            verify(printing).regenerateAccessKey();
+            assertTrue(harness.sessions().accepts("admin_existing"));
+            verify(printing, never()).regenerateAccessKey();
+            assertEquals(0, harness.sessions().generation());
+            assertFalse(harness.maintenance().state().active());
         } finally {
             harness.service().shutdown();
         }
+    }
+
+    @Test
+    void backupMaintenanceDoesNotBlockOrdersOrLogin() throws Exception {
+        BackupMaintenanceMode mode = new BackupMaintenanceMode();
+        BackupMaintenanceInterceptor interceptor = new BackupMaintenanceInterceptor(mode);
+        try (BackupMaintenanceMode.Lease ignored = mode.enter(BackupMaintenanceMode.Operation.BACKUP)) {
+            MockHttpServletRequest order = new MockHttpServletRequest("POST", "/api/wx/orders");
+            MockHttpServletResponse orderResponse = new MockHttpServletResponse();
+            assertTrue(interceptor.preHandle(order, orderResponse, new Object()));
+            assertEquals(200, orderResponse.getStatus());
+
+            MockHttpServletRequest login = new MockHttpServletRequest("POST", "/api/admin/auth/login");
+            MockHttpServletResponse loginResponse = new MockHttpServletResponse();
+            assertTrue(interceptor.preHandle(login, loginResponse, new Object()));
+            assertEquals(200, loginResponse.getStatus());
+
+            MockHttpServletRequest home = new MockHttpServletRequest("GET", "/api/wx/home");
+            MockHttpServletResponse homeResponse = new MockHttpServletResponse();
+            assertTrue(interceptor.preHandle(home, homeResponse, new Object()));
+        }
+    }
+
+    @Test
+    void restoreAndFailClosedStillBlockRequests() throws Exception {
+        BackupMaintenanceMode mode = new BackupMaintenanceMode();
+        BackupMaintenanceInterceptor interceptor = new BackupMaintenanceInterceptor(mode);
+        try (BackupMaintenanceMode.Lease ignored = mode.enter(BackupMaintenanceMode.Operation.RESTORE)) {
+            MockHttpServletRequest order = new MockHttpServletRequest("POST", "/api/wx/orders");
+            MockHttpServletResponse orderResponse = new MockHttpServletResponse();
+            assertFalse(interceptor.preHandle(order, orderResponse, new Object()));
+            assertEquals(503, orderResponse.getStatus());
+            assertTrue(orderResponse.getContentAsString().contains("系统正在恢复备份"));
+        }
+
+        mode.failClosed("test-fail-closed");
+        MockHttpServletRequest blocked = new MockHttpServletRequest("POST", "/api/wx/orders");
+        MockHttpServletResponse blockedResponse = new MockHttpServletResponse();
+        assertFalse(interceptor.preHandle(blocked, blockedResponse, new Object()));
+        assertEquals(503, blockedResponse.getStatus());
+        assertTrue(blockedResponse.getContentAsString().contains("故障关闭"));
+
+        MockHttpServletRequest login = new MockHttpServletRequest("POST", "/api/admin/auth/login");
+        MockHttpServletResponse loginResponse = new MockHttpServletResponse();
+        assertTrue(interceptor.preHandle(login, loginResponse, new Object()));
     }
 
     @Test
