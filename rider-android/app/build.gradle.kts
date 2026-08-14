@@ -96,8 +96,9 @@ android {
                 storePassword = signingValue("RIDER_KEYSTORE_PASSWORD")
                 keyAlias = signingValue("RIDER_KEY_ALIAS")
                 keyPassword = signingValue("RIDER_KEY_PASSWORD")
-                // minSdk 26,v1(JAR 签名)已无设备需要,AGP 也会忽略;v2 + v3 即可
-                enableV1Signing = false
+                // 设备只需要 v2/v3。打开 v1 是因为后端 apk-parser 2.6.10
+                // 读不了当前这包的 v2/v3 签名块，只能从 META-INF 取证书。
+                enableV1Signing = true
                 enableV2Signing = true
                 enableV3Signing = true
             }

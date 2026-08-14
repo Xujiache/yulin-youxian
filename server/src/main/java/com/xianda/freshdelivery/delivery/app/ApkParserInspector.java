@@ -15,6 +15,7 @@ import java.util.Locale;
 import net.dongliu.apk.parser.ApkFile;
 import net.dongliu.apk.parser.bean.ApkMeta;
 import net.dongliu.apk.parser.bean.ApkSigner;
+import net.dongliu.apk.parser.bean.ApkV2Signer;
 import net.dongliu.apk.parser.bean.CertificateMeta;
 import org.springframework.stereotype.Component;
 
@@ -50,8 +51,59 @@ public class ApkParserInspector implements ApkInspector {
     }
 
     private static String firstCertSha256(ApkFile parser) throws Exception {
-        List<ApkSigner> signers = parser.getApkSingers();
-        if (signers != null) {
+        String digest = fromV2(parser);
+        if (digest != null) {
+            return digest;
+        }
+        digest = fromV1(parser);
+        if (digest != null) {
+            return digest;
+        }
+        try {
+            List<CertificateMeta> certificates = parser.getCertificateMetaList();
+            if (certificates != null) {
+                for (CertificateMeta certificate : certificates) {
+                    digest = sha256Of(certificate);
+                    if (digest != null) {
+                        return digest;
+                    }
+                }
+            }
+        } catch (Exception ignored) {
+            // v2/v3-only APKs have no META-INF JAR certificate
+        }
+        return null;
+    }
+
+    private static String fromV2(ApkFile parser) {
+        try {
+            List<ApkV2Signer> signers = parser.getApkV2Singers();
+            if (signers == null) {
+                return null;
+            }
+            for (ApkV2Signer signer : signers) {
+                if (signer == null || signer.getCertificateMetas() == null) {
+                    continue;
+                }
+                for (CertificateMeta certificate : signer.getCertificateMetas()) {
+                    String digest = sha256Of(certificate);
+                    if (digest != null) {
+                        return digest;
+                    }
+                }
+            }
+        } catch (Exception ignored) {
+            return null;
+        }
+        return null;
+    }
+
+    private static String fromV1(ApkFile parser) {
+        try {
+            List<ApkSigner> signers = parser.getApkSingers();
+            if (signers == null) {
+                return null;
+            }
             for (ApkSigner signer : signers) {
                 if (signer == null || signer.getCertificateMetas() == null) {
                     continue;
@@ -63,15 +115,8 @@ public class ApkParserInspector implements ApkInspector {
                     }
                 }
             }
-        }
-        List<CertificateMeta> certificates = parser.getCertificateMetaList();
-        if (certificates != null) {
-            for (CertificateMeta certificate : certificates) {
-                String digest = sha256Of(certificate);
-                if (digest != null) {
-                    return digest;
-                }
-            }
+        } catch (Exception ignored) {
+            return null;
         }
         return null;
     }
