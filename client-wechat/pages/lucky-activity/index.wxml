@@ -1,112 +1,54 @@
 <view class="activity-page {{landingMode ? 'is-landing' : 'is-normal'}}">
   <view wx:if="{{loading}}" class="activity-loading">
-    <view class="loading-basket">
-      <view class="loading-leaf"></view>
-      <view class="loading-produce"></view>
-    </view>
-    <text>正在整理今天的菜篮鲜礼…</text>
+    <view class="loading-ring"></view>
+    <text>正在加载活动信息…</text>
   </view>
 
   <block wx:elif="{{landingMode}}">
-    <view class="landing-hero">
-      <image
-        wx:if="{{campaign.shareImageUrl}}"
-        class="hero-food-image"
-        src="{{campaign.shareImageUrl}}"
-        mode="aspectFill"
-      />
-      <view class="hero-wash"></view>
-      <view class="basket-illustration">
-        <view class="basket-handle"></view>
-        <view class="vegetable vegetable-a"><view class="vegetable-leaf"></view></view>
-        <view class="vegetable vegetable-b"><view class="vegetable-leaf"></view></view>
-        <view class="vegetable vegetable-c"><view class="vegetable-leaf"></view></view>
-        <view class="basket-body"></view>
-      </view>
-      <view class="hero-copy">
-        <text class="hero-eyebrow">禹邻优鲜 · 菜篮鲜礼签</text>
-        <text class="hero-title">{{campaign.name || '把一篮新鲜，也分享给你'}}</text>
-        <text class="hero-desc">{{campaign.shareDescription || '下单前分享活动页，符合条件的订单可解锁一次随机鲜礼。'}}</text>
-      </view>
+    <view class="landing-head">
+      <text class="landing-kicker">禹邻优鲜 · 随机减免</text>
+      <text class="landing-title">{{campaign.name || '分享解锁一次抽奖'}}</text>
+      <text class="landing-desc">{{campaign.shareDescription || '符合条件并分享活动页的订单，可抽取一次随机减免。'}}</text>
     </view>
 
     <view wx:if="{{loadError}}" class="landing-notice">
-      <text class="notice-title">今天的鲜礼单暂未展开</text>
-      <text class="notice-desc">{{loadError}}，稍后再来看看。</text>
+      <text class="landing-notice-title">活动信息暂时没有加载出来</text>
+      <text class="landing-notice-desc">{{loadError}}，稍后再来看看。</text>
     </view>
 
     <view wx:elif="{{campaignNotice}}" class="landing-notice">
-      <text class="notice-title">{{campaignNotice.title}}</text>
-      <text class="notice-desc">{{campaignNotice.desc}}</text>
+      <text class="landing-notice-title">{{campaignNotice.title}}</text>
+      <text class="landing-notice-desc">{{campaignNotice.desc}}</text>
     </view>
 
-    <view wx:else class="landing-section">
-      <view class="section-ticket-head">
-        <view>
-          <text class="section-kicker">本期鲜礼</text>
-          <text class="section-title">菜篮里可能装着这些</text>
-        </view>
-        <text class="ticket-stamp">随机一签</text>
-      </view>
+    <view wx:else class="landing-prizes-card">
+      <text class="landing-prizes-title">本期奖项</text>
       <view class="landing-prizes">
-        <view wx:for="{{prizes}}" wx:key="id" class="landing-prize">
-          <image wx:if="{{item.imageUrl}}" class="landing-prize-image" src="{{item.imageUrl}}" mode="aspectFill" />
-          <view wx:else class="landing-prize-fallback">
-            <view class="fallback-leaf"></view>
-            <view class="fallback-produce"></view>
-          </view>
+        <view wx:for="{{prizes}}" wx:key="id" class="landing-prize tone-{{index % 4}}">
           <text class="landing-prize-name">{{item.name}}</text>
         </view>
       </view>
     </view>
 
     <view class="landing-rules">
-      <text class="rules-title">鲜礼说明</text>
-      <text class="rules-line">活动是否开放、订单门槛和抽取结果，以发起人的付款订单页为准。</text>
-      <text class="rules-line">实物鲜礼会作为赠品随符合条件的订单一同配送。</text>
+      <text class="landing-rules-title">活动说明</text>
+      <text class="landing-rules-line">活动是否开放、订单门槛和抽取结果，以发起人的付款订单页为准。</text>
+      <text class="landing-rules-line">中奖后减免会按最终应付金额锁定；每个符合条件的订单仅有一次机会。</text>
     </view>
     <text class="landing-footnote">本页仅展示活动内容，不读取登录信息</text>
   </block>
 
   <block wx:else>
-    <view class="guide-hero">
-      <view class="guide-brand-row">
-        <view class="guide-brand-mark">
-          <view class="brand-leaf"></view>
-          <text>鲜</text>
-        </view>
-        <view class="guide-brand-copy">
-          <text class="guide-eyebrow">菜篮鲜礼签</text>
-          <text class="guide-campaign">{{campaign.name || '分享后抽取本单鲜礼'}}</text>
-        </view>
-        <text class="guide-badge">本单专享</text>
-      </view>
+    <view class="guide-head">
+      <text class="guide-kicker">随机减免</text>
+      <text class="guide-title">{{campaign.name || '分享后抽取本单减免'}}</text>
+      <text class="guide-desc">结果由服务端先锁定，再回到付款页转到对应奖项</text>
+    </view>
 
-      <view class="menu-guide">
-        <view class="menu-arrow"></view>
-        <view class="menu-dots"><text>···</text></view>
-        <text class="menu-guide-title">点右上角进入分享菜单</text>
-        <text class="menu-guide-desc">再选择「分享到朋友圈」</text>
-      </view>
-
-      <view class="fresh-ticket">
-        <view class="fresh-ticket-cut cut-left"></view>
-        <view class="fresh-ticket-cut cut-right"></view>
-        <view class="ticket-number">ORDER · {{orderId}}</view>
-        <view class="ticket-main">
-          <view class="mini-basket">
-            <view class="mini-basket-handle"></view>
-            <view class="mini-produce produce-green"></view>
-            <view class="mini-produce produce-yellow"></view>
-            <view class="mini-basket-body"></view>
-          </view>
-          <view class="ticket-copy">
-            <text class="ticket-title">分享入口记录后</text>
-            <text class="ticket-highlight">返回付款页自动开转盘</text>
-            <text class="ticket-desc">中奖结果由服务端先锁定，再转到对应鲜礼格</text>
-          </view>
-        </view>
-      </view>
+    <view class="guide-menu">
+      <view class="guide-menu-dots"><text>···</text></view>
+      <text class="guide-menu-title">点右上角进入分享菜单</text>
+      <text class="guide-menu-desc">再选择「分享到朋友圈」</text>
     </view>
 
     <view class="guide-steps">
@@ -159,7 +101,7 @@
         wx:if="{{shareReported}}"
         class="return-draw-button"
         bindtap="handleReturnAfterShare"
-      >返回付款页抽鲜礼</button>
+      >返回付款页抽奖</button>
       <block wx:else>
         <text class="actions-tip">{{reporting ? '正在记录，请关闭微信分享面板后稍候' : '不进入朋友圈分享就不会获得抽奖资格'}}</text>
         <view class="actions-row">

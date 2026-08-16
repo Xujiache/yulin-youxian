@@ -533,239 +533,150 @@
 
 .lottery-choice-mask {
   position: fixed;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  left: 0;
+  inset: 0;
   z-index: 160;
-  display: flex;
-  align-items: flex-end;
-  padding: 24rpx 22rpx calc(24rpx + env(safe-area-inset-bottom));
-  box-sizing: border-box;
-  background: rgba(18, 32, 25, 0.62);
-  backdrop-filter: blur(10rpx);
-  -webkit-backdrop-filter: blur(10rpx);
-}
-
-.lottery-choice-sheet {
-  position: relative;
-  width: 100%;
-  padding: 32rpx 28rpx 24rpx;
-  overflow: hidden;
-  color: #122019;
-  background:
-    linear-gradient(90deg, rgba(0, 138, 82, 0.035) 1rpx, transparent 1rpx),
-    #fff8e7;
-  background-size: 22rpx 22rpx;
-  border: 2rpx solid rgba(244, 201, 93, 0.78);
-  border-radius: 38rpx;
-  box-shadow: 0 30rpx 80rpx rgba(3, 45, 26, 0.3);
-}
-
-.choice-ticket-edge {
-  position: absolute;
-  top: 0;
-  right: 0;
-  left: 0;
-  height: 12rpx;
-  background: repeating-linear-gradient(90deg, #008a52 0, #008a52 32rpx, #f4c95d 32rpx, #f4c95d 64rpx);
-}
-
-.choice-heading {
-  display: flex;
-  align-items: center;
-  gap: 18rpx;
-}
-
-.choice-mark {
-  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
-  flex: 0 0 auto;
-  width: 76rpx;
-  height: 76rpx;
-  color: #fff8e7;
-  font-family: "STKaiti", "KaiTi", sans-serif;
-  font-size: 38rpx;
-  font-weight: 900;
-  background: linear-gradient(145deg, #60c041, #008a52);
-  border: 5rpx solid #f4c95d;
-  border-radius: 24rpx 24rpx 30rpx 30rpx;
+  padding: 30rpx 26rpx calc(28rpx + env(safe-area-inset-bottom));
+  box-sizing: border-box;
+  background: rgba(8, 20, 14, 0.62);
 }
 
-.choice-leaf {
-  position: absolute;
-  top: -13rpx;
-  right: 3rpx;
-  width: 27rpx;
-  height: 38rpx;
-  background: #006d42;
-  border-radius: 26rpx 4rpx 26rpx 4rpx;
-  transform: rotate(38deg);
+.lottery-choice-card {
+  width: 100%;
+  max-width: 640rpx;
+  padding: 34rpx 30rpx 26rpx;
+  box-sizing: border-box;
+  color: #17352a;
+  background: #ffffff;
+  border-radius: 30rpx;
+  box-shadow: 0 28rpx 70rpx rgba(4, 22, 14, 0.24);
 }
 
-.choice-title-copy {
-  display: flex;
-  flex: 1;
-  min-width: 0;
-  flex-direction: column;
-}
-
-.choice-eyebrow {
-  color: #008a52;
-  font-size: 19rpx;
-  font-weight: 800;
-  line-height: 28rpx;
-  letter-spacing: 2rpx;
-}
-
-.choice-title {
-  margin-top: 4rpx;
-  overflow: hidden;
-  color: #122019;
-  font-family: "STKaiti", "KaiTi", "PingFang SC", sans-serif;
-  font-size: 36rpx;
-  font-weight: 900;
-  line-height: 48rpx;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.choice-desc {
+.lottery-choice-head {
   display: block;
-  margin-top: 20rpx;
+}
+
+.lottery-choice-eyebrow {
+  display: block;
+  color: #0a8a52;
+  font-size: 20rpx;
+  font-weight: 800;
+  letter-spacing: 4rpx;
+}
+
+.lottery-choice-title {
+  display: block;
+  margin-top: 6rpx;
+  color: #17352a;
+  font-size: 34rpx;
+  font-weight: 900;
+  line-height: 46rpx;
+}
+
+.lottery-choice-desc {
+  display: block;
+  margin-top: 14rpx;
   color: #5f6f67;
   font-size: 23rpx;
   line-height: 36rpx;
 }
 
-.choice-prizes {
+.lottery-choice-prizes {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14rpx;
-  width: 100%;
-  margin-top: 22rpx;
+  margin-top: 24rpx;
 }
 
-.choice-prize {
+.lottery-choice-prize {
   display: flex;
   align-items: center;
-  min-width: 0;
-  padding: 12rpx 10rpx;
-  flex-direction: column;
-  color: #26362d;
-  font-size: 20rpx;
-  font-weight: 700;
-  background: rgba(255, 255, 255, 0.72);
-  border: 2rpx solid rgba(0, 138, 82, 0.13);
-  border-radius: 20rpx;
-}
-
-.choice-prize-image,
-.choice-prize-fallback {
-  width: 112rpx;
-  height: 86rpx;
-  margin-bottom: 9rpx;
-  overflow: hidden;
-  background: #eaf7e4;
-  border-radius: 15rpx;
-}
-
-.choice-prize-fallback {
-  position: relative;
-}
-
-.choice-produce {
-  position: absolute;
-  top: 30rpx;
-  left: 34rpx;
-  width: 48rpx;
-  height: 42rpx;
-  background: #60c041;
-  border-radius: 50% 50% 42% 42%;
-}
-
-.choice-produce-leaf {
-  position: absolute;
-  top: 10rpx;
-  left: 56rpx;
-  z-index: 1;
-  width: 21rpx;
-  height: 34rpx;
-  background: #006d42;
-  border-radius: 22rpx 4rpx 22rpx 4rpx;
-  transform: rotate(30deg);
-}
-
-.choice-facts {
-  display: flex;
-  flex-direction: column;
-  gap: 10rpx;
-  margin-top: 22rpx;
-  padding: 18rpx 20rpx;
-  color: #52635a;
-  font-size: 21rpx;
-  line-height: 31rpx;
-  background: rgba(0, 138, 82, 0.075);
+  justify-content: center;
+  min-height: 86rpx;
+  padding: 12rpx;
   border-radius: 18rpx;
 }
 
-.choice-fact {
+.lottery-choice-prize.tone-0 {
+  color: #ffffff;
+  background: #0a8a52;
+}
+
+.lottery-choice-prize.tone-1 {
+  color: #17352a;
+  background: #f5c04e;
+}
+
+.lottery-choice-prize.tone-2 {
+  color: #ffffff;
+  background: #1d8f5f;
+}
+
+.lottery-choice-prize.tone-3 {
+  color: #17352a;
+  background: #f4f0e2;
+}
+
+.lottery-choice-prize-name {
+  font-size: 24rpx;
+  font-weight: 800;
+  text-align: center;
+}
+
+.lottery-choice-facts {
   display: flex;
-  align-items: center;
-  gap: 12rpx;
+  flex-wrap: wrap;
+  gap: 10rpx 22rpx;
+  margin-top: 20rpx;
 }
 
-.fact-dot {
-  flex: 0 0 auto;
-  width: 10rpx;
-  height: 10rpx;
-  background: #60c041;
-  border: 4rpx solid #d7edcd;
-  border-radius: 50%;
+.lottery-choice-fact {
+  color: #6d7a72;
+  font-size: 20rpx;
+  line-height: 29rpx;
 }
 
-.choice-share-button,
-.choice-original-button {
+.lottery-choice-primary,
+.lottery-choice-plain {
   display: flex;
   align-items: center;
   justify-content: center;
   width: 100%;
-  height: 86rpx;
-  font-size: 28rpx;
+  height: 84rpx;
+  font-size: 27rpx;
   font-weight: 900;
-  line-height: 86rpx;
+  line-height: 84rpx;
   border-radius: 999rpx;
 }
 
-.choice-share-button {
+.lottery-choice-primary {
   margin-top: 24rpx;
   color: #ffffff;
-  background: linear-gradient(135deg, #008a52 0%, #006d42 100%);
-  box-shadow: 0 14rpx 28rpx rgba(0, 109, 66, 0.22);
+  background: #0a8a52;
 }
 
-.choice-share-button.is-disabled {
-  background: #9aaba1;
-  box-shadow: none;
+.lottery-choice-primary.is-disabled {
+  color: rgba(255, 255, 255, 0.72);
+  background: #9db0a6;
 }
 
-.choice-original-button {
-  margin-top: 12rpx;
-  color: #006d42;
-  background: transparent;
+.lottery-choice-plain {
+  margin-top: 10rpx;
+  color: #0a8a52;
+  background: #f2f6f3;
 }
 
-.choice-share-button::after,
-.choice-original-button::after {
+.lottery-choice-primary::after,
+.lottery-choice-plain::after {
   border: 0;
 }
 
-.choice-footnote {
+.lottery-choice-footnote {
   display: block;
   margin-top: 8rpx;
-  color: #859189;
+  color: #8b978f;
   font-size: 19rpx;
   line-height: 28rpx;
   text-align: center;
