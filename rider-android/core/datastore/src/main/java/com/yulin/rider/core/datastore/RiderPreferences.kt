@@ -47,6 +47,7 @@ object RiderPreferenceKeys {
     val LAST_ROUTE_AT = longPreferencesKey("last_route_at")
 
     val UPDATE_SKIPPED_VERSION_CODE = longPreferencesKey("update_skipped_version_code")
+    val UPDATE_ACCEPTED_VERSION_CODE = longPreferencesKey("update_accepted_version_code")
     val UPDATE_PARTIAL_ETAG = stringPreferencesKey("update_partial_etag")
     val UPDATE_LAST_CHECK_AT = longPreferencesKey("update_last_check_at")
 }

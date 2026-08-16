@@ -92,6 +92,7 @@ class MainActivity : ComponentActivity() {
     /** 常驻通知上的「在线时长」起点,下班清空。 */
     private var onDutyAtMillis: Long? = null
     private var onDutyShiftId: Long? = null
+    private val riderOnDuty = MutableStateFlow(false)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -133,6 +134,7 @@ class MainActivity : ComponentActivity() {
                     ),
                 ) {
                     val updateState by updateController.state.collectAsState()
+                    val onDuty by riderOnDuty.collectAsState()
                     Box(Modifier.fillMaxSize()) {
                         RiderNavHost(
                             tokenStore = tokenStore,
@@ -148,7 +150,11 @@ class MainActivity : ComponentActivity() {
                             modifier = Modifier.fillMaxSize(),
                         )
                         ForceUpdateGate(state = updateState, controller = updateController)
-                        OptionalUpdateDialog(state = updateState, controller = updateController)
+                        OptionalUpdateDialog(
+                            state = updateState,
+                            controller = updateController,
+                            riderOnDuty = onDuty,
+                        )
                     }
 
                     val alert by dutyAlert.collectAsState()
@@ -223,6 +229,7 @@ class MainActivity : ComponentActivity() {
                 val startedAt = RiderTime.toEpochMillis(onDutyAt) ?: System.currentTimeMillis()
                 onDutyShiftId = shiftId
                 onDutyAtMillis = startedAt
+                riderOnDuty.value = true
                 locationController.confirmDuty(shiftId, startedAt)
                 ActionSyncWorker.enqueuePeriodic(this@MainActivity)
                 pushController.onDutyStarted()
@@ -304,6 +311,7 @@ class MainActivity : ComponentActivity() {
      * 不轮询就等于接不到单,比位置缺失严重得多。
      */
     private fun startDutyResources(shiftId: Long, startedAtMillis: Long) {
+        riderOnDuty.value = true
         when (val result = locationController.start(shiftId, startedAtMillis)) {
             is LocationStartResult.Started -> {
                 onDutyShiftId = shiftId
@@ -321,6 +329,7 @@ class MainActivity : ComponentActivity() {
     private fun stopDutyResources() {
         onDutyShiftId = null
         onDutyAtMillis = null
+        riderOnDuty.value = false
         locationController.stop()
         locationController.updateShift(null, null, 0)
         locationController.bindTask(null, null)
@@ -329,6 +338,7 @@ class MainActivity : ComponentActivity() {
 
     private fun endSession() {
         onDutyAtMillis = null
+        riderOnDuty.value = false
         lifecycleScope.launch { sessionCoordinator.endSession() }
     }
 

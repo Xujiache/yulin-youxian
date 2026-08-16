@@ -58,8 +58,14 @@ fun ForceUpdateGate(state: UpdateUiState, controller: UpdateController) {
 }
 
 @Composable
-fun OptionalUpdateDialog(state: UpdateUiState, controller: UpdateController) {
-    if (state.policy != UpdatePolicyResolver.OPTIONAL || !state.showOptional) return
+fun OptionalUpdateDialog(
+    state: UpdateUiState,
+    controller: UpdateController,
+    riderOnDuty: Boolean,
+) {
+    if (!UpdatePromptPolicy.shouldShowOptionalDialog(riderOnDuty, state.policy, state.showOptional)) {
+        return
+    }
     val scope = rememberCoroutineScope()
     AlertDialog(
         onDismissRequest = { controller.dismissOptional() },
@@ -69,11 +75,13 @@ fun OptionalUpdateDialog(state: UpdateUiState, controller: UpdateController) {
         },
         confirmButton = {},
         dismissButton = {
-            MtPrimaryButton(
-                text = "以后再说",
-                action = MtAction.SECONDARY,
-                onClick = { scope.launch { controller.skipOptional() } },
-            )
+            if (!state.accepted && !state.downloading && !state.ready) {
+                MtPrimaryButton(
+                    text = "以后再说",
+                    action = MtAction.SECONDARY,
+                    onClick = { scope.launch { controller.skipOptional() } },
+                )
+            }
         },
     )
 }
@@ -108,7 +116,11 @@ fun UpdatePanel(
             style = MaterialTheme.typography.bodyLarge,
         )
         Text(
-            text = if (state.managedMode == ManagedDevice.DEVICE_OWNER) "本机已纳管，将静默安装。" else "本机需系统确认安装。",
+            text = when {
+                state.managedMode == ManagedDevice.DEVICE_OWNER -> "本机已纳管，将静默安装。"
+                state.accepted || state.downloading -> "已开始下载。关闭弹窗或离开页面也不会中断。"
+                else -> "本机需系统确认安装。未上线时会弹窗提醒。"
+            },
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -130,11 +142,20 @@ fun UpdatePanel(
         }
         if (!state.ready && !state.downloading) {
             MtPrimaryButton(
-                text = "下载更新",
+                text = "立即更新",
                 action = MtAction.ACCEPT,
                 modifier = Modifier.fillMaxWidth(),
                 enabled = !state.checking,
-                onClick = { scope.launch { controller.startDownload() } },
+                onClick = { controller.acceptUpdate() },
+            )
+        }
+        if (state.downloading) {
+            MtPrimaryButton(
+                text = "正在下载，无法取消",
+                action = MtAction.SECONDARY,
+                modifier = Modifier.fillMaxWidth(),
+                enabled = false,
+                onClick = {},
             )
         }
         if (state.ready) {
