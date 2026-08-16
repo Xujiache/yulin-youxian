@@ -28,7 +28,8 @@ public final class DeliveryTestDatabase {
             "V17__store_coords_xingjing_market.sql",
             "V18__store_coords_operator_pin.sql",
             "V19__customer_live_tracking.sql",
-            "V20__rider_app_release.sql"
+            "V20__rider_app_release.sql",
+            "V21__fixed_four_prize_lottery.sql"
     );
 
     private DeliveryTestDatabase() {

@@ -126,10 +126,12 @@ class LotteryHardeningTests {
 
     @Test
     void pendingOrderGiftCannotBeFulfilledSoBothStocksStayRefundable() {
-        service.saveCampaign(campaign(2, null, List.of(goodsPrize(104L, 1, 10))));
+        service.saveCampaign(campaign(2, null, LotteryCampaignFixtures.onlyNone()));
         BigDecimal productStockBefore = storefront.product(104L).stockQty();
         OrderDetailDto order = createOrder();
-        DrawResult gift = triggerAndDraw(order);
+        DrawResult gift = LotteryCampaignFixtures.seedHistoricalGoodsDraw(
+                dao, storefront, jdbcTemplate, order, USER_ID, 104L, 1
+        );
 
         BusinessException blocked = assertThrows(
                 BusinessException.class,
@@ -146,9 +148,11 @@ class LotteryHardeningTests {
 
     @Test
     void paidOrderGiftFulfillmentSucceedsAndReachesTerminalState() {
-        service.saveCampaign(campaign(2, null, List.of(goodsPrize(104L, 1, 10))));
+        service.saveCampaign(campaign(2, null, LotteryCampaignFixtures.onlyNone()));
         OrderDetailDto order = createOrder();
-        DrawResult gift = triggerAndDraw(order);
+        DrawResult gift = LotteryCampaignFixtures.seedHistoricalGoodsDraw(
+                dao, storefront, jdbcTemplate, order, USER_ID, 104L, 1
+        );
         payOrder(order.id());
 
         AdminDraw fulfilled = service.fulfill(gift.drawId(), "已随单送达");
@@ -213,7 +217,7 @@ class LotteryHardeningTests {
 
     @Test
     void drawTakesRowGuardsForUserAndBudgetInsteadOfLockingTheCampaign() {
-        service.saveCampaign(campaign(2, 100000, List.of(discountPrize(100, 10))));
+        service.saveCampaign(campaign(2, 100000, LotteryCampaignFixtures.firstThreshold(10_000, 200, 100)));
         triggerAndDraw(createOrder());
 
         assertEquals(1, guardRows(USER_ID), "用户维度护栏行");
@@ -222,7 +226,7 @@ class LotteryHardeningTests {
 
     @Test
     void unlimitedBudgetDrawDoesNotTakeTheBudgetGuard() {
-        service.saveCampaign(campaign(2, null, List.of(discountPrize(100, 10))));
+        service.saveCampaign(campaign(2, null, LotteryCampaignFixtures.firstThreshold(10_000, 200, 100)));
         triggerAndDraw(createOrder());
 
         assertEquals(1, guardRows(USER_ID));
@@ -278,7 +282,7 @@ class LotteryHardeningTests {
 
     @Test
     void discountDrawClosesThePrepayBeforeRotatingTheTradeNo() {
-        service.saveCampaign(campaign(3, null, List.of(discountPrize(100, 10))));
+        service.saveCampaign(campaign(3, null, LotteryCampaignFixtures.firstThreshold(10_000, 200, 100)));
         OrderDetailDto order = createOrder();
         String originalPaymentNo = order.paymentOrderNo();
 
@@ -290,9 +294,11 @@ class LotteryHardeningTests {
 
     @Test
     void restartFallsBackToOriginalPriceWhenGiftCanNoLongerBeReserved() {
-        service.saveCampaign(campaign(2, null, List.of(goodsPrize(104L, 1, 10), nonePrize(20))));
+        service.saveCampaign(campaign(2, null, LotteryCampaignFixtures.onlyNone()));
         OrderDetailDto order = createOrder();
-        DrawResult gift = triggerAndDraw(order);
+        DrawResult gift = LotteryCampaignFixtures.seedHistoricalGoodsDraw(
+                dao, storefront, jdbcTemplate, order, USER_ID, 104L, 1
+        );
         assertEquals("GOODS", gift.prizeType());
 
         LocalDateTime expiredAt = LocalDateTime.parse(order.createdAt().replace(" ", "T")).plusHours(7);
@@ -311,11 +317,13 @@ class LotteryHardeningTests {
 
     @Test
     void fullRefundKeepsDispatchedGiftButRestoresUndispatchedOne() {
-        service.saveCampaign(campaign(2, null, List.of(goodsPrize(104L, 2, 10))));
+        service.saveCampaign(campaign(2, null, LotteryCampaignFixtures.onlyNone()));
         BigDecimal productStockBefore = storefront.product(104L).stockQty();
 
         OrderDetailDto dispatched = createOrder();
-        triggerAndDraw(dispatched);
+        LotteryCampaignFixtures.seedHistoricalGoodsDraw(
+                dao, storefront, jdbcTemplate, dispatched, USER_ID, 104L, 2
+        );
         payOrder(dispatched.id());
         storefront.deliverOrder(dispatched.id());
         approveFullRefund(dispatched.id());
@@ -328,7 +336,9 @@ class LotteryHardeningTests {
         assertEquals(1, marketingStockRemaining(), "营销库存同样按损失处理");
 
         OrderDetailDto pending = createOrder();
-        triggerAndDraw(pending);
+        LotteryCampaignFixtures.seedHistoricalGoodsDraw(
+                dao, storefront, jdbcTemplate, pending, USER_ID, 104L, 1
+        );
         payOrder(pending.id());
         approveFullRefund(pending.id());
 
@@ -342,7 +352,7 @@ class LotteryHardeningTests {
 
     @Test
     void reconcileClosesPrepayBeforeRestoringPriceAndConverges() {
-        service.saveCampaign(campaign(3, null, List.of(discountPrize(100, 10))));
+        service.saveCampaign(campaign(3, null, LotteryCampaignFixtures.firstThreshold(10_000, 200, 100)));
         OrderDetailDto order = createOrder();
         DrawResult drawn = triggerAndDraw(order);
         String discountedPaymentNo = storefront.order(order.id()).paymentOrderNo();
@@ -363,10 +373,12 @@ class LotteryHardeningTests {
 
     @Test
     void reconcileClearsProjectionOnPaidOrderWithoutTouchingAmounts() {
-        service.saveCampaign(campaign(2, null, List.of(goodsPrize(104L, 1, 10))));
+        service.saveCampaign(campaign(2, null, LotteryCampaignFixtures.onlyNone()));
         BigDecimal productStockBefore = storefront.product(104L).stockQty();
         OrderDetailDto order = createOrder();
-        DrawResult gift = triggerAndDraw(order);
+        DrawResult gift = LotteryCampaignFixtures.seedHistoricalGoodsDraw(
+                dao, storefront, jdbcTemplate, order, USER_ID, 104L, 1
+        );
         payOrder(order.id());
         int paidAmount = storefront.adminOrder(order.id()).paidAmount();
         jdbcTemplate.update("DELETE FROM marketing_lottery_draw WHERE id = ?", gift.drawId());
@@ -384,9 +396,11 @@ class LotteryHardeningTests {
 
     @Test
     void completedOrderDrawLeavesTheReconcileScope() {
-        service.saveCampaign(campaign(2, null, List.of(goodsPrize(104L, 1, 10))));
+        service.saveCampaign(campaign(2, null, LotteryCampaignFixtures.onlyNone()));
         OrderDetailDto order = createOrder();
-        triggerAndDraw(order);
+        LotteryCampaignFixtures.seedHistoricalGoodsDraw(
+                dao, storefront, jdbcTemplate, order, USER_ID, 104L, 1
+        );
         payOrder(order.id());
         storefront.deliverOrder(order.id());
         storefront.completeOrder(order.id());
@@ -400,7 +414,7 @@ class LotteryHardeningTests {
 
     @Test
     void adminDrawsArePagedAndCarryAuditFields() {
-        service.saveCampaign(campaign(3, null, List.of(nonePrize(10))));
+        service.saveCampaign(campaign(3, null, LotteryCampaignFixtures.onlyNone()));
         OrderDetailDto first = createOrder();
         OrderDetailDto second = createOrder();
         triggerAndDraw(first);
@@ -426,7 +440,7 @@ class LotteryHardeningTests {
 
     @Test
     void drawnAtTracksWhenThePrizeTookEffectNotWhenTheRowWasCreated() {
-        service.saveCampaign(campaign(3, null, List.of(nonePrize(10))));
+        service.saveCampaign(campaign(3, null, LotteryCampaignFixtures.onlyNone()));
         OrderDetailDto order = createOrder();
         triggerAndDraw(order);
         // 快照已经写好、流水状态还停在 RESERVED，正是对账要补的那一步。
@@ -445,7 +459,7 @@ class LotteryHardeningTests {
 
     @Test
     void staleChallengesAreCleanedUp() {
-        service.saveCampaign(campaign(3, null, List.of(nonePrize(10))));
+        service.saveCampaign(campaign(3, null, LotteryCampaignFixtures.onlyNone()));
         service.challenge(createOrder().id());
         assertEquals(1, challengeRows());
 
@@ -456,39 +470,49 @@ class LotteryHardeningTests {
     }
 
     @Test
-    void wheelOnlyShowsPrizesThatCanStillBeWon() {
-        service.saveCampaign(campaign(2, null, List.of(goodsPrize(104L, 1, 10), nonePrize(20))));
+    void wheelAlwaysShowsFourSlotsEvenWhenAPrizeIsUnavailable() {
+        service.saveCampaign(campaign(2, null, List.of(
+                LotteryCampaignFixtures.threshold(LotteryModels.PrizeCode.FIRST, 5000, 99_000, 800),
+                LotteryCampaignFixtures.inactive(LotteryModels.PrizeCode.SECOND),
+                LotteryCampaignFixtures.inactive(LotteryModels.PrizeCode.THIRD),
+                LotteryCampaignFixtures.thankYou(5000)
+        )));
         OrderDetailDto first = createOrder();
         OrderDetailDto second = createOrder();
-        assertEquals(2, service.orderState(second.id()).prizes().size());
+        assertEquals(4, service.orderState(second.id()).prizes().size());
 
-        assertEquals("GOODS", triggerAndDraw(first).prizeType());
+        DrawResult result = triggerAndDraw(first);
+        assertEquals("NONE", result.prizeType());
+        assertEquals(3, result.prizeIndex());
 
         OrderState state = service.orderState(second.id());
-        assertEquals(1, state.prizes().size(), "库存抽光的赠品不能继续出现在转盘上");
-        assertEquals("NONE", state.prizes().get(0).type());
+        assertEquals(4, state.prizes().size(), "未达门槛的奖项仍要出现在转盘上");
+        assertEquals("FIRST", state.prizes().get(0).prizeCode());
+        assertEquals("NONE", state.prizes().get(3).prizeCode());
     }
 
     @Test
-    void prizeIndexPointsIntoTheListSentToTheClient() {
-        Prize disabledDiscount = new Prize(
-                null, "DISCOUNT", "已停用减免", 100,
-                null, null, null, 0, 0, null, false, 10
-        );
-        service.saveCampaign(campaign(2, null, List.of(disabledDiscount, nonePrize(20))));
+    void prizeIndexUsesFixedSlotEvenWhenOtherPrizesAreIneligible() {
+        service.saveCampaign(campaign(2, null, List.of(
+                LotteryCampaignFixtures.threshold(LotteryModels.PrizeCode.FIRST, 1, 99_000, 800),
+                LotteryCampaignFixtures.inactive(LotteryModels.PrizeCode.SECOND),
+                LotteryCampaignFixtures.inactive(LotteryModels.PrizeCode.THIRD),
+                LotteryCampaignFixtures.thankYou(9999)
+        )));
         OrderDetailDto order = createOrder();
         OrderState state = service.orderState(order.id());
-        assertEquals(1, state.prizes().size());
+        assertEquals(4, state.prizes().size());
 
         DrawResult result = triggerAndDraw(order);
 
-        assertEquals(0, result.prizeIndex(), "下标必须落在下发列表里，而不是未过滤的原始列表");
-        assertEquals(state.prizes().get(0).id(), result.prizeId());
+        assertEquals(3, result.prizeIndex(), "下标必须指向固定槽位而不是动态候选列表");
+        assertEquals(state.prizes().get(3).id(), result.prizeId());
+        assertEquals("NONE", result.prizeCode());
     }
 
     @Test
     void orderStateCarriesStableReasonCodes() {
-        service.saveCampaign(campaign(1, null, List.of(nonePrize(10))));
+        service.saveCampaign(campaign(1, null, LotteryCampaignFixtures.onlyNone()));
         OrderDetailDto first = createOrder();
         OrderDetailDto second = createOrder();
         assertEquals(ReasonCode.ELIGIBLE, service.orderState(first.id()).reasonCode());
@@ -513,7 +537,7 @@ class LotteryHardeningTests {
 
     @Test
     void lineItemRefundDeductsItsShareOfTheDiscount() {
-        service.saveCampaign(campaign(2, null, List.of(discountPrize(100, 10))));
+        service.saveCampaign(campaign(2, null, LotteryCampaignFixtures.firstThreshold(10_000, 200, 100)));
         OrderDetailDto order = createMultiItemOrder();
         triggerAndDraw(order);
         payOrder(order.id());
@@ -543,30 +567,29 @@ class LotteryHardeningTests {
 
     @Test
     void drawnOrderKeepsTheWinningPrizeAndRealignsItsIndex() {
-        service.saveCampaign(campaign(2, null, List.of(goodsPrize(104L, 1, 10), nonePrize(20))));
+        service.saveCampaign(campaign(2, null, LotteryCampaignFixtures.firstThreshold(10_000, 200, 100)));
         OrderDetailDto order = createOrder();
         DrawResult result = triggerAndDraw(order);
-        assertEquals("GOODS", result.prizeType());
-        assertEquals(0, marketingStockRemaining());
+        assertEquals("FIRST", result.prizeCode());
 
         OrderState afterDraw = service.orderState(order.id());
-        assertEquals(2, afterDraw.prizes().size(), "库存已归零，中奖奖项仍要留在下发列表里");
+        assertEquals(4, afterDraw.prizes().size(), "已抽订单仍下发完整四格");
         assertEquals(
                 result.prizeId(),
                 afterDraw.prizes().get(afterDraw.result().prizeIndex()).id(),
                 "prizeIndex 必须指向下发列表里的中奖奖项"
         );
 
-        // 运营调整排序后下发列表顺序变了，下标要按本次下发的列表重算而不是沿用流水里的旧值。
-        jdbcTemplate.update("UPDATE marketing_lottery_prize SET sort_order = 30 WHERE type = 'GOODS'");
-        OrderState reordered = service.orderState(order.id());
-        assertEquals(1, reordered.result().prizeIndex());
-        assertEquals(result.prizeId(), reordered.prizes().get(1).id());
+        service.saveCampaign(campaign(2, null, LotteryCampaignFixtures.onlyNone()));
+        OrderState afterConfigChange = service.orderState(order.id());
+        assertEquals(result.prizeId(), afterConfigChange.result().prizeId());
+        assertEquals("FIRST", afterConfigChange.result().prizeCode());
+        assertEquals(result.prizeId(), afterConfigChange.prizes().get(0).id());
     }
 
     @Test
     void drawSearchPushesTheTimeWindowIntoSqlAndPaging() {
-        service.saveCampaign(campaign(5, null, List.of(nonePrize(10))));
+        service.saveCampaign(campaign(5, null, LotteryCampaignFixtures.onlyNone()));
         OrderDetailDto old = createOrder();
         triggerAndDraw(old);
         jdbcTemplate.update(
@@ -600,17 +623,20 @@ class LotteryHardeningTests {
 
     @Test
     void everyAcceptedStatusFilterAgreesWithTheStatusesTheApiReturns() {
-        service.saveCampaign(campaign(9, null, List.of(goodsPrize(104L, 2, 10), nonePrize(20))));
+        service.saveCampaign(campaign(9, null, LotteryCampaignFixtures.onlyNone()));
         OrderDetailDto applied = createOrder();
-        triggerAndDraw(applied);
+        LotteryCampaignFixtures.seedHistoricalGoodsDraw(
+                dao, storefront, jdbcTemplate, applied, USER_ID, 104L, 2
+        );
         payOrder(applied.id());
 
         OrderDetailDto settled = createOrder();
-        DrawResult settledDraw = triggerAndDraw(settled);
+        DrawResult settledDraw = LotteryCampaignFixtures.seedHistoricalGoodsDraw(
+                dao, storefront, jdbcTemplate, settled, USER_ID, 104L, 1
+        );
         payOrder(settled.id());
         service.fulfill(settledDraw.drawId(), "门店自提已交付");
 
-        // 赠品库存抽完之后才会轮到 NONE，用来覆盖 NOT_REQUIRED。
         OrderDetailDto notRequired = createOrder();
         triggerAndDraw(notRequired);
 
@@ -650,10 +676,10 @@ class LotteryHardeningTests {
 
     @Test
     void unlimitedDailyBudgetSurvivesTheSaveReadSaveRoundTrip() {
-        service.saveCampaign(campaign(2, 10_000, List.of(discountPrize(100, 10))));
+        service.saveCampaign(campaign(2, 10_000, LotteryCampaignFixtures.firstThreshold(10_000, 200, 100)));
         assertEquals(10_000, service.adminCampaign().dailyBudgetAmount());
 
-        service.saveCampaign(campaign(2, null, List.of(discountPrize(100, 10))));
+        service.saveCampaign(campaign(2, null, LotteryCampaignFixtures.firstThreshold(10_000, 200, 100)));
         assertNull(service.adminCampaign().dailyBudgetAmount(), "不限预算必须存成 NULL 而不是 0");
         assertNull(jdbcTemplate.queryForObject(
                 "SELECT daily_budget_amount FROM marketing_lottery_campaign", Integer.class));
@@ -667,7 +693,7 @@ class LotteryHardeningTests {
 
     @Test
     void drawsEndpointAcceptsPageSizeAliasFromTheAdminConsole() {
-        service.saveCampaign(campaign(5, null, List.of(nonePrize(10))));
+        service.saveCampaign(campaign(5, null, LotteryCampaignFixtures.onlyNone()));
         triggerAndDraw(createOrder());
         triggerAndDraw(createOrder());
         AdminLotteryController controller = new AdminLotteryController(service);
@@ -682,7 +708,7 @@ class LotteryHardeningTests {
 
     @Test
     void publicCampaignIsCachedAndInvalidatedOnSave() {
-        service.saveCampaign(campaign(2, null, List.of(nonePrize(10))));
+        service.saveCampaign(campaign(2, null, LotteryCampaignFixtures.onlyNone()));
 
         PublicCampaign cached = service.publicCampaign();
         assertSame(cached, service.publicCampaign());
@@ -691,7 +717,7 @@ class LotteryHardeningTests {
         assertNotSame(cached, service.publicCampaign(), "TTL 到期后要重新读库");
 
         PublicCampaign refreshed = service.publicCampaign();
-        service.saveCampaign(campaign(2, null, List.of(nonePrize(10))));
+        service.saveCampaign(campaign(2, null, LotteryCampaignFixtures.onlyNone()));
         assertNotSame(refreshed, service.publicCampaign(), "改配置后缓存必须失效");
     }
 
@@ -719,37 +745,11 @@ class LotteryHardeningTests {
     }
 
     private void disableGiftPrize() {
-        Campaign current = service.adminCampaign();
-        Tier tier = current.tiers().get(0);
-        List<Prize> prizes = tier.prizes().stream()
-                .map(prize -> "GOODS".equals(prize.type())
-                        ? new Prize(
-                                prize.id(), prize.type(), prize.name(), prize.discountAmount(),
-                                prize.productId(), prize.skuId(), prize.imageUrl(), 0,
-                                prize.stockTotal(), prize.stockRemaining(), false, prize.sortOrder())
-                        : prize)
-                .toList();
-        service.saveCampaign(new Campaign(
-                current.id(),
-                current.enabled(),
-                current.name(),
-                current.startAt(),
-                current.endAt(),
-                current.dailyUserLimit(),
-                current.dailyBudgetAmount(),
-                current.shareTitle(),
-                current.shareDescription(),
-                current.shareImageUrl(),
-                List.of(new Tier(
-                        tier.id(),
-                        tier.name(),
-                        tier.minProductAmount(),
-                        tier.maxProductAmount(),
-                        tier.enabled(),
-                        tier.sortOrder(),
-                        prizes
-                ))
-        ));
+        jdbcTemplate.update("""
+                UPDATE marketing_lottery_prize
+                SET enabled = 0, weight = 0, stock_remaining = 0
+                WHERE type = 'GOODS'
+                """);
     }
 
     private Campaign disabled(Campaign current) {
@@ -764,7 +764,8 @@ class LotteryHardeningTests {
                 current.shareTitle(),
                 current.shareDescription(),
                 current.shareImageUrl(),
-                current.tiers()
+                current.tiers(),
+                current.prizes()
         );
     }
 
@@ -773,11 +774,11 @@ class LotteryHardeningTests {
     }
 
     private int marketingStockRemaining() {
-        return service.adminCampaign().tiers().get(0).prizes().stream()
-                .filter(prize -> "GOODS".equals(prize.type()))
-                .findFirst()
-                .orElseThrow()
-                .stockRemaining();
+        Integer remaining = jdbcTemplate.queryForObject(
+                "SELECT COALESCE(SUM(stock_remaining), 0) FROM marketing_lottery_prize WHERE type = 'GOODS'",
+                Integer.class
+        );
+        return remaining == null ? 0 : remaining;
     }
 
     private int guardRows(long userId) {
@@ -826,41 +827,92 @@ class LotteryHardeningTests {
         ));
     }
 
+    @Test
+    void promotionFailureDoesNotConsumeChallengeOrWriteDecision() {
+        FailingApplyStorefront failing = new FailingApplyStorefront(tempDir.resolve("failing.json").toString());
+        Long failingAddressId = failing.createAddress(new CreateAddressRequest(
+                "失败回滚用户",
+                "13800000002",
+                "3号楼 303室",
+                "测试小区",
+                31.2304,
+                121.4737,
+                true
+        )).id();
+        failing.addCartItem(106L, BigDecimal.ONE);
+        CartDto cart = failing.cart();
+        OrderDetailDto order = failing.createOrder(new CreateOrderRequest(
+                failingAddressId,
+                1L,
+                "",
+                cart.items().stream().map(item -> item.id()).toList()
+        ));
+        TransactionTemplate transactions = new TransactionTemplate(
+                new DataSourceTransactionManager(jdbcTemplate.getDataSource())
+        );
+        LotteryService failingService = new LotteryService(
+                dao,
+                failing,
+                payClient,
+                LotteryUnitOfWork.of(transactions),
+                clock,
+                new FirstCandidateRandom(),
+                Duration.ofMinutes(10),
+                Duration.ofHours(72),
+                200,
+                Duration.ofDays(7),
+                Duration.ofSeconds(30)
+        );
+        failingService.saveCampaign(campaign(3, null, LotteryCampaignFixtures.firstThreshold(10_000, 200, 100)));
+        OrderState challenge = failingService.challenge(order.id());
+        failingService.shareTriggered(order.id(), challenge.challengeToken());
+
+        assertThrows(IllegalStateException.class, () -> failingService.draw(order.id(), challenge.challengeToken()));
+        assertEquals(Integer.valueOf(0), jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM marketing_lottery_draw", Integer.class));
+        assertEquals(Integer.valueOf(0), jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM marketing_lottery_order_decision", Integer.class));
+        assertNull(jdbcTemplate.queryForObject(
+                "SELECT consumed_at FROM marketing_lottery_challenge WHERE order_id = ?",
+                java.sql.Timestamp.class,
+                order.id()
+        ));
+    }
+
+    @Test
+    void concurrentRetryReturnsTheSameDrawAndPublicApiOmitsProbability() throws Exception {
+        service.saveCampaign(campaign(3, null, LotteryCampaignFixtures.firstThreshold(10_000, 200, 100)));
+        OrderDetailDto order = createOrder();
+        OrderState challenge = service.challenge(order.id());
+        service.shareTriggered(order.id(), challenge.challengeToken());
+        DrawResult first = service.draw(order.id(), challenge.challengeToken());
+        DrawResult retry = service.draw(order.id(), challenge.challengeToken());
+        assertEquals(first.drawId(), retry.drawId());
+        assertEquals(first.prizeCode(), retry.prizeCode());
+        assertEquals(first.discountAmount(), retry.discountAmount());
+
+        String publicJson = new ObjectMapper().writeValueAsString(service.publicCampaign());
+        assertFalse(publicJson.contains("probabilityBp"));
+        assertFalse(publicJson.contains("\"weight\""));
+        assertEquals(4, service.publicCampaign().prizes().size());
+    }
+
+    @Test
+    void legacyDrawWithoutPrizeCodeRemainsReadable() {
+        service.saveCampaign(campaign(2, null, LotteryCampaignFixtures.onlyNone()));
+        OrderDetailDto order = createOrder();
+        DrawResult gift = LotteryCampaignFixtures.seedHistoricalGoodsDraw(
+                dao, storefront, jdbcTemplate, order, USER_ID, 104L, 1
+        );
+        jdbcTemplate.update("UPDATE marketing_lottery_draw SET prize_code = NULL WHERE id = ?", gift.drawId());
+        OrderState state = service.orderState(order.id());
+        assertEquals(gift.drawId(), state.result().drawId());
+        assertNull(state.result().prizeCode());
+        assertEquals(4, state.prizes().size());
+    }
+
     private Campaign campaign(Integer dailyLimit, Integer dailyBudget, List<Prize> prizes) {
-        return new Campaign(
-                null,
-                true,
-                "随机减免加固测试",
-                "2026-08-01T00:00:00",
-                "2026-09-01T00:00:00",
-                dailyLimit,
-                dailyBudget,
-                "分享后抽奖",
-                "仅记录朋友圈菜单触发",
-                "/lottery.png",
-                List.of(new Tier(null, "满 10 元", 1000, null, true, 10, prizes))
-        );
-    }
-
-    private Prize discountPrize(int amount, int sortOrder) {
-        return new Prize(
-                null, "DISCOUNT", "随机减 " + amount + " 分", amount,
-                null, null, null, 1, 0, null, true, sortOrder
-        );
-    }
-
-    private Prize goodsPrize(long productId, int stock, int sortOrder) {
-        return new Prize(
-                null, "GOODS", "随机赠品", null,
-                productId, null, null, 1, stock, null, true, sortOrder
-        );
-    }
-
-    private Prize nonePrize(int sortOrder) {
-        return new Prize(
-                null, "NONE", "谢谢参与", null,
-                null, null, null, 1, 0, null, true, sortOrder
-        );
+        return LotteryCampaignFixtures.campaign(dailyLimit, dailyBudget, prizes);
     }
 
     private static final class MutableClock extends Clock {
@@ -924,6 +976,21 @@ class LotteryHardeningTests {
         @Override
         public void closePayment(OrderDetailDto order) {
             closedPaymentNos.add(order.paymentOrderNo());
+        }
+    }
+
+    private static final class FailingApplyStorefront extends StorefrontService {
+        private FailingApplyStorefront(String path) {
+            super(path, true);
+        }
+
+        @Override
+        public synchronized OrderPromotionProjection applyLotteryPromotion(
+                long orderId,
+                long userId,
+                OrderPromotionProjection promotion
+        ) {
+            throw new IllegalStateException("promotion failed");
         }
     }
 

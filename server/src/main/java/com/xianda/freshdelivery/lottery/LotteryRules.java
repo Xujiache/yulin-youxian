@@ -2,21 +2,25 @@ package com.xianda.freshdelivery.lottery;
 
 import com.xianda.freshdelivery.common.BusinessException;
 import com.xianda.freshdelivery.lottery.LotteryModels.Campaign;
+import com.xianda.freshdelivery.lottery.LotteryModels.DiscountMode;
 import com.xianda.freshdelivery.lottery.LotteryModels.Prize;
+import com.xianda.freshdelivery.lottery.LotteryModels.PrizeCode;
 import com.xianda.freshdelivery.lottery.LotteryModels.PrizeType;
 import com.xianda.freshdelivery.lottery.LotteryModels.Tier;
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.HashSet;
+import java.util.EnumSet;
 import java.util.List;
+import java.util.OptionalInt;
 import java.util.Set;
 
 public final class LotteryRules {
     /** 与 V10 的列宽保持一致，超长会在 MySQL 侧报 1406 并变成 500。 */
     private static final int NAME_MAX_LENGTH = 128;
     private static final int TEXT_MAX_LENGTH = 512;
+    public static final int PROBABILITY_SCALE = 10_000;
 
     private LotteryRules() {
     }
@@ -43,118 +47,146 @@ public final class LotteryRules {
         if (startAt != null && endAt != null && !startAt.isBefore(endAt)) {
             throw new BusinessException(400, "活动结束时间必须晚于开始时间");
         }
-
-        List<Tier> enabledTiers = campaign.tiers().stream()
-                .filter(tier -> tier != null && !Boolean.FALSE.equals(tier.enabled()))
-                .sorted(Comparator.comparingInt(tier -> value(tier.minProductAmount(), -1)))
-                .toList();
-        if (Boolean.TRUE.equals(campaign.enabled()) && enabledTiers.isEmpty()) {
-            throw new BusinessException(400, "启用活动前至少配置一个启用阶梯");
-        }
-        Set<Long> tierIds = new HashSet<>();
-        Set<Long> prizeIds = new HashSet<>();
-        for (int index = 0; index < enabledTiers.size(); index++) {
-            Tier tier = enabledTiers.get(index);
-            validateTier(tier, index == enabledTiers.size() - 1, tierIds, prizeIds);
-            if (index > 0) {
-                Tier previous = enabledTiers.get(index - 1);
-                if (previous.maxProductAmount() == null
-                        || previous.maxProductAmount() > tier.minProductAmount()) {
-                    throw new BusinessException(400, "启用阶梯金额区间不能重叠");
-                }
-            }
-        }
-        for (Tier tier : campaign.tiers()) {
-            if (tier == null || !Boolean.FALSE.equals(tier.enabled())) {
-                continue;
-            }
-            validateTier(tier, true, tierIds, prizeIds);
-        }
+        validateFixedPrizes(campaign.prizes());
     }
 
-    private static void validateTier(
-            Tier tier,
-            boolean mayHaveOpenEnd,
-            Set<Long> tierIds,
-            Set<Long> prizeIds
-    ) {
-        if (!hasText(tier.name())) {
-            throw new BusinessException(400, "阶梯名称不能为空");
+    public static void validateFixedPrizes(List<Prize> prizes) {
+        if (prizes == null || prizes.size() != PrizeCode.values().length) {
+            throw new BusinessException(400, "必须配置一等奖、二等奖、三等奖和谢谢惠顾四个固定奖项");
         }
-        ensureLength(tier.name(), NAME_MAX_LENGTH, "阶梯名称");
-        if (tier.id() != null && !tierIds.add(tier.id())) {
-            throw new BusinessException(400, "阶梯 ID 重复");
-        }
-        if (tier.minProductAmount() == null || tier.minProductAmount() < 0) {
-            throw new BusinessException(400, "阶梯最低商品金额不能小于 0");
-        }
-        if (tier.maxProductAmount() == null && !mayHaveOpenEnd && !Boolean.FALSE.equals(tier.enabled())) {
-            throw new BusinessException(400, "仅最后一个启用阶梯可不设置最高金额");
-        }
-        if (tier.maxProductAmount() != null
-                && tier.maxProductAmount() <= tier.minProductAmount()) {
-            throw new BusinessException(400, "阶梯最高金额必须大于最低金额");
-        }
-        long totalWeight = 0;
-        int enabledPrizeCount = 0;
-        for (Prize prize : tier.prizes()) {
+        Set<PrizeCode> seen = EnumSet.noneOf(PrizeCode.class);
+        int totalProbability = 0;
+        for (Prize prize : prizes) {
             if (prize == null) {
                 throw new BusinessException(400, "奖项配置不能为空");
             }
-            if (prize.id() != null && !prizeIds.add(prize.id())) {
-                throw new BusinessException(400, "奖项 ID 重复");
+            PrizeCode code = prizeCode(prize.prizeCode());
+            if (!seen.add(code)) {
+                throw new BusinessException(400, "固定奖项槽位重复：" + code.displayName());
             }
-            PrizeType type = prizeType(prize.type());
-            if (!hasText(prize.name())) {
-                throw new BusinessException(400, "奖项名称不能为空");
-            }
-            ensureLength(prize.name(), NAME_MAX_LENGTH, "奖项名称");
-            ensureLength(prize.imageUrl(), TEXT_MAX_LENGTH, "奖项图片地址");
-            if (prize.weight() == null || prize.weight() < 0) {
-                throw new BusinessException(400, "奖项权重不能小于 0");
-            }
-            if (!Boolean.FALSE.equals(prize.enabled()) && prize.weight() == 0) {
-                throw new BusinessException(400, "启用奖项的权重必须大于 0");
-            }
-            if (prize.stockTotal() != null && prize.stockTotal() < 0) {
-                throw new BusinessException(400, "营销库存不能小于 0");
-            }
-            if (type == PrizeType.DISCOUNT
-                    && (prize.discountAmount() == null || prize.discountAmount() <= 0)) {
-                throw new BusinessException(400, "减免奖项金额必须大于 0");
-            }
-            // 实际减免是 min(配置额, 应付 - 1)，转盘展示的却是名义金额。减免额不小于阶梯
-            // 下限时就会出现「减 5 元实际减 3.99」，所以配置阶段直接拦掉。
-            if (type == PrizeType.DISCOUNT
-                    && prize.discountAmount() != null
-                    && tier.minProductAmount() != null
-                    && prize.discountAmount() >= tier.minProductAmount()) {
-                throw new BusinessException(
-                        400,
-                        "减免奖项金额必须小于所属阶梯的最低商品金额，否则实际减免会被压缩"
-                );
-            }
-            if (type == PrizeType.GOODS && prize.productId() == null) {
-                throw new BusinessException(400, "赠品奖项必须关联商品");
-            }
-            if (type == PrizeType.GOODS && prize.stockTotal() == null) {
-                throw new BusinessException(400, "赠品奖项必须设置营销库存");
-            }
-            if (type == PrizeType.GOODS && prize.stockRemaining() != null
-                    && (prize.stockRemaining() < 0 || prize.stockRemaining() > prize.stockTotal())) {
-                throw new BusinessException(400, "赠品剩余库存必须在 0 到总库存之间");
-            }
-            if (!Boolean.FALSE.equals(prize.enabled())) {
-                enabledPrizeCount++;
-                totalWeight += prize.weight();
-            }
-            if (totalWeight > Integer.MAX_VALUE) {
-                throw new BusinessException(400, "同一阶梯奖项权重总和过大");
+            int probability = requireProbability(prize.probabilityBp(), code);
+            totalProbability += probability;
+            validatePrizeRule(code, prize, probability);
+        }
+        for (PrizeCode code : PrizeCode.values()) {
+            if (!seen.contains(code)) {
+                throw new BusinessException(400, "缺少固定奖项：" + code.displayName());
             }
         }
-        if (!Boolean.FALSE.equals(tier.enabled()) && enabledPrizeCount == 0) {
-            throw new BusinessException(400, "启用阶梯至少需要一个启用奖项");
+        if (totalProbability != PROBABILITY_SCALE) {
+            throw new BusinessException(400, "四个奖项的中奖概率总和必须等于 100.00%");
         }
+    }
+
+    private static void validatePrizeRule(PrizeCode code, Prize prize, int probability) {
+        DiscountMode mode = discountMode(prize.discountMode());
+        if (code == PrizeCode.NONE) {
+            if (mode != DiscountMode.NONE) {
+                throw new BusinessException(400, "谢谢惠顾不能配置减免");
+            }
+            if (hasPositive(prize.thresholdAmount())
+                    || hasPositive(prize.fixedDiscountAmount())
+                    || hasPositive(prize.discountRateBp())
+                    || hasPositive(prize.maxDiscountAmount())
+                    || hasPositive(prize.discountAmount())) {
+                throw new BusinessException(400, "谢谢惠顾不能配置任何减免字段");
+            }
+            return;
+        }
+        if (mode != DiscountMode.THRESHOLD && mode != DiscountMode.PERCENTAGE) {
+            throw new BusinessException(400, code.displayName() + "只能选择满减或百分比模式");
+        }
+        if (probability == 0) {
+            return;
+        }
+        if (mode == DiscountMode.THRESHOLD) {
+            if (!hasPositive(prize.thresholdAmount()) || !hasPositive(prize.fixedDiscountAmount())) {
+                throw new BusinessException(400, code.displayName() + "满减模式必须填写满多少元和减多少元");
+            }
+            if (prize.fixedDiscountAmount() >= prize.thresholdAmount()) {
+                throw new BusinessException(400, code.displayName() + "的减免金额必须小于满减门槛");
+            }
+            if (hasPositive(prize.discountRateBp()) || hasPositive(prize.maxDiscountAmount())) {
+                throw new BusinessException(400, code.displayName() + "满减模式不能同时填写百分比字段");
+            }
+            return;
+        }
+        if (prize.discountRateBp() == null
+                || prize.discountRateBp() < 1
+                || prize.discountRateBp() > PROBABILITY_SCALE) {
+            throw new BusinessException(400, code.displayName() + "的减免比例必须在 0.01% 到 100.00% 之间");
+        }
+        if (!hasPositive(prize.maxDiscountAmount())) {
+            throw new BusinessException(400, code.displayName() + "百分比模式必须设置最大减免金额");
+        }
+        if (hasPositive(prize.thresholdAmount()) || hasPositive(prize.fixedDiscountAmount())) {
+            throw new BusinessException(400, code.displayName() + "百分比模式不能同时填写满减字段");
+        }
+    }
+
+    public static OptionalInt actualDiscount(Prize prize, int payableBefore) {
+        if (prize == null) {
+            return OptionalInt.empty();
+        }
+        DiscountMode mode = discountMode(prize.discountMode());
+        if (mode == DiscountMode.NONE || prizeCodeOrNull(prize.prizeCode()) == PrizeCode.NONE) {
+            return OptionalInt.of(0);
+        }
+        if (payableBefore <= 1) {
+            return OptionalInt.empty();
+        }
+        if (mode == DiscountMode.THRESHOLD) {
+            int threshold = value(prize.thresholdAmount(), 0);
+            int fixed = value(prize.fixedDiscountAmount(), 0);
+            if (threshold <= 0 || fixed <= 0 || payableBefore < threshold) {
+                return OptionalInt.empty();
+            }
+            int actual = Math.min(fixed, payableBefore - 1);
+            return actual > 0 ? OptionalInt.of(actual) : OptionalInt.empty();
+        }
+        if (mode == DiscountMode.PERCENTAGE) {
+            int rate = value(prize.discountRateBp(), 0);
+            int cap = value(prize.maxDiscountAmount(), 0);
+            if (rate <= 0 || cap <= 0) {
+                return OptionalInt.empty();
+            }
+            long raw = ((long) payableBefore * rate) / PROBABILITY_SCALE;
+            if (raw <= 0) {
+                return OptionalInt.empty();
+            }
+            int actual = (int) Math.min(raw, Math.min((long) cap, payableBefore - 1L));
+            return actual > 0 ? OptionalInt.of(actual) : OptionalInt.empty();
+        }
+        return OptionalInt.empty();
+    }
+
+    public static Prize selectByProbability(List<Prize> prizes, SecureRandom random) {
+        List<Prize> candidates = new ArrayList<>(prizes == null ? List.of() : prizes);
+        long total = candidates.stream().mapToLong(prize -> value(prize.probabilityBp(), 0)).sum();
+        if (total <= 0 || total > Integer.MAX_VALUE) {
+            throw new BusinessException(409, "当前没有可抽取的奖项");
+        }
+        int ticket = random.nextInt((int) total);
+        int cursor = 0;
+        for (Prize prize : candidates) {
+            cursor += value(prize.probabilityBp(), 0);
+            if (ticket < cursor) {
+                return prize;
+            }
+        }
+        throw new IllegalStateException("奖项概率计算失败");
+    }
+
+    public static List<Prize> sortedFixedPrizes(List<Prize> prizes) {
+        return (prizes == null ? List.<Prize>of() : prizes).stream()
+                .sorted(Comparator
+                        .comparingInt((Prize prize) -> {
+                            PrizeCode code = prizeCodeOrNull(prize.prizeCode());
+                            return code == null ? 100 : code.slotIndex();
+                        })
+                        .thenComparingInt(prize -> value(prize.sortOrder(), 100))
+                        .thenComparingLong(prize -> prize.id() == null ? Long.MAX_VALUE : prize.id()))
+                .toList();
     }
 
     public static Tier matchingTier(Campaign campaign, int productAmount) {
@@ -163,6 +195,7 @@ public final class LotteryRules {
         }
         return campaign.tiers().stream()
                 .filter(tier -> !Boolean.FALSE.equals(tier.enabled()))
+                .filter(tier -> !"GLOBAL".equals(tier.poolCode()))
                 .filter(tier -> tier.minProductAmount() != null && productAmount >= tier.minProductAmount())
                 .filter(tier -> tier.maxProductAmount() == null || productAmount < tier.maxProductAmount())
                 .sorted(Comparator
@@ -170,23 +203,6 @@ public final class LotteryRules {
                         .thenComparingInt(tier -> value(tier.minProductAmount(), 0)))
                 .findFirst()
                 .orElse(null);
-    }
-
-    public static Prize weightedPrize(List<Prize> prizes, SecureRandom random) {
-        List<Prize> candidates = new ArrayList<>(prizes == null ? List.of() : prizes);
-        long total = candidates.stream().mapToLong(prize -> prize.weight() == null ? 0 : prize.weight()).sum();
-        if (total <= 0 || total > Integer.MAX_VALUE) {
-            throw new BusinessException(409, "当前没有可抽取的奖项");
-        }
-        int ticket = random.nextInt((int) total);
-        int cursor = 0;
-        for (Prize prize : candidates) {
-            cursor += prize.weight();
-            if (ticket < cursor) {
-                return prize;
-            }
-        }
-        throw new IllegalStateException("奖项权重计算失败");
     }
 
     public static boolean isCampaignActive(Campaign campaign, LocalDateTime now) {
@@ -207,6 +223,36 @@ public final class LotteryRules {
         }
     }
 
+    public static PrizeCode prizeCode(String value) {
+        PrizeCode code = prizeCodeOrNull(value);
+        if (code == null) {
+            throw new BusinessException(400, "奖项槽位仅支持 FIRST、SECOND、THIRD、NONE");
+        }
+        return code;
+    }
+
+    public static PrizeCode prizeCodeOrNull(String value) {
+        if (!hasText(value)) {
+            return null;
+        }
+        try {
+            return PrizeCode.valueOf(value.trim().toUpperCase());
+        } catch (IllegalArgumentException exception) {
+            return null;
+        }
+    }
+
+    public static DiscountMode discountMode(String value) {
+        if (!hasText(value)) {
+            return DiscountMode.NONE;
+        }
+        try {
+            return DiscountMode.valueOf(value.trim().toUpperCase());
+        } catch (IllegalArgumentException exception) {
+            throw new BusinessException(400, "减免模式仅支持 THRESHOLD、PERCENTAGE、NONE");
+        }
+    }
+
     public static LocalDateTime parseTime(String value, String fieldName) {
         if (!hasText(value)) {
             return null;
@@ -218,10 +264,21 @@ public final class LotteryRules {
         }
     }
 
+    private static int requireProbability(Integer probabilityBp, PrizeCode code) {
+        if (probabilityBp == null || probabilityBp < 0 || probabilityBp > PROBABILITY_SCALE) {
+            throw new BusinessException(400, code.displayName() + "的中奖概率必须在 0% 到 100.00% 之间");
+        }
+        return probabilityBp;
+    }
+
     private static void ensureLength(String value, int maxLength, String fieldName) {
         if (value != null && value.trim().length() > maxLength) {
             throw new BusinessException(400, fieldName + "不能超过 " + maxLength + " 个字符");
         }
+    }
+
+    private static boolean hasPositive(Integer value) {
+        return value != null && value > 0;
     }
 
     private static int value(Integer value, int fallback) {

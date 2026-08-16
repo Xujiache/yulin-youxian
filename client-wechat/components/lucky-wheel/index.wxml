@@ -16,28 +16,23 @@
 
     <view class="wheel-stage">
       <view class="wheel-shadow"></view>
-      <view class="wheel-pointer">
+      <view class="wheel-pointer {{spinning ? 'is-wobbling' : ''}}">
         <view class="pointer-leaf"></view>
         <view class="pointer-tip"></view>
       </view>
       <view
-        class="wheel-disc {{spinning ? 'is-spinning' : ''}}"
+        class="wheel-disc {{spinning ? 'is-spinning' : ''}} {{winnerIndex >= 0 && showResult && !spinning ? 'has-winner winner-' + winnerIndex : ''}}"
         style="transform: rotate({{wheelRotation}}deg); transition: {{wheelTransition}};"
         bindtransitionend="handleTransitionEnd"
       >
-        <view class="basket-weave"></view>
+        <view class="wheel-sectors"></view>
         <view
           wx:for="{{displayPrizes}}"
-          wx:key="id"
-          class="wheel-prize tone-{{item.tone}}"
-          style="{{item.segmentStyle}}"
+          wx:key="slot"
+          class="wheel-label tone-{{item.tone}} {{winnerIndex === index && showResult && !spinning ? 'is-winner' : ''}}"
+          style="{{item.labelStyle}}"
         >
-          <image wx:if="{{item.imageUrl}}" class="prize-image" src="{{item.imageUrl}}" mode="aspectFill" />
-          <view wx:else class="prize-produce">
-            <view class="produce-leaf"></view>
-            <view class="produce-body"></view>
-          </view>
-          <text class="prize-name">{{item.shortName}}</text>
+          <text class="prize-name">{{item.label}}</text>
         </view>
         <view class="wheel-hub">
           <text class="hub-mark">鲜</text>
@@ -73,8 +68,8 @@
 
     <button
       wx:if="{{!showResult}}"
-      class="wheel-action {{drawLoading || spinning || !displayPrizes.length ? 'is-disabled' : ''}}"
-      disabled="{{drawLoading || spinning || !displayPrizes.length}}"
+      class="wheel-action {{drawLoading || spinning ? 'is-disabled' : ''}}"
+      disabled="{{drawLoading || spinning}}"
       bindtap="handleDraw"
     >{{drawLoading ? '正在向菜篮取签…' : spinning ? '鲜礼转动中…' : '抽取本单鲜礼'}}</button>
 

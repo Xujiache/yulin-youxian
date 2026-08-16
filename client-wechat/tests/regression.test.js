@@ -17,7 +17,7 @@ const {
 } = require("../pages/order-detail/tracking");
 const { normalizeAssetUrl } = require("../api/normalize");
 const { homeNavigationPlan } = require("../utils/navigation");
-const { normalizeLotteryState } = require("../api/marketing");
+const { normalizeLotteryState, recoverLotteryDrawAfterFailure } = require("../api/marketing");
 const { normalizeOrderDetail } = require("../api/orders");
 const {
   campaignNotice,
@@ -35,7 +35,12 @@ const {
   pendingOrderDecision,
   pendingOrderSignature
 } = require("../pages/checkout/pending-order");
-const { resolvePrizeIndex, targetRotation } = require("../components/lucky-wheel/wheel-math");
+const {
+  resolvePrizeIndex,
+  slotCenterAngle,
+  slotTargetAngle,
+  targetRotation
+} = require("../components/lucky-wheel/wheel-math");
 const {
   isPaidOrder,
   paymentShareConfirmationState,
@@ -211,24 +216,38 @@ test("lottery response keeps the server result and sorts visible prizes", () => 
     challengeToken: "challenge",
     shareTriggered: true,
     prizes: [
-      { id: 2, type: "NONE", name: "谢谢惠顾", sortOrder: 20 },
-      { id: 1, type: "DISCOUNT", name: "减 1 元", sortOrder: 10 }
+      { id: 4, type: "NONE", name: "谢谢惠顾", prizeCode: "NONE", probabilityBp: 7000 },
+      { id: 2, type: "DISCOUNT", name: "二等奖", prizeCode: "SECOND" },
+      { id: 3, type: "DISCOUNT", name: "三等奖", prizeCode: "THIRD" },
+      { id: 1, type: "DISCOUNT", name: "一等奖", prizeCode: "FIRST" }
     ],
     result: {
       drawId: 9,
       prizeId: 1,
+      prizeCode: "FIRST",
       prizeIndex: 0,
       prizeType: "DISCOUNT",
-      prizeName: "减 1 元",
+      prizeName: "一等奖",
       discountAmount: 100,
       payableAmount: 1298
     }
   });
 
   assert.equal(state.drawn, true);
-  assert.deepEqual(state.prizes.map((prize) => prize.id), [1, 2]);
+  assert.deepEqual(state.prizes.map((prize) => prize.prizeCode), ["FIRST", "SECOND", "THIRD", "NONE"]);
+  assert.deepEqual(state.prizes.map((prize) => prize.id), [1, 2, 3, 4]);
+  assert.equal(state.prizes[0].probabilityBp, undefined);
+  assert.equal(state.result.prizeCode, "FIRST");
   assert.equal(state.result.discountAmount, 100);
   assert.equal(state.result.payableAmount, 1298);
+
+  const legacy = normalizeLotteryState({
+    prizes: [
+      { id: 2, type: "NONE", name: "谢谢惠顾", sortOrder: 20 },
+      { id: 1, type: "DISCOUNT", name: "减 1 元", sortOrder: 10 }
+    ]
+  });
+  assert.deepEqual(legacy.prizes.map((prize) => prize.id), [1, 2]);
 });
 
 test("checkout drops the pending order whenever the order inputs change", () => {
@@ -326,18 +345,73 @@ test("landing page hides the prize list outside the campaign window", () => {
 });
 
 test("wheel never lands on a wrong slot when the prize index is unusable", () => {
-  const prizes = [{ id: 1 }, { id: 2 }, { id: 3 }];
+  const prizes = [
+    { id: 1, prizeCode: "FIRST" },
+    { id: 2, prizeCode: "SECOND" },
+    { id: 3, prizeCode: "THIRD" },
+    { id: 4, prizeCode: "NONE" }
+  ];
 
-  assert.equal(resolvePrizeIndex(prizes, { prizeId: 3, prizeIndex: -1 }), 2);
+  assert.deepEqual([0, 1, 2, 3].map(slotCenterAngle), [0, 90, 180, 270]);
+  assert.deepEqual([0, 1, 2, 3].map(slotTargetAngle), [0, 270, 180, 90]);
+
+  assert.equal(resolvePrizeIndex(prizes, { prizeId: 3, prizeCode: "NONE", prizeIndex: 0 }), 2);
+  assert.equal(resolvePrizeIndex(prizes, { prizeId: 99, prizeCode: "THIRD", prizeIndex: 0 }), 2);
   assert.equal(resolvePrizeIndex(prizes, { prizeId: 99, prizeIndex: 1 }), 1);
   assert.equal(resolvePrizeIndex(prizes, { prizeId: 99, prizeIndex: -1 }), -1);
   assert.equal(resolvePrizeIndex(prizes, { prizeIndex: 7 }), -1);
   assert.equal(resolvePrizeIndex([], { prizeId: 1, prizeIndex: 0 }), -1);
 
+  assert.equal(targetRotation({ index: 0, count: 4, currentRotation: 0 }), 0);
   assert.equal(targetRotation({ index: 1, count: 4, currentRotation: 0 }), 270);
-  assert.equal(targetRotation({ index: 1, count: 4, currentRotation: 0, withTurns: true }), 2070);
+  assert.equal(targetRotation({ index: 2, count: 4, currentRotation: 0 }), 180);
+  assert.equal(targetRotation({ index: 3, count: 4, currentRotation: 0 }), 90);
+  assert.equal(targetRotation({ index: 1, count: 4, currentRotation: 0, withTurns: true }), 2430);
   assert.equal(targetRotation({ index: -1, count: 4, currentRotation: 240, withTurns: true }), 240);
   assert.equal(targetRotation({ index: 9, count: 4, currentRotation: 240 }), 240);
+});
+
+test("draw recovery prefers the GET result and keeps eligibility when both fail", () => {
+  const prizes = [
+    { id: 11, prizeCode: "FIRST", name: "一等奖" },
+    { id: 12, prizeCode: "SECOND", name: "二等奖" },
+    { id: 13, prizeCode: "THIRD", name: "三等奖" },
+    { id: 14, prizeCode: "NONE", name: "谢谢惠顾" }
+  ];
+  const recovered = normalizeLotteryState({
+    drawn: true,
+    prizes,
+    result: {
+      drawId: 88,
+      prizeId: 13,
+      prizeCode: "THIRD",
+      prizeIndex: 2,
+      discountAmount: 800,
+      payableAmount: 4200
+    }
+  });
+  const restored = recoverLotteryDrawAfterFailure({ getState: recovered, getFailed: false });
+  assert.equal(restored.action, "restore");
+  assert.equal(resolvePrizeIndex(recovered.prizes, recovered.result), 2);
+  assert.equal(targetRotation({ index: 2, count: 4 }), 180);
+
+  const keepWhenGetFails = recoverLotteryDrawAfterFailure({ getState: null, getFailed: true });
+  assert.equal(keepWhenGetFails.action, "keep-eligibility");
+  assert.equal(keepWhenGetFails.title, "抽奖结果暂未确认");
+
+  const keepWhenNoDraw = recoverLotteryDrawAfterFailure({
+    getState: normalizeLotteryState({
+      eligible: true,
+      shareTriggered: true,
+      drawn: false,
+      prizes,
+      reasonCode: "ELIGIBLE"
+    }),
+    getFailed: false
+  });
+  assert.equal(keepWhenNoDraw.action, "keep-eligibility");
+  assert.equal(keepWhenNoDraw.title, "抽奖资格仍在");
+  assert.deepEqual(prizes.map((prize) => prize.prizeCode), ["FIRST", "SECOND", "THIRD", "NONE"]);
 });
 
 test("friend payment reuses a live share instead of rotating the token", async () => {

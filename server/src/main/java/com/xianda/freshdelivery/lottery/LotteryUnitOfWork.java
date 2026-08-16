@@ -34,6 +34,10 @@ public class LotteryUnitOfWork {
         return new LotteryUnitOfWork((TransactionTemplate) null);
     }
 
+    public static LotteryUnitOfWork of(TransactionTemplate transactionTemplate) {
+        return new LotteryUnitOfWork(transactionTemplate);
+    }
+
     public <T> T commit(Supplier<T> work) {
         if (transactionTemplate == null) {
             return work.get();

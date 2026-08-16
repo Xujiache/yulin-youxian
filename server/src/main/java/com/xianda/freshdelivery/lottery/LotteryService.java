@@ -15,7 +15,9 @@ import com.xianda.freshdelivery.lottery.LotteryModels.DrawResult;
 import com.xianda.freshdelivery.lottery.LotteryModels.Gift;
 import com.xianda.freshdelivery.lottery.LotteryModels.OrderPromotionProjection;
 import com.xianda.freshdelivery.lottery.LotteryModels.OrderState;
+import com.xianda.freshdelivery.lottery.LotteryModels.DiscountMode;
 import com.xianda.freshdelivery.lottery.LotteryModels.Prize;
+import com.xianda.freshdelivery.lottery.LotteryModels.PrizeCode;
 import com.xianda.freshdelivery.lottery.LotteryModels.PrizeType;
 import com.xianda.freshdelivery.lottery.LotteryModels.PublicCampaign;
 import com.xianda.freshdelivery.lottery.LotteryModels.PublicPrize;
@@ -33,10 +35,10 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.OptionalInt;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -168,10 +170,6 @@ public class LotteryService implements LotteryOrderLifecycle {
     public Campaign saveCampaign(Campaign request) {
         Campaign normalized = normalizeCampaign(request);
         LotteryRules.validate(normalized);
-        normalized.tiers().stream()
-                .flatMap(tier -> tier.prizes().stream())
-                .filter(prize -> LotteryRules.prizeType(prize.type()) == PrizeType.GOODS)
-                .forEach(prize -> storefrontService.validateLotteryGift(prize.productId(), prize.skuId()));
         Campaign saved = dao.saveCampaign(normalized);
         publicCampaignCache = null;
         return saved;
@@ -256,11 +254,7 @@ public class LotteryService implements LotteryOrderLifecycle {
         if (challenge.campaignId() != campaign.id()) {
             throw new BusinessException(409, "活动配置已变化，请重新获取分享挑战");
         }
-        Tier tier = LotteryRules.matchingTier(campaign, order.productAmount());
-        if (tier == null) {
-            throw new BusinessException(409, "订单商品金额不在活动阶梯内");
-        }
-        if (mayChangePrice(tier)) {
+        if (mayChangePrice(campaign)) {
             closeActivePayment(order);
         }
 
@@ -283,10 +277,7 @@ public class LotteryService implements LotteryOrderLifecycle {
         if (challenge.campaignId() != campaign.id()) {
             throw new BusinessException(409, "活动配置已变化，请重新获取分享挑战");
         }
-        Tier tier = LotteryRules.matchingTier(campaign, order.productAmount());
-        if (tier == null) {
-            throw new BusinessException(409, "订单商品金额不在活动阶梯内");
-        }
+        Tier globalTier = requiredGlobalTier(campaign);
 
         LocalDate statDate = now.toLocalDate();
         // 加锁顺序固定为「用户行 -> 预算行」，两把锁都是行级，避免死锁也避免锁住整个活动。
@@ -296,50 +287,21 @@ public class LotteryService implements LotteryOrderLifecycle {
             dao.lockDrawGuard(new DrawGuardKey(campaign.id(), statDate, LotteryDao.BUDGET_GUARD_USER));
         }
         int spent = dailyDiscountSpent(campaign, now);
-        List<Prize> eligible = eligiblePrizes(campaign, tier, order, spent);
+        List<Prize> displayPrizes = displayPrizes(campaign);
+        List<Prize> eligible = eligiblePrizes(displayPrizes, order.payableAmount(), spent, campaign.dailyBudgetAmount());
         if (eligible.isEmpty()) {
-            throw new BusinessException(409, "当前阶梯暂无可抽取奖项");
-        }
-        List<Prize> candidates = new ArrayList<>(eligible);
-
-        Prize selected;
-        boolean marketingStockReserved = false;
-        while (true) {
-            selected = LotteryRules.weightedPrize(candidates, secureRandom);
-            if (LotteryRules.prizeType(selected.type()) != PrizeType.GOODS) {
-                break;
-            }
-            if (dao.reserveMarketingStock(selected.id()) == 1) {
-                marketingStockReserved = true;
-                break;
-            }
-            Prize unavailable = selected;
-            candidates.removeIf(prize -> Objects.equals(prize.id(), unavailable.id()));
-            if (candidates.isEmpty()) {
-                throw new BusinessException(409, "奖品库存已耗尽");
-            }
+            throw new BusinessException(409, "当前没有可抽取的奖项");
         }
 
-        PrizeType type = LotteryRules.prizeType(selected.type());
-        int discountAmount = type == PrizeType.DISCOUNT
-                ? Math.min(selected.discountAmount(), Math.max(order.payableAmount() - 1, 0))
-                : 0;
+        Prize selected = LotteryRules.selectByProbability(eligible, secureRandom);
+        PrizeCode prizeCode = LotteryRules.prizeCode(selected.prizeCode());
+        PrizeType type = prizeCode == PrizeCode.NONE ? PrizeType.NONE : PrizeType.DISCOUNT;
+        int discountAmount = LotteryRules.actualDiscount(selected, order.payableAmount()).orElse(0);
         int payableAmount = Math.max(1, order.payableAmount() - discountAmount);
-
-        // 下标必须落在「下发给客户端的那个列表」的空间里，否则转盘会停在别的奖品上。
-        int prizeIndex = indexOf(eligible, selected);
-        Gift giftTemplate = type == PrizeType.GOODS
-                ? storefrontService.lotteryGift(
-                        selected.productId(),
-                        selected.skuId(),
-                        null,
-                        selected.id(),
-                        selected.imageUrl()
-                )
-                : null;
+        int prizeIndex = prizeCode.slotIndex();
         DrawInsert insert = new DrawInsert(
                 campaign.id(),
-                tier.id(),
+                globalTier.id(),
                 selected.id(),
                 order.id(),
                 order.orderNo(),
@@ -354,25 +316,12 @@ public class LotteryService implements LotteryOrderLifecycle {
                 selected.imageUrl(),
                 order.payableAmount(),
                 payableAmount,
-                giftTemplate
+                null,
+                prizeCode.name()
         );
         long drawId = 0;
         try {
             drawId = dao.insertDraw(insert, now);
-            Gift gift = giftTemplate == null ? null : new Gift(
-                    drawId,
-                    selected.id(),
-                    giftTemplate.productId(),
-                    giftTemplate.skuId(),
-                    giftTemplate.productName(),
-                    giftTemplate.skuName(),
-                    giftTemplate.imageUrl(),
-                    giftTemplate.quantity(),
-                    "RESERVED"
-            );
-            if (gift != null) {
-                dao.insertGift(drawId, selected.id(), orderId, gift, now);
-            }
             OrderPromotionProjection projection = new OrderPromotionProjection(
                     drawId,
                     selected.id(),
@@ -384,8 +333,9 @@ public class LotteryService implements LotteryOrderLifecycle {
                     selected.skuId(),
                     selected.imageUrl(),
                     payableAmount,
-                    gift == null ? List.of() : List.of(gift),
-                    "APPLIED"
+                    List.of(),
+                    "APPLIED",
+                    prizeCode.name()
             );
             storefrontService.applyLotteryPromotion(orderId, userId, projection);
             dao.markDrawApplied(drawId, now);
@@ -396,13 +346,6 @@ public class LotteryService implements LotteryOrderLifecycle {
             if (drawId > 0) {
                 try {
                     storefrontService.rollbackLotteryPromotion(orderId, drawId, order.payableAmount());
-                } catch (RuntimeException compensationException) {
-                    exception.addSuppressed(compensationException);
-                }
-            }
-            if (marketingStockReserved && selected.id() != null) {
-                try {
-                    dao.restoreMarketingStock(selected.id());
                 } catch (RuntimeException compensationException) {
                     exception.addSuppressed(compensationException);
                 }
@@ -795,10 +738,7 @@ public class LotteryService implements LotteryOrderLifecycle {
         PublicCampaign publicCampaign = toPublic(campaign);
         DrawRow draw = dao.findDrawByOrder(orderId).orElse(null);
         if (draw != null) {
-            // 中奖的那一项抽完之后往往就不再「可抽」了（赠品库存归零、减免额吃掉了当日预算），
-            // 如果按当前可抽列表下发，转盘拿到的列表就和 prizeIndex 不是同一个下标空间，
-            // 会停在别的格子上。已抽奖的订单强制把中奖奖项留在列表里，并按该列表重算下标。
-            List<PublicPrize> prizes = publicPrizes(campaign, order, now, draw.prizeId());
+            List<PublicPrize> prizes = publicPrizes(campaign);
             return new OrderState(
                     false,
                     "该订单已抽奖",
@@ -837,13 +777,6 @@ public class LotteryService implements LotteryOrderLifecycle {
                     "已有有效好友代付链接，不能再抽奖", ReasonCode.ACTIVE_PAYMENT_SHARE, challenge
             );
         }
-        Tier tier = LotteryRules.matchingTier(campaign, order.productAmount());
-        if (tier == null) {
-            return unavailable(
-                    publicCampaign, campaign, order, now,
-                    "订单商品金额不在活动阶梯内", ReasonCode.TIER_NOT_MATCHED, challenge
-            );
-        }
         if (dao.countUserDraws(
                 campaign.id(),
                 userId,
@@ -855,11 +788,16 @@ public class LotteryService implements LotteryOrderLifecycle {
                     "今日抽奖次数已用完", ReasonCode.DAILY_LIMIT_REACHED, challenge
             );
         }
-        List<Prize> eligible = eligiblePrizes(campaign, tier, order, dailyDiscountSpent(campaign, now));
+        List<Prize> eligible = eligiblePrizes(
+                displayPrizes(campaign),
+                order.payableAmount(),
+                dailyDiscountSpent(campaign, now),
+                campaign.dailyBudgetAmount()
+        );
         if (eligible.isEmpty()) {
             return unavailable(
                     publicCampaign, campaign, order, now,
-                    "当前阶梯暂无可抽取奖项", ReasonCode.NO_AVAILABLE_PRIZE, challenge
+                    "当前没有可抽取的奖项", ReasonCode.NO_AVAILABLE_PRIZE, challenge
             );
         }
         if (challenge != null && isChallengeStale(challenge, now)) {
@@ -876,7 +814,7 @@ public class LotteryService implements LotteryOrderLifecycle {
                 challenge != null && challenge.shareTriggeredAt() != null,
                 false,
                 publicCampaign,
-                eligible.stream().map(this::toPublic).toList(),
+                publicPrizes(campaign),
                 null
         );
     }
@@ -898,7 +836,7 @@ public class LotteryService implements LotteryOrderLifecycle {
                 challenge != null && challenge.shareTriggeredAt() != null,
                 false,
                 publicCampaign,
-                publicPrizes(campaign, order, now),
+                publicPrizes(campaign),
                 null
         );
     }
@@ -907,76 +845,43 @@ public class LotteryService implements LotteryOrderLifecycle {
         return challenge.consumedAt() != null || !challenge.expiresAt().isAfter(now);
     }
 
-    private List<Prize> eligiblePrizes(
-            Campaign campaign,
-            Tier tier,
-            OrderDetailDto order,
-            int spent
-    ) {
-        return eligiblePrizes(campaign, tier, order, spent, null);
+    private List<Prize> displayPrizes(Campaign campaign) {
+        return LotteryRules.sortedFixedPrizes(campaign.prizes());
     }
 
-    /**
-     * @param retainPrizeId 无论是否还满足可抽条件都要保留的奖项，用于让已抽奖订单的下发列表
-     *                      始终包含中奖奖项。
-     */
     private List<Prize> eligiblePrizes(
-            Campaign campaign,
-            Tier tier,
-            OrderDetailDto order,
+            List<Prize> prizes,
+            int payableBefore,
             int spent,
-            Long retainPrizeId
+            Integer dailyBudgetAmount
     ) {
-        int budget = campaign.dailyBudgetAmount() == null
-                ? Integer.MAX_VALUE
-                : campaign.dailyBudgetAmount();
-        return tier.prizes().stream()
-                .filter(prize -> retainPrizeId != null && Objects.equals(prize.id(), retainPrizeId)
-                        || !Boolean.FALSE.equals(prize.enabled()))
-                .filter(prize -> {
-                    if (retainPrizeId != null && Objects.equals(prize.id(), retainPrizeId)) {
-                        return true;
-                    }
-                    PrizeType type = LotteryRules.prizeType(prize.type());
-                    if (type == PrizeType.GOODS) {
-                        return prize.stockRemaining() != null
-                                && prize.stockRemaining() > 0
-                                && storefrontService.canReserveLotteryGift(prize.productId(), prize.skuId());
-                    }
-                    if (type == PrizeType.DISCOUNT) {
-                        int actual = Math.min(prize.discountAmount(), Math.max(order.payableAmount() - 1, 0));
-                        return actual > 0 && (long) spent + actual <= budget;
-                    }
-                    return true;
-                })
-                .sorted(Comparator
-                        .comparingInt((Prize prize) -> prize.sortOrder() == null ? 100 : prize.sortOrder())
-                        .thenComparing(prize -> prize.id() == null ? Long.MAX_VALUE : prize.id()))
-                .toList();
-    }
-
-    private int indexOf(List<Prize> prizes, Prize selected) {
-        for (int index = 0; index < prizes.size(); index++) {
-            if (Objects.equals(prizes.get(index).id(), selected.id())) {
-                return index;
+        long budget = dailyBudgetAmount == null ? Long.MAX_VALUE : dailyBudgetAmount;
+        List<Prize> eligible = new ArrayList<>();
+        for (Prize prize : LotteryRules.sortedFixedPrizes(prizes)) {
+            int probability = prize.probabilityBp() == null ? 0 : prize.probabilityBp();
+            if (probability <= 0) {
+                continue;
             }
+            OptionalInt discount = LotteryRules.actualDiscount(prize, payableBefore);
+            if (discount.isEmpty()) {
+                continue;
+            }
+            PrizeCode code = LotteryRules.prizeCodeOrNull(prize.prizeCode());
+            if (code != PrizeCode.NONE && (long) spent + discount.getAsInt() > budget) {
+                continue;
+            }
+            eligible.add(prize);
         }
-        return -1;
+        return eligible;
     }
 
     /**
-     * prizeIndex 的契约是「在同一份响应里下发的 prizes 列表中的下标，找不到返回 -1」。
-     * 流水里存的是抽奖当时的下标，重新读取状态时要按这次下发的列表重算。
+     * 新流水的 prizeIndex 是固定槽位 0–3。回读时优先按 prizeId，再按 prizeCode；
+     * 历史 GOODS 流水不在四格里时保留原下标，避免改写历史结果。
      */
     private DrawResult alignPrizeIndex(DrawResult result, List<PublicPrize> prizes) {
-        int index = -1;
-        for (int position = 0; position < prizes.size(); position++) {
-            if (Objects.equals(prizes.get(position).id(), result.prizeId())) {
-                index = position;
-                break;
-            }
-        }
-        if (Objects.equals(result.prizeIndex(), index)) {
+        int index = indexOfPrize(prizes, result.prizeId(), result.prizeCode());
+        if (index < 0 || Objects.equals(result.prizeIndex(), index)) {
             return result;
         }
         return new DrawResult(
@@ -991,13 +896,39 @@ public class LotteryService implements LotteryOrderLifecycle {
                 result.imageUrl(),
                 result.payableAmount(),
                 result.gifts(),
-                result.status()
+                result.status(),
+                result.prizeCode()
         );
     }
 
-    private boolean mayChangePrice(Tier tier) {
-        return tier.prizes().stream()
-                .anyMatch(prize -> LotteryRules.prizeType(prize.type()) == PrizeType.DISCOUNT);
+    private int indexOfPrize(List<PublicPrize> prizes, Long prizeId, String prizeCode) {
+        if (prizeId != null) {
+            for (int position = 0; position < prizes.size(); position++) {
+                if (Objects.equals(prizes.get(position).id(), prizeId)) {
+                    return position;
+                }
+            }
+        }
+        PrizeCode code = LotteryRules.prizeCodeOrNull(prizeCode);
+        if (code != null) {
+            for (int position = 0; position < prizes.size(); position++) {
+                if (code.name().equals(prizes.get(position).prizeCode())) {
+                    return position;
+                }
+            }
+        }
+        return -1;
+    }
+
+    private boolean mayChangePrice(Campaign campaign) {
+        return displayPrizes(campaign).stream()
+                .anyMatch(prize -> {
+                    PrizeCode code = LotteryRules.prizeCodeOrNull(prize.prizeCode());
+                    return code != null
+                            && code != PrizeCode.NONE
+                            && prize.probabilityBp() != null
+                            && prize.probabilityBp() > 0;
+                });
     }
 
     private void closeActivePayment(OrderDetailDto order) {
@@ -1087,7 +1018,8 @@ public class LotteryService implements LotteryOrderLifecycle {
                 draw.imageUrl(),
                 draw.payableAmount(),
                 dao.findGifts(draw.id()),
-                draw.status()
+                draw.status(),
+                draw.prizeCode()
         );
     }
 
@@ -1104,7 +1036,8 @@ public class LotteryService implements LotteryOrderLifecycle {
                 draw.imageUrl(),
                 draw.payableAmount(),
                 dao.findGifts(draw.id()),
-                draw.status()
+                draw.status(),
+                draw.prizeCode()
         );
     }
 
@@ -1153,7 +1086,8 @@ public class LotteryService implements LotteryOrderLifecycle {
                 format(draw.paidAt()),
                 format(draw.fulfilledAt()),
                 draw.fulfillmentRemark(),
-                gifts.getOrDefault(draw.id(), List.of())
+                gifts.getOrDefault(draw.id(), List.of()),
+                draw.prizeCode()
         );
     }
 
@@ -1175,45 +1109,16 @@ public class LotteryService implements LotteryOrderLifecycle {
         if (request == null) {
             throw new BusinessException(400, "活动配置不能为空");
         }
-        List<Tier> tiers = new ArrayList<>();
-        int nextTierSort = 10;
-        for (Tier tier : request.tiers()) {
-            if (tier == null) {
-                throw new BusinessException(400, "阶梯配置不能为空");
+        List<Prize> prizes = new ArrayList<>();
+        for (PrizeCode code : PrizeCode.values()) {
+            Prize source = request.prizes().stream()
+                    .filter(prize -> prize != null && code == LotteryRules.prizeCodeOrNull(prize.prizeCode()))
+                    .findFirst()
+                    .orElse(null);
+            if (source == null) {
+                throw new BusinessException(400, "缺少固定奖项：" + code.displayName());
             }
-            List<Prize> prizes = new ArrayList<>();
-            int nextPrizeSort = 10;
-            for (Prize prize : tier.prizes()) {
-                if (prize == null) {
-                    throw new BusinessException(400, "奖项配置不能为空");
-                }
-                PrizeType type = LotteryRules.prizeType(prize.type());
-                prizes.add(new Prize(
-                        prize.id(),
-                        type.name(),
-                        trim(prize.name()),
-                        type == PrizeType.DISCOUNT ? prize.discountAmount() : null,
-                        type == PrizeType.GOODS ? prize.productId() : null,
-                        type == PrizeType.GOODS ? prize.skuId() : null,
-                        trimToNull(prize.imageUrl()),
-                        prize.weight(),
-                        type == PrizeType.GOODS ? prize.stockTotal() : 0,
-                        prize.stockRemaining(),
-                        prize.enabled() == null || prize.enabled(),
-                        value(prize.sortOrder(), nextPrizeSort)
-                ));
-                nextPrizeSort += 10;
-            }
-            tiers.add(new Tier(
-                    tier.id(),
-                    trim(tier.name()),
-                    tier.minProductAmount(),
-                    tier.maxProductAmount(),
-                    tier.enabled() == null || tier.enabled(),
-                    value(tier.sortOrder(), nextTierSort),
-                    prizes
-            ));
-            nextTierSort += 10;
+            prizes.add(normalizeFixedPrize(code, source));
         }
         return new Campaign(
                 request.id(),
@@ -1226,11 +1131,62 @@ public class LotteryService implements LotteryOrderLifecycle {
                 trimToNull(request.shareTitle()),
                 trimToNull(request.shareDescription()),
                 trimToNull(request.shareImageUrl()),
-                tiers
+                List.of(),
+                prizes
+        );
+    }
+
+    private Prize normalizeFixedPrize(PrizeCode code, Prize source) {
+        int probability = source.probabilityBp() == null ? 0 : source.probabilityBp();
+        DiscountMode mode = code == PrizeCode.NONE
+                ? DiscountMode.NONE
+                : hasText(source.discountMode())
+                        ? LotteryRules.discountMode(source.discountMode())
+                        : DiscountMode.PERCENTAGE;
+        if (code == PrizeCode.NONE || mode == DiscountMode.NONE) {
+            return Prize.fixed(source.id(), code, probability, DiscountMode.NONE, null, null, null, null);
+        }
+        if (mode == DiscountMode.THRESHOLD) {
+            return Prize.fixed(
+                    source.id(),
+                    code,
+                    probability,
+                    DiscountMode.THRESHOLD,
+                    source.thresholdAmount(),
+                    source.fixedDiscountAmount(),
+                    null,
+                    null
+            );
+        }
+        return Prize.fixed(
+                source.id(),
+                code,
+                probability,
+                DiscountMode.PERCENTAGE,
+                null,
+                null,
+                source.discountRateBp(),
+                source.maxDiscountAmount()
         );
     }
 
     private PublicCampaign toPublic(Campaign campaign) {
+        List<PublicPrize> prizes = publicPrizes(campaign);
+        Tier global = campaign.tiers().stream()
+                .filter(tier -> "GLOBAL".equals(tier.poolCode()))
+                .findFirst()
+                .orElse(null);
+        List<PublicTier> tiers = global == null
+                ? List.of()
+                : List.of(new PublicTier(
+                        global.id(),
+                        "全部订单",
+                        0,
+                        null,
+                        true,
+                        10,
+                        prizes
+                ));
         return new PublicCampaign(
                 campaign.id(),
                 campaign.enabled(),
@@ -1241,64 +1197,41 @@ public class LotteryService implements LotteryOrderLifecycle {
                 campaign.shareTitle(),
                 campaign.shareDescription(),
                 campaign.shareImageUrl(),
-                campaign.tiers().stream()
-                        .filter(tier -> !Boolean.FALSE.equals(tier.enabled()))
-                        .map(tier -> new PublicTier(
-                                tier.id(),
-                                tier.name(),
-                                tier.minProductAmount(),
-                                tier.maxProductAmount(),
-                                tier.enabled(),
-                                tier.sortOrder(),
-                                tier.prizes().stream()
-                                        .filter(prize -> !Boolean.FALSE.equals(prize.enabled()))
-                                        .map(this::toPublic)
-                                        .toList()
-                        ))
-                        .toList(),
-                campaign.tiers().stream()
-                        .filter(tier -> !Boolean.FALSE.equals(tier.enabled()))
-                        .flatMap(tier -> tier.prizes().stream())
-                        .filter(prize -> !Boolean.FALSE.equals(prize.enabled()))
-                        .map(this::toPublic)
-                        .toList()
+                tiers,
+                prizes
         );
     }
 
     private PublicPrize toPublic(Prize prize) {
+        Integer displayDiscount = null;
+        if (LotteryRules.prizeCodeOrNull(prize.prizeCode()) == PrizeCode.NONE) {
+            displayDiscount = 0;
+        } else if (LotteryRules.discountMode(prize.discountMode()) == DiscountMode.THRESHOLD) {
+            displayDiscount = prize.fixedDiscountAmount();
+        }
         return new PublicPrize(
                 prize.id(),
                 prize.type(),
                 prize.name(),
-                prize.discountAmount(),
+                displayDiscount,
                 prize.productId(),
                 prize.skuId(),
                 prize.imageUrl(),
                 prize.enabled(),
-                prize.sortOrder()
+                prize.sortOrder(),
+                prize.prizeCode()
         );
     }
 
-    /**
-     * 转盘展示的奖项必须和真正参与抽取的奖项一致，否则用户会看到概率为 0 的奖品。
-     */
-    private List<PublicPrize> publicPrizes(Campaign campaign, OrderDetailDto order, LocalDateTime now) {
-        return publicPrizes(campaign, order, now, null);
+    private List<PublicPrize> publicPrizes(Campaign campaign) {
+        return displayPrizes(campaign).stream().map(this::toPublic).toList();
     }
 
-    private List<PublicPrize> publicPrizes(
-            Campaign campaign,
-            OrderDetailDto order,
-            LocalDateTime now,
-            Long retainPrizeId
-    ) {
-        Tier tier = LotteryRules.matchingTier(campaign, order.productAmount());
-        if (tier == null || campaign.id() == null) {
-            return List.of();
-        }
-        return eligiblePrizes(campaign, tier, order, dailyDiscountSpent(campaign, now), retainPrizeId).stream()
-                .map(this::toPublic)
-                .toList();
+    private Tier requiredGlobalTier(Campaign campaign) {
+        return campaign.tiers().stream()
+                .filter(tier -> "GLOBAL".equals(tier.poolCode()))
+                .findFirst()
+                .orElseThrow(() -> new BusinessException(409, "抽奖活动尚未配置"));
     }
 
     private Campaign requiredCampaign() {
@@ -1329,7 +1262,11 @@ public class LotteryService implements LotteryOrderLifecycle {
     }
 
     private Campaign emptyCampaign() {
-        return new Campaign(null, false, "随机减免", null, null, 1, null, null, null, null, List.of());
+        return new Campaign(null, false, "随机减免", null, null, 1, null, null, null, null, List.of(), List.of());
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
     }
 
     private String challengeToken() {

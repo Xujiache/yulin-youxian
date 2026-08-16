@@ -3135,7 +3135,8 @@ public class StorefrontService {
                 projection.imageUrl(),
                 projection.payableAmount(),
                 gifts,
-                status
+                status,
+                projection.prizeCode()
         );
     }
 

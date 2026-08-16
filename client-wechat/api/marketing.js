@@ -6,22 +6,43 @@ function numberOr(value, fallback = 0) {
   return Number.isFinite(number) ? number : fallback;
 }
 
-// 后端下发的列表已经排好序，缺省 sortOrder 按 100 处理、并列时按 id 排。
-// 本地排序必须用同一套规则，否则转盘的下标空间会和 prizeIndex 错开。
 const DEFAULT_SORT_ORDER = 100;
+const FIXED_PRIZE_CODES = ["FIRST", "SECOND", "THIRD", "NONE"];
+const PRIZE_CODE_ORDER = FIXED_PRIZE_CODES.reduce((order, code, index) => {
+  order[code] = index;
+  return order;
+}, {});
+
+function normalizePrizeCode(value) {
+  const code = String(value || "").trim().toUpperCase();
+  return Object.prototype.hasOwnProperty.call(PRIZE_CODE_ORDER, code) ? code : "";
+}
 
 function normalizePrize(prize = {}) {
   return {
-    ...prize,
     id: prize.id,
     type: prize.type || "",
     name: prize.name || "鲜礼",
+    prizeCode: normalizePrizeCode(prize.prizeCode),
     imageUrl: normalizeAssetUrl(prize.imageUrl || ""),
-    sortOrder: numberOr(prize.sortOrder, DEFAULT_SORT_ORDER)
+    sortOrder: numberOr(prize.sortOrder, DEFAULT_SORT_ORDER),
+    productId: prize.productId,
+    skuId: prize.skuId
   };
 }
 
 function comparePrizes(left, right) {
+  const leftCode = PRIZE_CODE_ORDER[left.prizeCode];
+  const rightCode = PRIZE_CODE_ORDER[right.prizeCode];
+  if (leftCode !== undefined && rightCode !== undefined) {
+    return leftCode - rightCode;
+  }
+  if (leftCode !== undefined) {
+    return -1;
+  }
+  if (rightCode !== undefined) {
+    return 1;
+  }
   const bySortOrder = left.sortOrder - right.sortOrder;
   if (bySortOrder !== 0) {
     return bySortOrder;
@@ -41,6 +62,7 @@ function normalizeDrawResult(result) {
   }
   return {
     ...normalizePrizeResult(result),
+    prizeCode: normalizePrizeCode(result.prizeCode),
     prizeIndex: numberOr(result.prizeIndex, -1),
     discountAmount: numberOr(result.discountAmount),
     payableAmount: numberOr(result.payableAmount)
@@ -55,6 +77,7 @@ function normalizeCampaign(campaign) {
     ...campaign,
     enabled: campaign.enabled !== false,
     shareImageUrl: normalizeAssetUrl(campaign.shareImageUrl || ""),
+    prizes: normalizePrizes(campaign.prizes),
     tiers: Array.isArray(campaign.tiers) ? campaign.tiers.slice() : []
   };
 }
@@ -66,6 +89,7 @@ function looksLikeCampaign(payload) {
     && (
       payload.enabled !== undefined
       || payload.shareTitle
+      || payload.prizes
       || payload.tiers
     )
   );
@@ -84,7 +108,6 @@ function normalizeLotteryState(payload = {}) {
     ...payload,
     eligible: Boolean(payload.eligible),
     reason: payload.reason || "",
-    // 稳定枚举，判定统一按它走；旧服务端不下发时保持空串，由 utils/lottery-status 从中文 reason 兜底
     reasonCode: String(payload.reasonCode || "").trim().toUpperCase(),
     challengeToken: payload.challengeToken || "",
     shareTriggered: Boolean(payload.shareTriggered),
@@ -92,6 +115,20 @@ function normalizeLotteryState(payload = {}) {
     campaign,
     prizes,
     result
+  };
+}
+
+function recoverLotteryDrawAfterFailure({ getState, getFailed }) {
+  if (getState && getState.drawn && getState.result) {
+    return {
+      action: "restore",
+      state: getState,
+      result: getState.result
+    };
+  }
+  return {
+    action: "keep-eligibility",
+    title: getFailed ? "抽奖结果暂未确认" : "抽奖资格仍在"
   };
 }
 
@@ -141,11 +178,14 @@ async function drawLottery(orderId, challengeToken) {
 }
 
 module.exports = {
+  FIXED_PRIZE_CODES,
   createLotteryChallenge,
   drawLottery,
   getOrderLottery,
   getPublicLottery,
   normalizeDrawResult,
   normalizeLotteryState,
+  normalizePrizeCode,
+  recoverLotteryDrawAfterFailure,
   reportLotteryShareTrigger
 };

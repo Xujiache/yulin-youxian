@@ -164,18 +164,16 @@
       </view>
       <text class="choice-desc">{{lotteryState.campaign.shareDescription || '进入朋友圈分享入口后，返回即可抽取本单减免或随单鲜礼。'}}</text>
 
-      <scroll-view wx:if="{{wheelPrizes.length}}" class="choice-prizes" scroll-x enhanced show-scrollbar="{{false}}">
-        <view class="choice-prizes-inner">
-          <view wx:for="{{wheelPrizes}}" wx:key="id" class="choice-prize">
-            <image wx:if="{{item.imageUrl}}" class="choice-prize-image" src="{{item.imageUrl}}" mode="aspectFill" />
-            <view wx:else class="choice-prize-fallback">
-              <view class="choice-produce-leaf"></view>
-              <view class="choice-produce"></view>
-            </view>
-            <text>{{item.name}}</text>
+      <view wx:if="{{wheelPrizes.length}}" class="choice-prizes">
+        <view wx:for="{{wheelPrizes}}" wx:key="id" class="choice-prize">
+          <image wx:if="{{item.imageUrl}}" class="choice-prize-image" src="{{item.imageUrl}}" mode="aspectFill" />
+          <view wx:else class="choice-prize-fallback">
+            <view class="choice-produce-leaf"></view>
+            <view class="choice-produce"></view>
           </view>
+          <text>{{item.name}}</text>
         </view>
-      </scroll-view>
+      </view>
 
       <view class="choice-facts">
         <view class="choice-fact"><text class="fact-dot"></text><text>分享后仍由服务端确认资格</text></view>

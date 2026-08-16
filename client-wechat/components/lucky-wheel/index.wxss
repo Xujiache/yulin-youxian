@@ -127,9 +127,7 @@
   width: 476rpx;
   height: 476rpx;
   overflow: hidden;
-  background:
-    radial-gradient(circle at center, #fff8e7 0, #fff8e7 28%, transparent 29%),
-    repeating-linear-gradient(45deg, #008a52 0, #008a52 30rpx, #006d42 30rpx, #006d42 60rpx);
+  background: #fff8e7;
   border: 14rpx solid #f4c95d;
   border-radius: 50%;
   box-shadow:
@@ -139,18 +137,44 @@
   transform-origin: center center;
 }
 
-.basket-weave {
+.wheel-sectors {
   position: absolute;
-  top: 18rpx;
-  right: 18rpx;
-  bottom: 18rpx;
-  left: 18rpx;
-  background:
-    linear-gradient(90deg, rgba(255, 248, 231, 0.09) 50%, transparent 50%),
-    linear-gradient(rgba(255, 248, 231, 0.08) 50%, transparent 50%);
-  background-size: 34rpx 34rpx;
-  border: 2rpx solid rgba(255, 255, 255, 0.28);
+  top: 8rpx;
+  right: 8rpx;
+  bottom: 8rpx;
+  left: 8rpx;
   border-radius: 50%;
+  background: conic-gradient(
+    from -45deg,
+    #008a52 0deg 90deg,
+    #f4c95d 90deg 180deg,
+    #006d42 180deg 270deg,
+    #fff8e7 270deg 360deg
+  );
+}
+
+.wheel-disc.has-winner .wheel-sectors::after {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  content: "";
+  pointer-events: none;
+}
+
+.wheel-disc.winner-0 .wheel-sectors::after {
+  background: conic-gradient(from -45deg, rgba(255, 255, 255, 0.22) 0deg 90deg, transparent 90deg 360deg);
+}
+
+.wheel-disc.winner-1 .wheel-sectors::after {
+  background: conic-gradient(from -45deg, transparent 0deg 90deg, rgba(255, 255, 255, 0.28) 90deg 180deg, transparent 180deg 360deg);
+}
+
+.wheel-disc.winner-2 .wheel-sectors::after {
+  background: conic-gradient(from -45deg, transparent 0deg 180deg, rgba(255, 255, 255, 0.2) 180deg 270deg, transparent 270deg 360deg);
+}
+
+.wheel-disc.winner-3 .wheel-sectors::after {
+  background: conic-gradient(from -45deg, transparent 0deg 270deg, rgba(244, 201, 93, 0.28) 270deg 360deg);
 }
 
 .wheel-pointer {
@@ -161,6 +185,20 @@
   width: 70rpx;
   height: 96rpx;
   transform: translateX(-50%);
+  transform-origin: 50% 12rpx;
+}
+
+.wheel-pointer.is-wobbling {
+  animation: pointer-wobble 240ms ease-in-out infinite alternate;
+}
+
+@keyframes pointer-wobble {
+  from {
+    transform: translateX(-50%) rotate(-9deg);
+  }
+  to {
+    transform: translateX(-50%) rotate(9deg);
+  }
 }
 
 .pointer-leaf {
@@ -185,7 +223,7 @@
   border-left: 27rpx solid transparent;
 }
 
-.wheel-prize {
+.wheel-label {
   position: absolute;
   top: 50%;
   left: 50%;
@@ -193,80 +231,39 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 116rpx;
-  height: 82rpx;
-  margin-top: -41rpx;
-  margin-left: -58rpx;
-  overflow: hidden;
-  background: #fff8e7;
-  border: 3rpx solid rgba(244, 201, 93, 0.9);
-  border-radius: 18rpx 18rpx 24rpx 24rpx;
-  box-shadow: 0 8rpx 14rpx rgba(0, 63, 37, 0.18);
+  width: 132rpx;
+  height: 72rpx;
+  margin-top: -36rpx;
+  margin-left: -66rpx;
+  border-radius: 18rpx;
   transform-origin: center center;
 }
 
-.wheel-prize.tone-1 {
-  background: #f4c95d;
-  border-color: #fff3bd;
+.wheel-label.tone-0,
+.wheel-label.tone-2 {
+  color: #fffdf5;
 }
 
-.wheel-prize.tone-2 {
-  background: #eaf8df;
-  border-color: #60c041;
+.wheel-label.tone-1,
+.wheel-label.tone-3 {
+  color: #122019;
 }
 
-.prize-image {
-  position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  opacity: 0.42;
+.wheel-label.is-winner {
+  background: rgba(255, 253, 245, 0.92);
+  box-shadow: 0 0 0 6rpx #f4c95d, 0 10rpx 22rpx rgba(0, 63, 37, 0.2);
 }
 
-.prize-produce {
-  position: absolute;
-  top: 7rpx;
-  left: 8rpx;
-  width: 34rpx;
-  height: 34rpx;
-}
-
-.produce-body {
-  position: absolute;
-  top: 11rpx;
-  left: 5rpx;
-  width: 24rpx;
-  height: 24rpx;
-  background: #60c041;
-  border-radius: 50% 50% 44% 44%;
-}
-
-.produce-leaf {
-  position: absolute;
-  top: 1rpx;
-  left: 14rpx;
-  width: 13rpx;
-  height: 18rpx;
-  background: #006d42;
-  border-radius: 12rpx 2rpx 12rpx 2rpx;
-  transform: rotate(32deg);
+.wheel-label.is-winner .prize-name {
+  color: #006d42;
 }
 
 .prize-name {
-  position: relative;
-  z-index: 1;
-  max-width: 104rpx;
-  padding: 4rpx 6rpx;
-  overflow: hidden;
-  color: #122019;
-  font-size: 19rpx;
+  max-width: 124rpx;
+  font-size: 26rpx;
   font-weight: 900;
-  line-height: 25rpx;
+  line-height: 32rpx;
   text-align: center;
-  text-overflow: ellipsis;
 }
 
 .wheel-hub {

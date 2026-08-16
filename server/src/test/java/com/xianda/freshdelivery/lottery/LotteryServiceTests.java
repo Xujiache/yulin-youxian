@@ -13,9 +13,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.xianda.freshdelivery.common.BusinessException;
 import com.xianda.freshdelivery.common.CurrentUserContext;
 import com.xianda.freshdelivery.config.WechatPayProperties;
-import com.xianda.freshdelivery.delivery.domain.DeliveryTask;
 import com.xianda.freshdelivery.delivery.repository.DeliveryTestDatabase;
-import com.xianda.freshdelivery.delivery.task.OrderTaskSnapshotFactory;
 import com.xianda.freshdelivery.dto.CartDto;
 import com.xianda.freshdelivery.dto.CreateAddressRequest;
 import com.xianda.freshdelivery.dto.CreateOrderRequest;
@@ -26,7 +24,6 @@ import com.xianda.freshdelivery.lottery.LotteryModels.Campaign;
 import com.xianda.freshdelivery.lottery.LotteryModels.DrawResult;
 import com.xianda.freshdelivery.lottery.LotteryModels.OrderState;
 import com.xianda.freshdelivery.lottery.LotteryModels.Prize;
-import com.xianda.freshdelivery.lottery.LotteryModels.Tier;
 import com.xianda.freshdelivery.service.StorefrontService;
 import com.xianda.freshdelivery.service.WechatPayClient;
 import java.math.BigDecimal;
@@ -54,6 +51,7 @@ class LotteryServiceTests {
     Path tempDir;
 
     private StorefrontService storefront;
+    private JdbcTemplate jdbcTemplate;
     private LotteryDao dao;
     private MutableClock clock;
     private SequenceSecureRandom random;
@@ -65,7 +63,7 @@ class LotteryServiceTests {
     void setUp() {
         CurrentUserContext.setUserId(USER_ID);
         storefront = new StorefrontService(tempDir.resolve("storefront.json").toString(), true);
-        JdbcTemplate jdbcTemplate = DeliveryTestDatabase.create(
+        jdbcTemplate = DeliveryTestDatabase.create(
                 "lottery_" + System.nanoTime()
         );
         dao = new LotteryDao(jdbcTemplate);
@@ -98,11 +96,12 @@ class LotteryServiceTests {
 
     @Test
     void challengeDrawIsIdempotentAndDiscountRotatesPaymentOrder() throws Exception {
-        service.saveCampaign(campaign(3, 1000, List.of(discountPrize(100, 10))));
+        service.saveCampaign(campaign(3, 1000, LotteryCampaignFixtures.firstThreshold(10_000, 200, 100)));
         String publicJson = new ObjectMapper().writeValueAsString(service.publicCampaign());
         assertFalse(publicJson.contains("\"weight\""));
         assertFalse(publicJson.contains("\"stockRemaining\""));
-        assertFalse(service.publicCampaign().prizes().isEmpty());
+        assertFalse(publicJson.contains("probabilityBp"));
+        assertEquals(4, service.publicCampaign().prizes().size());
         OrderDetailDto order = createOrder();
         String originalPaymentOrderNo = order.paymentOrderNo();
 
@@ -146,7 +145,7 @@ class LotteryServiceTests {
 
     @Test
     void challengeIsBoundToUserAndOrderAndExpires() {
-        service.saveCampaign(campaign(3, null, List.of(nonePrize(10))));
+        service.saveCampaign(campaign(3, null, LotteryCampaignFixtures.onlyNone()));
         OrderDetailDto first = createOrder();
         OrderDetailDto second = createOrder();
         OrderState challenge = service.challenge(first.id());
@@ -174,7 +173,12 @@ class LotteryServiceTests {
         service.saveCampaign(campaign(
                 2,
                 100,
-                List.of(discountPrize(100, 10), nonePrize(20))
+                List.of(
+                        LotteryCampaignFixtures.threshold(LotteryModels.PrizeCode.FIRST, 5000, 200, 100),
+                        LotteryCampaignFixtures.inactive(LotteryModels.PrizeCode.SECOND),
+                        LotteryCampaignFixtures.inactive(LotteryModels.PrizeCode.THIRD),
+                        LotteryCampaignFixtures.thankYou(5000)
+                )
         ));
         OrderDetailDto first = createOrder();
         OrderDetailDto second = createOrder();
@@ -189,111 +193,46 @@ class LotteryServiceTests {
     }
 
     @Test
-    void exhaustedGiftFallsBackAndCancellationRestoresBothStocksWithoutChance() {
-        service.saveCampaign(campaign(
-                2,
-                null,
-                List.of(goodsPrize(105L, 1, 10), nonePrize(20))
-        ));
-        BigDecimal giftStockBefore = storefront.product(105L).stockQty();
+    void thresholdMissExitsTheCandidateAndCancellationKeepsDailyLimit() {
+        service.saveCampaign(campaign(2, null, List.of(
+                LotteryCampaignFixtures.threshold(LotteryModels.PrizeCode.FIRST, 5000, 99_000, 800),
+                LotteryCampaignFixtures.inactive(LotteryModels.PrizeCode.SECOND),
+                LotteryCampaignFixtures.inactive(LotteryModels.PrizeCode.THIRD),
+                LotteryCampaignFixtures.thankYou(5000)
+        )));
         OrderDetailDto first = createOrder();
         OrderDetailDto second = createOrder();
         OrderDetailDto third = createOrder();
 
-        DrawResult gift = triggerAndDraw(first);
-        assertEquals("GOODS", gift.prizeType());
-        assertEquals(giftStockBefore.subtract(BigDecimal.ONE), storefront.product(105L).stockQty());
-        DeliveryTask task = new OrderTaskSnapshotFactory().build(
-                storefront.order(first.id()),
-                null,
-                "PS-LOTTERY-TEST",
-                LocalDateTime.now(),
-                null,
-                null
-        );
-        assertEquals(0, task.marketingDiscountAmount());
-        assertTrue(task.marketingGiftSummary().contains(gift.gifts().get(0).productName()));
-        assertTrue(task.goodsSummary().contains("赠"));
-        assertEquals(1, adminDraws(null, "GOODS", "PENDING").size());
-        assertNotNull(adminDraws(null, "GOODS", "PENDING").get(0).drawnAt());
-
-        DrawResult fallback = triggerAndDraw(second);
+        DrawResult fallback = triggerAndDraw(first);
         assertEquals("NONE", fallback.prizeType());
-        Prize configuredGift = service.adminCampaign().tiers().get(0).prizes().stream()
-                .filter(prize -> "GOODS".equals(prize.type()))
-                .findFirst()
-                .orElseThrow();
-        assertEquals(0, configuredGift.stockRemaining());
+        assertEquals("NONE", fallback.prizeCode());
+        assertEquals(0, fallback.discountAmount());
+        assertEquals(4, service.orderState(first.id()).prizes().size());
 
+        triggerAndDraw(second);
         storefront.cancelOrder(first.id(), false);
         service.onOrderCancelled(first.id(), "TEST_CANCEL");
-
-        assertEquals(giftStockBefore, storefront.product(105L).stockQty());
-        Prize restoredGift = service.adminCampaign().tiers().get(0).prizes().stream()
-                .filter(prize -> "GOODS".equals(prize.type()))
-                .findFirst()
-                .orElseThrow();
-        assertEquals(1, restoredGift.stockRemaining());
-        assertEquals("VOIDED", adminDraws(null, null, null).stream()
-                .filter(draw -> draw.orderId().equals(first.id()))
-                .findFirst().orElseThrow().status());
         assertFalse(service.orderState(third.id()).eligible(), "取消不返还每日抽奖次数");
     }
 
     @Test
-    void savingStaleCampaignDoesNotRestoreConsumedGiftStock() {
-        service.saveCampaign(campaign(2, null, List.of(goodsPrize(105L, 3, 10))));
-        triggerAndDraw(createOrder());
-
-        Campaign current = service.adminCampaign();
-        Tier currentTier = current.tiers().get(0);
-        Prize currentPrize = currentTier.prizes().get(0);
-        assertEquals(2, currentPrize.stockRemaining());
-
-        Prize stalePrize = new Prize(
-                currentPrize.id(),
-                currentPrize.type(),
-                currentPrize.name(),
-                currentPrize.discountAmount(),
-                currentPrize.productId(),
-                currentPrize.skuId(),
-                currentPrize.imageUrl(),
-                currentPrize.weight(),
-                currentPrize.stockTotal(),
-                currentPrize.stockTotal(),
-                currentPrize.enabled(),
-                currentPrize.sortOrder()
+    void savingCampaignDoesNotTouchLegacyGiftStock() {
+        service.saveCampaign(campaign(2, null, LotteryCampaignFixtures.onlyNone()));
+        OrderDetailDto order = createOrder();
+        LotteryCampaignFixtures.seedHistoricalGoodsDraw(
+                dao, storefront, jdbcTemplate, order, USER_ID, 105L, 3
         );
-        Campaign staleSave = new Campaign(
-                current.id(),
-                current.enabled(),
-                current.name(),
-                current.startAt(),
-                current.endAt(),
-                current.dailyUserLimit(),
-                current.dailyBudgetAmount(),
-                current.shareTitle(),
-                current.shareDescription(),
-                current.shareImageUrl(),
-                List.of(new Tier(
-                        currentTier.id(),
-                        currentTier.name(),
-                        currentTier.minProductAmount(),
-                        currentTier.maxProductAmount(),
-                        currentTier.enabled(),
-                        currentTier.sortOrder(),
-                        List.of(stalePrize)
-                ))
-        );
+        assertEquals(2, legacyGiftStock());
 
-        Campaign saved = service.saveCampaign(staleSave);
-
-        assertEquals(2, saved.tiers().get(0).prizes().get(0).stockRemaining());
+        Campaign saved = service.saveCampaign(service.adminCampaign());
+        assertEquals(4, saved.prizes().size());
+        assertEquals(2, legacyGiftStock());
     }
 
     @Test
     void activeFriendPaymentLinkBlocksDrawAndDrawnPriceFlowsToShare() {
-        service.saveCampaign(campaign(3, null, List.of(discountPrize(80, 10))));
+        service.saveCampaign(campaign(3, null, LotteryCampaignFixtures.firstThreshold(10_000, 200, 80)));
         OrderDetailDto blockedOrder = createOrder();
         OrderState challenge = service.challenge(blockedOrder.id());
         service.shareTriggered(blockedOrder.id(), challenge.challengeToken());
@@ -317,10 +256,12 @@ class LotteryServiceTests {
 
     @Test
     void expiredOrderReleasesGiftStockAndRestartKeepsOriginalPrize() {
-        service.saveCampaign(campaign(2, null, List.of(goodsPrize(104L, 1, 10))));
+        service.saveCampaign(campaign(2, null, LotteryCampaignFixtures.onlyNone()));
         BigDecimal stockBefore = storefront.product(104L).stockQty();
         OrderDetailDto order = createOrder();
-        DrawResult result = triggerAndDraw(order);
+        DrawResult result = LotteryCampaignFixtures.seedHistoricalGoodsDraw(
+                dao, storefront, jdbcTemplate, order, USER_ID, 104L, 1
+        );
         LocalDateTime createdAt = LocalDateTime.parse(order.createdAt().replace(" ", "T"));
         LocalDateTime expiredAt = createdAt.plusHours(7);
 
@@ -341,17 +282,21 @@ class LotteryServiceTests {
 
     @Test
     void fullRefundRevokesUnfulfilledGiftButKeepsFulfilledGift() {
-        service.saveCampaign(campaign(2, null, List.of(goodsPrize(104L, 2, 10))));
+        service.saveCampaign(campaign(2, null, LotteryCampaignFixtures.onlyNone()));
         BigDecimal stockBefore = storefront.product(104L).stockQty();
         OrderDetailDto unfulfilled = createOrder();
-        triggerAndDraw(unfulfilled);
+        LotteryCampaignFixtures.seedHistoricalGoodsDraw(
+                dao, storefront, jdbcTemplate, unfulfilled, USER_ID, 104L, 2
+        );
 
         service.onOrderFullyRefunded(unfulfilled.id(), false);
         assertEquals(stockBefore, storefront.product(104L).stockQty());
         assertEquals("VOIDED", adminDraws(null, null, null).get(0).status());
 
         OrderDetailDto fulfilled = createOrder();
-        triggerAndDraw(fulfilled);
+        DrawResult fulfilledResult = LotteryCampaignFixtures.seedHistoricalGoodsDraw(
+                dao, storefront, jdbcTemplate, fulfilled, USER_ID, 104L, 1
+        );
         service.onOrderFulfilled(fulfilled.id());
         service.onOrderFullyRefunded(fulfilled.id(), true);
 
@@ -363,24 +308,18 @@ class LotteryServiceTests {
         assertEquals("FULFILLED", fulfilledDraw.status());
         assertEquals("SETTLED", fulfilledDraw.relationStatus(), "履约完成的流水应进入终态，不再被对账扫到");
         assertEquals("FULFILLED", fulfilledDraw.giftStockStatus());
+        assertEquals(fulfilledResult.drawId(), fulfilledDraw.id());
     }
 
     @Test
-    void goodsConfigurationMustReferenceARealProductSkuPair() {
-        Campaign invalid = campaign(1, null, List.of(new Prize(
-                null,
-                "GOODS",
-                "错误 SKU 赠品",
-                null,
-                106L,
-                999999L,
-                null,
-                1,
-                1,
-                null,
-                true,
-                10
-        )));
+    void incompletePercentagePrizeIsRejected() {
+        Campaign invalid = campaign(1, null, List.of(
+                Prize.fixed(null, LotteryModels.PrizeCode.FIRST, 1000,
+                        LotteryModels.DiscountMode.PERCENTAGE, null, null, 2000, null),
+                LotteryCampaignFixtures.inactive(LotteryModels.PrizeCode.SECOND),
+                LotteryCampaignFixtures.inactive(LotteryModels.PrizeCode.THIRD),
+                LotteryCampaignFixtures.thankYou(9000)
+        ));
 
         assertThrows(BusinessException.class, () -> service.saveCampaign(invalid));
     }
@@ -425,42 +364,73 @@ class LotteryServiceTests {
         ));
     }
 
+    @Test
+    void percentageDiscountUsesFloorAndCapOnPayableAmount() {
+        service.saveCampaign(campaign(3, null, LotteryCampaignFixtures.firstPercentage(10_000, 2000, 3000)));
+        OrderDetailDto order = createOrder();
+        int expected = (int) ((long) order.payableAmount() * 2000 / 10_000);
+        DrawResult result = triggerAndDraw(order);
+        assertEquals("FIRST", result.prizeCode());
+        assertEquals(expected, result.discountAmount());
+        assertEquals(order.payableAmount() - expected, result.payableAmount());
+
+        service.saveCampaign(campaign(3, null, LotteryCampaignFixtures.firstPercentage(10_000, 2000, 600)));
+        OrderDetailDto capped = createOrder();
+        DrawResult cappedResult = triggerAndDraw(capped);
+        assertEquals(600, cappedResult.discountAmount());
+    }
+
+    @Test
+    void thresholdBelowFloorLeavesThePrizeAndKeepsFourSlots() {
+        service.saveCampaign(campaign(3, null, List.of(
+                LotteryCampaignFixtures.threshold(LotteryModels.PrizeCode.FIRST, 8000, 99_000, 800),
+                LotteryCampaignFixtures.threshold(LotteryModels.PrizeCode.SECOND, 1000, 200, 100),
+                LotteryCampaignFixtures.inactive(LotteryModels.PrizeCode.THIRD),
+                LotteryCampaignFixtures.thankYou(1000)
+        )));
+        OrderDetailDto order = createOrder();
+        assertEquals(4, service.orderState(order.id()).prizes().size());
+        DrawResult result = triggerAndDraw(order);
+        assertEquals("SECOND", result.prizeCode());
+        assertEquals(100, result.discountAmount());
+        assertEquals(1, result.prizeIndex());
+    }
+
+    @Test
+    void noAvailablePrizeDoesNotConsumeChallenge() {
+        service.saveCampaign(campaign(3, 10_000, LotteryCampaignFixtures.firstThreshold(10_000, 200, 100)));
+        OrderDetailDto order = createOrder();
+        OrderState challenge = service.challenge(order.id());
+        service.shareTriggered(order.id(), challenge.challengeToken());
+        service.saveCampaign(campaign(3, 50, LotteryCampaignFixtures.firstThreshold(10_000, 200, 100)));
+        BusinessException blocked = assertThrows(
+                BusinessException.class,
+                () -> service.draw(order.id(), challenge.challengeToken())
+        );
+        assertTrue(blocked.getMessage().contains("可抽取"));
+        OrderState after = service.orderState(order.id());
+        assertEquals(LotteryModels.ReasonCode.NO_AVAILABLE_PRIZE, after.reasonCode());
+        assertFalse(Boolean.TRUE.equals(after.drawn()));
+        assertEquals(4, after.prizes().size());
+    }
+
+    @Test
+    void globalPoolDoesNotReturnTierNotMatched() {
+        service.saveCampaign(campaign(3, null, LotteryCampaignFixtures.onlyNone()));
+        OrderDetailDto order = createOrder();
+        assertEquals(LotteryModels.ReasonCode.ELIGIBLE, service.orderState(order.id()).reasonCode());
+    }
+
     private Campaign campaign(Integer dailyLimit, Integer dailyBudget, List<Prize> prizes) {
-        return new Campaign(
-                null,
-                true,
-                "随机减免测试",
-                "2026-08-01T00:00:00",
-                "2026-09-01T00:00:00",
-                dailyLimit,
-                dailyBudget,
-                "分享后抽奖",
-                "仅记录朋友圈菜单触发，不验证最终发布",
-                "/lottery.png",
-                // 减免额必须小于阶梯下限，否则实际减免会被 payable - 1 压缩成另一个数字。
-                List.of(new Tier(null, "满 10 元", 1000, null, true, 10, prizes))
-        );
+        return LotteryCampaignFixtures.campaign(dailyLimit, dailyBudget, prizes);
     }
 
-    private Prize discountPrize(int amount, int sortOrder) {
-        return new Prize(
-                null, "DISCOUNT", "随机减 " + amount + " 分", amount,
-                null, null, null, 1, 0, null, true, sortOrder
+    private int legacyGiftStock() {
+        Integer remaining = jdbcTemplate.queryForObject(
+                "SELECT stock_remaining FROM marketing_lottery_prize WHERE type = 'GOODS' ORDER BY id DESC LIMIT 1",
+                Integer.class
         );
-    }
-
-    private Prize goodsPrize(long productId, int stock, int sortOrder) {
-        return new Prize(
-                null, "GOODS", "随机赠品", null,
-                productId, null, null, 1, stock, null, true, sortOrder
-        );
-    }
-
-    private Prize nonePrize(int sortOrder) {
-        return new Prize(
-                null, "NONE", "谢谢参与", null,
-                null, null, null, 1, 0, null, true, sortOrder
-        );
+        return remaining == null ? 0 : remaining;
     }
 
     private static final class MutableClock extends Clock {

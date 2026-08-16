@@ -1671,22 +1671,17 @@
 }
 
 .choice-prizes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14rpx;
   width: 100%;
   margin-top: 22rpx;
-  white-space: nowrap;
-}
-
-.choice-prizes-inner {
-  display: inline-flex;
-  gap: 14rpx;
-  padding-right: 12rpx;
 }
 
 .choice-prize {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  width: 142rpx;
-  min-width: 142rpx;
+  min-width: 0;
   padding: 12rpx 10rpx;
   flex-direction: column;
   color: #26362d;

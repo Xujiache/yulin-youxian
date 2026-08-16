@@ -3,6 +3,16 @@ import type { Product } from '@/api/admin'
 
 export type LotteryId = number | string
 export type LotteryPrizeType = 'DISCOUNT' | 'GOODS' | 'NONE'
+export type LotteryPrizeCode = 'FIRST' | 'SECOND' | 'THIRD' | 'NONE'
+export type LotteryDiscountMode = 'THRESHOLD' | 'PERCENTAGE' | 'NONE'
+
+export const LOTTERY_PRIZE_CODES: LotteryPrizeCode[] = ['FIRST', 'SECOND', 'THIRD', 'NONE']
+export const LOTTERY_PRIZE_NAMES: Record<LotteryPrizeCode, string> = {
+  FIRST: '一等奖',
+  SECOND: '二等奖',
+  THIRD: '三等奖',
+  NONE: '谢谢惠顾'
+}
 
 /**
  * 营销接口中的金额统一使用“分”，页面只在输入和展示时换算为元。
@@ -13,6 +23,13 @@ export interface LotteryPrize {
   id?: LotteryId | null
   type?: LotteryPrizeType | string | null
   name?: string | null
+  prizeCode?: LotteryPrizeCode | string | null
+  probabilityBp?: number | null
+  discountMode?: LotteryDiscountMode | string | null
+  thresholdAmount?: number | null
+  fixedDiscountAmount?: number | null
+  discountRateBp?: number | null
+  maxDiscountAmount?: number | null
   discountAmount?: number | null
   productId?: number | null
   skuId?: number | null
@@ -48,6 +65,7 @@ export interface LotteryCampaign {
   shareTitle?: string | null
   shareDescription?: string | null
   shareImageUrl?: string | null
+  prizes?: Array<LotteryPrize | null> | null
   tiers?: Array<LotteryTier | null> | null
 }
 
@@ -66,16 +84,15 @@ export interface EditableLotteryPrize {
   /** 仅前端使用，不提交后端 */
   localId: string
   id: LotteryId | null
-  type: LotteryPrizeType
+  prizeCode: LotteryPrizeCode
   name: string
-  discountAmount: number
-  productId: number | null
-  skuId: number | null
-  imageUrl: string
-  weight: number
-  stockTotal: number | null
-  stockRemaining: number | null
-  enabled: boolean
+  type: LotteryPrizeType
+  probabilityBp: number
+  discountMode: LotteryDiscountMode
+  thresholdAmount: number | null
+  fixedDiscountAmount: number | null
+  discountRateBp: number | null
+  maxDiscountAmount: number | null
   sortOrder: number
 }
 
@@ -103,6 +120,7 @@ export interface EditableLotteryCampaign {
   shareTitle: string
   shareDescription: string
   shareImageUrl: string
+  prizes: EditableLotteryPrize[]
   tiers: EditableLotteryTier[]
 }
 
@@ -116,9 +134,9 @@ export interface LotteryTierPayload extends Omit<EditableLotteryTier, 'localId' 
   prizes: LotteryPrizePayload[]
 }
 
-export interface LotteryCampaignPayload extends Omit<EditableLotteryCampaign, 'tiers'> {
+export interface LotteryCampaignPayload extends Omit<EditableLotteryCampaign, 'tiers' | 'prizes'> {
   [key: string]: unknown
-  tiers: LotteryTierPayload[]
+  prizes: LotteryPrizePayload[]
 }
 
 export interface LotteryStatusOption {
@@ -249,3 +267,45 @@ export function getLotteryGiftProduct(productId: number) {
     showErrorMessage: false
   })
 }
+
+export const LOTTERY_FIXED_PRIZE_PAYLOAD_FIXTURES = {
+  threshold: {
+    id: 1,
+    prizeCode: 'FIRST',
+    name: '一等奖',
+    type: 'DISCOUNT',
+    probabilityBp: 1000,
+    discountMode: 'THRESHOLD',
+    thresholdAmount: 3000,
+    fixedDiscountAmount: 800,
+    discountRateBp: null,
+    maxDiscountAmount: null,
+    sortOrder: 10
+  },
+  percentage: {
+    id: 2,
+    prizeCode: 'SECOND',
+    name: '二等奖',
+    type: 'DISCOUNT',
+    probabilityBp: 2000,
+    discountMode: 'PERCENTAGE',
+    thresholdAmount: null,
+    fixedDiscountAmount: null,
+    discountRateBp: 2000,
+    maxDiscountAmount: 1000,
+    sortOrder: 20
+  },
+  none: {
+    id: 4,
+    prizeCode: 'NONE',
+    name: '谢谢惠顾',
+    type: 'NONE',
+    probabilityBp: 7000,
+    discountMode: 'NONE',
+    thresholdAmount: null,
+    fixedDiscountAmount: null,
+    discountRateBp: null,
+    maxDiscountAmount: null,
+    sortOrder: 40
+  }
+} as const satisfies Record<string, LotteryPrizePayload>

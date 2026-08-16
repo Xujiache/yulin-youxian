@@ -31,7 +31,7 @@ public class LotteryDao {
     private static final ZoneId STORE_ZONE = ZoneId.of("Asia/Shanghai");
     private static final String DRAW_COLUMNS = """
             id, campaign_id, tier_id, prize_id, order_id, order_no, user_id, product_amount,
-            prize_index, prize_type, prize_name, discount_amount, product_id, sku_id, image_url,
+            prize_index, prize_type, prize_name, prize_code, discount_amount, product_id, sku_id, image_url,
             payable_before, payable_amount, status, gift_stock_status, void_reason,
             fulfilled_at, fulfillment_remark, applied_at, paid_at, settled_at, created_at, updated_at
             """;
@@ -60,6 +60,7 @@ public class LotteryDao {
             rs.getInt("prize_index"),
             rs.getString("prize_type"),
             rs.getString("prize_name"),
+            rs.getString("prize_code"),
             rs.getInt("discount_amount"),
             nullableLong(rs.getObject("product_id")),
             nullableLong(rs.getObject("sku_id")),
@@ -112,6 +113,12 @@ public class LotteryDao {
         if (campaign == null) {
             return Optional.empty();
         }
+        List<Tier> tiers = findTiers(campaign.id());
+        List<Prize> prizes = tiers.stream()
+                .filter(tier -> "GLOBAL".equals(tier.poolCode()))
+                .findFirst()
+                .map(tier -> LotteryRules.sortedFixedPrizes(tier.prizes()))
+                .orElse(List.of());
         return Optional.of(new Campaign(
                 campaign.id(),
                 campaign.enabled(),
@@ -123,13 +130,14 @@ public class LotteryDao {
                 campaign.shareTitle(),
                 campaign.shareDescription(),
                 campaign.shareImageUrl(),
-                findTiers(campaign.id())
+                tiers,
+                prizes
         ));
     }
 
     private List<Tier> findTiers(long campaignId) {
         List<Tier> tiers = jdbcTemplate.query("""
-                SELECT id, name, min_product_amount, max_product_amount, enabled, sort_order
+                SELECT id, name, min_product_amount, max_product_amount, enabled, sort_order, pool_code
                 FROM marketing_lottery_tier
                 WHERE campaign_id = ?
                 ORDER BY sort_order, min_product_amount, id
@@ -140,7 +148,8 @@ public class LotteryDao {
                     nullableInteger(rs.getObject("max_product_amount")),
                     rs.getBoolean("enabled"),
                     rs.getInt("sort_order"),
-                    List.of()
+                    List.of(),
+                    rs.getString("pool_code")
             ), campaignId);
         return tiers.stream()
                 .map(tier -> new Tier(
@@ -150,7 +159,8 @@ public class LotteryDao {
                         tier.maxProductAmount(),
                         tier.enabled(),
                         tier.sortOrder(),
-                        findPrizes(tier.id())
+                        findPrizes(tier.id()),
+                        tier.poolCode()
                 ))
                 .toList();
     }
@@ -158,7 +168,9 @@ public class LotteryDao {
     private List<Prize> findPrizes(long tierId) {
         return jdbcTemplate.query("""
                 SELECT id, type, name, discount_amount, product_id, sku_id, image_url, weight,
-                       stock_total, stock_remaining, enabled, sort_order
+                       stock_total, stock_remaining, enabled, sort_order, prize_code, probability_bp,
+                       discount_mode, threshold_amount, fixed_discount_amount, discount_rate_bp,
+                       max_discount_amount
                 FROM marketing_lottery_prize
                 WHERE tier_id = ?
                 ORDER BY sort_order, id
@@ -174,7 +186,14 @@ public class LotteryDao {
                 rs.getInt("stock_total"),
                 rs.getInt("stock_remaining"),
                 rs.getBoolean("enabled"),
-                rs.getInt("sort_order")
+                rs.getInt("sort_order"),
+                rs.getString("prize_code"),
+                nullableInteger(rs.getObject("probability_bp")),
+                rs.getString("discount_mode"),
+                nullableInteger(rs.getObject("threshold_amount")),
+                nullableInteger(rs.getObject("fixed_discount_amount")),
+                nullableInteger(rs.getObject("discount_rate_bp")),
+                nullableInteger(rs.getObject("max_discount_amount"))
         ), tierId);
     }
 
@@ -186,17 +205,6 @@ public class LotteryDao {
         if (currentId != null) {
             lockCampaign(currentId);
         }
-
-        Map<Long, StockState> previousStocks = new LinkedHashMap<>();
-        jdbcTemplate.query("""
-                SELECT id, stock_total, stock_remaining
-                FROM marketing_lottery_prize
-                """, rs -> {
-            previousStocks.put(
-                    rs.getLong("id"),
-                    new StockState(rs.getInt("stock_total"), rs.getInt("stock_remaining"))
-            );
-        });
 
         long campaignId;
         if (currentId == null) {
@@ -224,21 +232,9 @@ public class LotteryDao {
             );
         }
 
-        jdbcTemplate.update("DELETE FROM marketing_lottery_prize WHERE campaign_id = ?", campaignId);
-        jdbcTemplate.update("DELETE FROM marketing_lottery_tier WHERE campaign_id = ?", campaignId);
-        for (Tier tier : request.tiers()) {
-            long tierId = insertTier(campaignId, tier);
-            for (Prize prize : tier.prizes()) {
-                int stockTotal = prize.stockTotal() == null ? 0 : prize.stockTotal();
-                StockState old = prize.id() == null ? null : previousStocks.get(prize.id());
-                int consumed = old == null ? 0 : Math.max(old.total() - old.remaining(), 0);
-                int remaining = "GOODS".equalsIgnoreCase(prize.type())
-                        ? old == null
-                                ? Math.min(prize.stockRemaining() == null ? stockTotal : prize.stockRemaining(), stockTotal)
-                                : Math.max(stockTotal - consumed, 0)
-                        : 0;
-                insertPrize(campaignId, tierId, prize, stockTotal, remaining);
-            }
+        long globalTierId = findOrCreateGlobalTier(campaignId);
+        for (Prize prize : LotteryRules.sortedFixedPrizes(request.prizes())) {
+            upsertFixedPrize(campaignId, globalTierId, prize);
         }
         return findCampaign().orElseThrow();
     }
@@ -266,64 +262,104 @@ public class LotteryDao {
         return generatedId(holder);
     }
 
-    private long insertTier(long campaignId, Tier tier) {
-        if (tier.id() != null && tier.id() > 0) {
+    private long findOrCreateGlobalTier(long campaignId) {
+        Long existing = jdbcTemplate.query("""
+                SELECT id FROM marketing_lottery_tier
+                WHERE campaign_id = ? AND pool_code = 'GLOBAL'
+                ORDER BY id
+                LIMIT 1
+                """, rs -> rs.next() ? rs.getLong(1) : null, campaignId);
+        if (existing != null) {
             jdbcTemplate.update("""
-                    INSERT INTO marketing_lottery_tier (
-                        id, campaign_id, name, min_product_amount, max_product_amount, enabled, sort_order
-                    ) VALUES (?,?,?,?,?,?,?)
-                    """,
-                    tier.id(), campaignId, tier.name(), tier.minProductAmount(), tier.maxProductAmount(),
-                    flag(tier.enabled()), tier.sortOrder()
-            );
-            return tier.id();
+                    UPDATE marketing_lottery_tier
+                    SET name = ?, min_product_amount = 0, max_product_amount = NULL,
+                        enabled = 1, sort_order = 10, updated_at = ?
+                    WHERE id = ?
+                    """, "全部订单", timestamp(LocalDateTime.now(STORE_ZONE)), existing);
+            return existing;
         }
         KeyHolder holder = new GeneratedKeyHolder();
         jdbcTemplate.update(connection -> {
             PreparedStatement statement = connection.prepareStatement("""
                     INSERT INTO marketing_lottery_tier (
-                        campaign_id, name, min_product_amount, max_product_amount, enabled, sort_order
-                    ) VALUES (?,?,?,?,?,?)
+                        campaign_id, name, min_product_amount, max_product_amount, enabled, sort_order, pool_code
+                    ) VALUES (?,?,?,?,?,?,?)
                     """, Statement.RETURN_GENERATED_KEYS);
             statement.setLong(1, campaignId);
-            statement.setString(2, tier.name());
-            statement.setInt(3, tier.minProductAmount());
-            setNullableInteger(statement, 4, tier.maxProductAmount());
-            statement.setInt(5, flag(tier.enabled()));
-            statement.setInt(6, tier.sortOrder());
+            statement.setString(2, "全部订单");
+            statement.setInt(3, 0);
+            statement.setNull(4, java.sql.Types.INTEGER);
+            statement.setInt(5, 1);
+            statement.setInt(6, 10);
+            statement.setString(7, "GLOBAL");
             return statement;
         }, holder);
         return generatedId(holder);
     }
 
-    private void insertPrize(long campaignId, long tierId, Prize prize, int stockTotal, int stockRemaining) {
-        List<Object> args = new ArrayList<>();
-        String idColumn = "";
-        String idPlaceholder = "";
-        if (prize.id() != null && prize.id() > 0) {
-            idColumn = "id, ";
-            idPlaceholder = "?,";
-            args.add(prize.id());
+    private void upsertFixedPrize(long campaignId, long tierId, Prize prize) {
+        String prizeCode = LotteryRules.prizeCode(prize.prizeCode()).name();
+        Long existingId = jdbcTemplate.query("""
+                SELECT id FROM marketing_lottery_prize
+                WHERE campaign_id = ? AND prize_code = ?
+                ORDER BY id
+                LIMIT 1
+                """, rs -> rs.next() ? rs.getLong(1) : null, campaignId, prizeCode);
+        if (existingId != null) {
+            jdbcTemplate.update("""
+                    UPDATE marketing_lottery_prize
+                    SET type = ?, name = ?, discount_amount = ?, product_id = NULL, sku_id = NULL,
+                        image_url = NULL, weight = ?, stock_total = 0, enabled = 1, sort_order = ?,
+                        prize_code = ?, probability_bp = ?, discount_mode = ?, threshold_amount = ?,
+                        fixed_discount_amount = ?, discount_rate_bp = ?, max_discount_amount = ?,
+                        updated_at = ?
+                    WHERE id = ?
+                    """,
+                    prize.type(),
+                    prize.name(),
+                    prize.discountAmount(),
+                    prize.probabilityBp() == null ? 0 : prize.probabilityBp(),
+                    prize.sortOrder(),
+                    prizeCode,
+                    prize.probabilityBp(),
+                    prize.discountMode(),
+                    prize.thresholdAmount(),
+                    prize.fixedDiscountAmount(),
+                    prize.discountRateBp(),
+                    prize.maxDiscountAmount(),
+                    timestamp(LocalDateTime.now(STORE_ZONE)),
+                    existingId
+            );
+            return;
         }
-        args.add(campaignId);
-        args.add(tierId);
-        args.add(prize.type().trim().toUpperCase());
-        args.add(prize.name());
-        args.add(prize.discountAmount());
-        args.add(prize.productId());
-        args.add(prize.skuId());
-        args.add(prize.imageUrl());
-        args.add(prize.weight());
-        args.add(stockTotal);
-        args.add(stockRemaining);
-        args.add(flag(prize.enabled()));
-        args.add(prize.sortOrder());
         jdbcTemplate.update("""
                 INSERT INTO marketing_lottery_prize (
-                    %scampaign_id, tier_id, type, name, discount_amount, product_id, sku_id, image_url,
-                    weight, stock_total, stock_remaining, enabled, sort_order
-                ) VALUES (%s?,?,?,?,?,?,?,?,?,?,?,?,?)
-                """.formatted(idColumn, idPlaceholder), args.toArray());
+                    campaign_id, tier_id, type, name, discount_amount, product_id, sku_id, image_url,
+                    weight, stock_total, stock_remaining, enabled, sort_order, prize_code, probability_bp,
+                    discount_mode, threshold_amount, fixed_discount_amount, discount_rate_bp, max_discount_amount
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                """,
+                campaignId,
+                tierId,
+                prize.type(),
+                prize.name(),
+                prize.discountAmount(),
+                null,
+                null,
+                null,
+                prize.probabilityBp() == null ? 0 : prize.probabilityBp(),
+                0,
+                0,
+                1,
+                prize.sortOrder(),
+                prizeCode,
+                prize.probabilityBp(),
+                prize.discountMode(),
+                prize.thresholdAmount(),
+                prize.fixedDiscountAmount(),
+                prize.discountRateBp(),
+                prize.maxDiscountAmount()
+        );
     }
 
     public Optional<ChallengeRow> findActiveChallenge(
@@ -479,9 +515,9 @@ public class LotteryDao {
             PreparedStatement statement = connection.prepareStatement("""
                     INSERT INTO marketing_lottery_draw (
                         campaign_id, tier_id, prize_id, order_id, order_no, user_id, product_amount,
-                        prize_index, prize_type, prize_name, discount_amount, product_id, sku_id, image_url,
+                        prize_index, prize_type, prize_name, prize_code, discount_amount, product_id, sku_id, image_url,
                         payable_before, payable_amount, status, gift_stock_status, created_at, updated_at
-                    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                     """, Statement.RETURN_GENERATED_KEYS);
             int index = 1;
             statement.setLong(index++, draw.campaignId());
@@ -494,6 +530,7 @@ public class LotteryDao {
             statement.setInt(index++, draw.prizeIndex());
             statement.setString(index++, draw.prizeType());
             statement.setString(index++, draw.prizeName());
+            statement.setString(index++, draw.prizeCode());
             statement.setInt(index++, draw.discountAmount());
             setNullableLong(statement, index++, draw.productId());
             setNullableLong(statement, index++, draw.skuId());
@@ -886,9 +923,6 @@ public class LotteryDao {
         }
     }
 
-    private record StockState(int total, int remaining) {
-    }
-
     public record ChallengeRow(
             long id,
             long campaignId,
@@ -929,8 +963,49 @@ public class LotteryDao {
             String imageUrl,
             int payableBefore,
             int payableAmount,
-            Gift gift
+            Gift gift,
+            String prizeCode
     ) {
+        public DrawInsert(
+                long campaignId,
+                long tierId,
+                long prizeId,
+                long orderId,
+                String orderNo,
+                long userId,
+                int productAmount,
+                int prizeIndex,
+                String prizeType,
+                String prizeName,
+                int discountAmount,
+                Long productId,
+                Long skuId,
+                String imageUrl,
+                int payableBefore,
+                int payableAmount,
+                Gift gift
+        ) {
+            this(
+                    campaignId,
+                    tierId,
+                    prizeId,
+                    orderId,
+                    orderNo,
+                    userId,
+                    productAmount,
+                    prizeIndex,
+                    prizeType,
+                    prizeName,
+                    discountAmount,
+                    productId,
+                    skuId,
+                    imageUrl,
+                    payableBefore,
+                    payableAmount,
+                    gift,
+                    null
+            );
+        }
     }
 
     public record DrawGuardKey(
@@ -952,6 +1027,7 @@ public class LotteryDao {
             int prizeIndex,
             String prizeType,
             String prizeName,
+            String prizeCode,
             int discountAmount,
             Long productId,
             Long skuId,
