@@ -41,6 +41,7 @@ import com.xianda.freshdelivery.dto.RefundDto;
 import com.xianda.freshdelivery.dto.RefundNotifyRequest;
 import com.xianda.freshdelivery.dto.RefundRequest;
 import com.xianda.freshdelivery.dto.SettingsDto;
+import com.xianda.freshdelivery.dto.StockOverviewExportDto;
 import com.xianda.freshdelivery.dto.StockOverviewItemDto;
 import com.xianda.freshdelivery.dto.StockOverviewSpecItemDto;
 import com.xianda.freshdelivery.lottery.LotteryModels.Gift;
@@ -1671,17 +1672,183 @@ public class StorefrontService {
     }
 
     public synchronized List<StockOverviewItemDto> stockOverview(LocalDate date) {
-        LocalDate targetDate = date == null ? LocalDate.now().plusDays(1) : date;
-        Map<Long, StockAccumulator> stockMap = new LinkedHashMap<>();
-        orders.values().stream()
-                .filter(order -> deliveryDate(order).equals(targetDate))
-                .filter(order -> List.of("已支付/待接单", "备货中", "配送中", "已完成").contains(order.status()))
-                .forEach(order -> order.items().forEach(item -> stockMap
-                        .computeIfAbsent(item.productId(), productId -> new StockAccumulator(item))
-                        .add(order.orderNo(), item)));
-        return stockMap.values().stream()
+        return stockAccumulators(stockTargetDate(date)).values().stream()
+                .sorted(Comparator.comparing(item -> item.productName, String.CASE_INSENSITIVE_ORDER))
                 .map(StockAccumulator::toDto)
                 .toList();
+    }
+
+    public synchronized StockOverviewExportDto stockOverviewExport(LocalDate date) {
+        LocalDate targetDate = stockTargetDate(date);
+        List<OrderState> dayOrders = stockOrders(targetDate);
+        Map<Long, StockAccumulator> stockMap = stockAccumulators(targetDate);
+        String dateText = targetDate.toString();
+        List<List<String>> productSheet = new ArrayList<>();
+        productSheet.add(List.of(
+                "配送日期", "商品ID", "商品名称", "需备数量", "单位", "规格明细", "订单数", "预计金额(元)", "关联订单号"
+        ));
+        List<List<String>> specSheet = new ArrayList<>();
+        specSheet.add(List.of(
+                "配送日期", "商品ID", "商品名称", "规格", "SKU ID", "SKU编码", "需备数量", "单位", "订单数", "预计金额(元)", "关联订单号"
+        ));
+        stockMap.values().stream()
+                .sorted(Comparator.comparing(item -> item.productName, String.CASE_INSENSITIVE_ORDER))
+                .forEach(item -> {
+                    productSheet.add(List.of(
+                            dateText,
+                            text(item.productId),
+                            text(item.productName),
+                            quantityText(item.quantity),
+                            text(item.saleUnit),
+                            item.specSummary(),
+                            String.valueOf(item.orderNos.size()),
+                            yuan(item.amount),
+                            String.join("；", item.sortedOrderNos())
+                    ));
+                    item.sortedSpecs().forEach(spec -> specSheet.add(List.of(
+                            dateText,
+                            text(item.productId),
+                            text(item.productName),
+                            text(spec.specificationText),
+                            text(spec.skuId),
+                            text(spec.skuCode),
+                            quantityText(spec.quantity),
+                            text(spec.saleUnit),
+                            String.valueOf(spec.orderNos.size()),
+                            yuan(spec.amount),
+                            String.join("；", spec.sortedOrderNos())
+                    )));
+                });
+        List<List<String>> orderSheet = new ArrayList<>();
+        orderSheet.add(List.of(
+                "配送日期", "订单编号", "订单状态", "配送时段", "收货人", "联系电话", "收货地址",
+                "商品ID", "商品名称", "规格", "SKU编码", "数量", "单位", "单价(元)", "行金额(元)", "行类型", "用户备注",
+                "下单时间", "应付金额(元)"
+        ));
+        dayOrders.forEach(order -> {
+            order.items().forEach(item -> orderSheet.add(stockOrderRow(dateText, order, item, "商品")));
+            stockGiftItems(order).forEach(item -> orderSheet.add(stockOrderRow(dateText, order, item, "赠品")));
+        });
+        return new StockOverviewExportDto(
+                dateText,
+                "备货总览_" + dateText + ".xlsx",
+                productSheet,
+                specSheet,
+                orderSheet
+        );
+    }
+
+    private LocalDate stockTargetDate(LocalDate date) {
+        return date == null ? LocalDate.now(STORE_ZONE).plusDays(1) : date;
+    }
+
+    private List<OrderState> stockOrders(LocalDate targetDate) {
+        return orders.values().stream()
+                .filter(order -> deliveryDate(order).equals(targetDate))
+                .filter(order -> List.of("已支付/待接单", "备货中", "配送中", "已完成", "部分退款").contains(order.status()))
+                .sorted(Comparator.comparing(OrderState::orderNo))
+                .toList();
+    }
+
+    private Map<Long, StockAccumulator> stockAccumulators(LocalDate targetDate) {
+        Map<Long, StockAccumulator> stockMap = new LinkedHashMap<>();
+        stockOrders(targetDate).forEach(order -> {
+            order.items().forEach(item -> stockMap
+                    .computeIfAbsent(item.productId(), productId -> new StockAccumulator(item))
+                    .add(order.orderNo(), item));
+            stockGiftItems(order).forEach(item -> stockMap
+                    .computeIfAbsent(item.productId(), productId -> new StockAccumulator(item))
+                    .add(order.orderNo(), item));
+        });
+        return stockMap;
+    }
+
+    private List<OrderItemDto> stockGiftItems(OrderState order) {
+        OrderPromotionProjection promotion = orderPromotions.get(order.id());
+        if (promotion == null || promotion.gifts() == null) {
+            return List.of();
+        }
+        List<OrderItemDto> gifts = new ArrayList<>();
+        for (Gift gift : promotion.gifts()) {
+            if (gift == null || gift.productId() == null) {
+                continue;
+            }
+            if (!List.of("RELEASED", "FULFILLED").contains(String.valueOf(gift.status()))) {
+                continue;
+            }
+            ProductDto product = products.get(gift.productId());
+            String unit = product == null || product.saleUnit() == null || product.saleUnit().isBlank()
+                    ? "份"
+                    : product.saleUnit();
+            String spec = gift.skuName() == null || gift.skuName().isBlank() ? "赠品" : gift.skuName().trim();
+            gifts.add(new OrderItemDto(
+                    null,
+                    gift.productId(),
+                    gift.productName() == null || gift.productName().isBlank()
+                            ? (product == null ? "赠品" : product.name())
+                            : gift.productName(),
+                    gift.imageUrl(),
+                    unit,
+                    0,
+                    gift.quantity() == null ? BigDecimal.ONE : gift.quantity(),
+                    0,
+                    gift.skuId(),
+                    "",
+                    spec + "（赠品）"
+            ));
+        }
+        return gifts;
+    }
+
+    private List<String> stockOrderRow(String dateText, OrderState order, OrderItemDto item, String lineType) {
+        AddressDto address = order.address();
+        return List.of(
+                dateText,
+                text(order.orderNo()),
+                text(order.status()),
+                text(deliverySlotDisplay(order)),
+                address == null ? "" : text(address.name()),
+                address == null ? "" : text(address.phone()),
+                addressText(address),
+                text(item.productId()),
+                text(item.productName()),
+                text(item.specificationText()),
+                text(item.skuCode()),
+                quantityText(item.quantity()),
+                text(item.saleUnit()),
+                yuan(item.unitPrice()),
+                yuan(item.amount()),
+                lineType,
+                text(order.remark()),
+                orderDateTimeText(order),
+                yuan(order.payableAmount())
+        );
+    }
+
+    private String addressText(AddressDto address) {
+        if (address == null) {
+            return "";
+        }
+        String location = text(address.locationName());
+        String detail = text(address.detail());
+        if (location.isBlank()) {
+            return detail;
+        }
+        if (detail.isBlank()) {
+            return location;
+        }
+        return location + " " + detail;
+    }
+
+    private String text(Object value) {
+        return value == null ? "" : String.valueOf(value).trim();
+    }
+
+    private String quantityText(BigDecimal quantity) {
+        if (quantity == null) {
+            return "0";
+        }
+        return quantity.stripTrailingZeros().toPlainString();
     }
 
     public synchronized List<OrderDto> adminOrdersByUser(Long userId) {
@@ -4432,15 +4599,39 @@ public class StorefrontService {
             amount += item.amount();
             orderNos.add(orderNo);
 
-            String specKey = (item.specificationText() != null && !item.specificationText().isBlank())
+            String specText = (item.specificationText() != null && !item.specificationText().isBlank())
                     ? item.specificationText().trim()
                     : "默认规格";
-            specMap.computeIfAbsent(specKey, key -> new SpecAccumulator(item.skuId(), key, item.saleUnit()))
+            String specKey = (item.skuId() == null ? "nosku" : item.skuId()) + "|" + specText;
+            specMap.computeIfAbsent(specKey, key -> new SpecAccumulator(
+                            item.skuId(),
+                            specText,
+                            item.skuCode(),
+                            item.saleUnit()
+                    ))
                     .add(orderNo, item);
         }
 
+        List<String> sortedOrderNos() {
+            return orderNos.stream().sorted().toList();
+        }
+
+        List<SpecAccumulator> sortedSpecs() {
+            return specMap.values().stream()
+                    .sorted(Comparator.comparing(spec -> spec.specificationText, String.CASE_INSENSITIVE_ORDER))
+                    .toList();
+        }
+
+        String specSummary() {
+            return sortedSpecs().stream()
+                    .map(spec -> spec.specificationText + " × " + spec.quantity.stripTrailingZeros().toPlainString()
+                            + (spec.saleUnit == null ? "" : spec.saleUnit))
+                    .reduce((left, right) -> left + "；" + right)
+                    .orElse("");
+        }
+
         StockOverviewItemDto toDto() {
-            List<StockOverviewSpecItemDto> specDetails = specMap.values().stream()
+            List<StockOverviewSpecItemDto> specDetails = sortedSpecs().stream()
                     .map(SpecAccumulator::toDto)
                     .toList();
             return new StockOverviewItemDto(
@@ -4451,7 +4642,7 @@ public class StorefrontService {
                     quantity,
                     orderNos.size(),
                     amount,
-                    new ArrayList<>(orderNos),
+                    new ArrayList<>(sortedOrderNos()),
                     specDetails
             );
         }
@@ -4460,14 +4651,16 @@ public class StorefrontService {
     private static class SpecAccumulator {
         private final Long skuId;
         private final String specificationText;
+        private final String skuCode;
         private final String saleUnit;
         private BigDecimal quantity = BigDecimal.ZERO;
         private int amount = 0;
         private final Set<String> orderNos = new HashSet<>();
 
-        SpecAccumulator(Long skuId, String specificationText, String saleUnit) {
+        SpecAccumulator(Long skuId, String specificationText, String skuCode, String saleUnit) {
             this.skuId = skuId;
             this.specificationText = specificationText;
+            this.skuCode = skuCode == null ? "" : skuCode;
             this.saleUnit = saleUnit;
         }
 
@@ -4475,6 +4668,10 @@ public class StorefrontService {
             quantity = quantity.add(item.quantity());
             amount += item.amount();
             orderNos.add(orderNo);
+        }
+
+        List<String> sortedOrderNos() {
+            return orderNos.stream().sorted().toList();
         }
 
         StockOverviewSpecItemDto toDto() {

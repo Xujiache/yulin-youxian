@@ -1,6 +1,7 @@
 package com.xianda.freshdelivery.controller.admin;
 
 import com.xianda.freshdelivery.common.ApiResponse;
+import com.xianda.freshdelivery.dto.StockOverviewExportDto;
 import com.xianda.freshdelivery.dto.StockOverviewItemDto;
 import com.xianda.freshdelivery.service.StorefrontService;
 import java.time.LocalDate;
@@ -22,5 +23,10 @@ public class AdminStockController {
     @GetMapping("/overview")
     public ApiResponse<List<StockOverviewItemDto>> overview(@RequestParam(required = false) LocalDate date) {
         return ApiResponse.ok(storefrontService.stockOverview(date));
+    }
+
+    @GetMapping("/export")
+    public ApiResponse<StockOverviewExportDto> export(@RequestParam(required = false) LocalDate date) {
+        return ApiResponse.ok(storefrontService.stockOverviewExport(date));
     }
 }

@@ -25,6 +25,8 @@ import com.xianda.freshdelivery.dto.ProductSpecGroupDto;
 import com.xianda.freshdelivery.dto.ProductSpecOptionDto;
 import com.xianda.freshdelivery.dto.RefundDto;
 import com.xianda.freshdelivery.dto.SettingsDto;
+import com.xianda.freshdelivery.dto.StockOverviewExportDto;
+import com.xianda.freshdelivery.dto.StockOverviewItemDto;
 import com.xianda.freshdelivery.service.StorefrontService;
 import java.math.BigDecimal;
 import java.nio.file.Path;
@@ -610,6 +612,89 @@ class StorefrontServiceTests {
         assertEquals(4, service.adminOrders(null, deliveryDate).stream()
                 .filter(order -> createdOrderIds.contains(order.id()))
                 .count());
+    }
+
+    @Test
+    void stockOverviewSplitsSpecsAndExportMatchesPaidOrdersOnly() {
+        StorefrontService service = newService();
+        ProductDto product = service.createProduct(multiSkuProductRequest("备货蓝莓"));
+        ProductSkuDto firstSku = product.skus().get(0);
+        ProductSkuDto secondSku = product.skus().get(1);
+        CurrentUserContext.setUserId(1000L);
+        Long addressId = service.createAddress(addressRequest()).id();
+
+        service.addCartItem(product.id(), firstSku.id(), new BigDecimal("2"));
+        service.addCartItem(product.id(), secondSku.id(), BigDecimal.ONE);
+        OrderDetailDto created = service.createOrder(new CreateOrderRequest(
+                addressId,
+                1L,
+                "门口放菜篮",
+                service.cart().items().stream().map(item -> item.id()).toList()
+        ));
+        OrderDetailDto paid = service.confirmPayment(new PaymentNotifyRequest(
+                created.orderNo(), "TX-STOCK", "SUCCESS", "wx-test-app", "test-mch", created.payableAmount()
+        )).order();
+
+        service.addCartItem(product.id(), firstSku.id(), BigDecimal.ONE);
+        OrderDetailDto unpaid = service.createOrder(new CreateOrderRequest(
+                addressId,
+                1L,
+                "",
+                service.cart().items().stream().map(item -> item.id()).toList()
+        ));
+        assertEquals("待支付", unpaid.status());
+
+        LocalDate deliveryDate = LocalDate.parse(service.adminOrders(null).stream()
+                .filter(order -> paid.orderNo().equals(order.orderNo()))
+                .findFirst()
+                .orElseThrow()
+                .deliveryDate());
+        List<StockOverviewItemDto> overview = service.stockOverview(deliveryDate);
+        assertEquals(1, overview.size());
+        StockOverviewItemDto row = overview.get(0);
+        assertEquals(product.id(), row.productId());
+        assertEquals(0, new BigDecimal("3").compareTo(row.quantity()));
+        assertEquals(1, row.orderCount());
+        assertEquals(List.of(paid.orderNo()), row.orderNos());
+        assertEquals(2, row.specDetails().size());
+        assertEquals(
+                0,
+                row.specDetails().stream()
+                        .map(spec -> spec.quantity())
+                        .reduce(BigDecimal.ZERO, BigDecimal::add)
+                        .compareTo(row.quantity())
+        );
+        assertEquals(
+                row.amount(),
+                row.specDetails().stream().mapToInt(spec -> spec.amount()).sum()
+        );
+        assertTrue(row.specDetails().stream().anyMatch(spec ->
+                firstSku.specificationText().equals(spec.specificationText())
+                        && spec.quantity().compareTo(new BigDecimal("2")) == 0));
+        assertTrue(row.specDetails().stream().anyMatch(spec ->
+                secondSku.specificationText().equals(spec.specificationText())
+                        && spec.quantity().compareTo(BigDecimal.ONE) == 0));
+
+        StockOverviewExportDto exported = service.stockOverviewExport(deliveryDate);
+        assertEquals(deliveryDate.toString(), exported.date());
+        assertEquals("备货总览_" + deliveryDate + ".xlsx", exported.filename());
+        assertEquals(List.of(
+                "配送日期", "商品ID", "商品名称", "需备数量", "单位", "规格明细", "订单数", "预计金额(元)", "关联订单号"
+        ), exported.productSheet().get(0));
+        assertEquals(2, exported.productSheet().size());
+        assertEquals("3", exported.productSheet().get(1).get(3));
+        assertEquals(paid.orderNo(), exported.productSheet().get(1).get(8));
+        assertEquals(3, exported.specSheet().size());
+        assertTrue(exported.orderSheet().stream().skip(1).allMatch(line ->
+                paid.orderNo().equals(line.get(1)) && "商品".equals(line.get(15))));
+        assertTrue(exported.orderSheet().stream().noneMatch(line -> unpaid.orderNo().equals(line.get(1))));
+        assertEquals("门口放菜篮", exported.orderSheet().get(1).get(16));
+        assertEquals(paid.createdAt(), exported.orderSheet().get(1).get(17));
+        assertEquals(2, exported.orderSheet().size() - 1);
+        StockOverviewExportDto emptyDay = service.stockOverviewExport(deliveryDate.plusYears(1));
+        assertEquals(1, emptyDay.productSheet().size());
+        assertEquals(1, emptyDay.specSheet().size());
+        assertEquals(1, emptyDay.orderSheet().size());
     }
 
     private StorefrontService newService() {

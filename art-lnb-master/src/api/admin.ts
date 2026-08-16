@@ -249,6 +249,14 @@ export interface StockOverviewItem {
   specDetails?: StockOverviewSpecItem[]
 }
 
+export interface StockOverviewExport {
+  date: string
+  filename: string
+  productSheet: string[][]
+  specSheet: string[][]
+  orderSheet: string[][]
+}
+
 export interface Banner {
   id?: number
   title: string
@@ -634,6 +642,13 @@ export function updateSettings(data: StoreSettings) {
 export function getStockOverview(date?: string) {
   return request.get<StockOverviewItem[]>({
     url: '/api/admin/stock/overview',
+    params: date ? { date } : undefined
+  })
+}
+
+export function exportStockOverview(date?: string) {
+  return request.get<StockOverviewExport>({
+    url: '/api/admin/stock/export',
     params: date ? { date } : undefined
   })
 }
