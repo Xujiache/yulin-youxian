@@ -1,89 +1,21 @@
-.lucky-mask {
-  position: fixed;
-  inset: 0;
-  z-index: 180;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 36rpx 28rpx calc(32rpx + env(safe-area-inset-bottom));
-  box-sizing: border-box;
-  background: rgba(8, 20, 14, 0.66);
-}
-
-.lucky-card {
-  width: 100%;
-  max-width: 640rpx;
-  max-height: 92vh;
-  padding: 36rpx 32rpx 28rpx;
-  overflow-y: auto;
-  box-sizing: border-box;
-  color: #17352a;
-  background: #ffffff;
-  border-radius: 32rpx;
-  box-shadow: 0 30rpx 80rpx rgba(4, 22, 14, 0.28);
-}
-
-.lucky-card__head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 20rpx;
-}
-
-.lucky-card__eyebrow,
-.lucky-card__title {
-  display: block;
-}
-
-.lucky-card__eyebrow {
-  color: #0a8a52;
-  font-size: 21rpx;
-  font-weight: 800;
-  line-height: 30rpx;
-  letter-spacing: 4rpx;
-}
-
-.lucky-card__title {
-  margin-top: 4rpx;
-  color: #17352a;
-  font-size: 38rpx;
-  font-weight: 900;
-  line-height: 50rpx;
-}
-
-.lucky-card__close {
-  flex: 0 0 auto;
-  min-width: 64rpx;
-  padding: 12rpx 20rpx;
-  color: #4a5c52;
-  font-size: 22rpx;
-  font-weight: 700;
-  text-align: center;
-  background: #f2f6f3;
-  border-radius: 999rpx;
-}
-
-.lucky-card__close.is-locked {
-  color: #8a968f;
-}
-
-.lucky-card__stage {
+.wheel-stage {
   position: relative;
   width: 520rpx;
   height: 520rpx;
-  margin: 24rpx auto 8rpx;
+  margin: 0 auto;
 }
 
 .wheel-pointer {
   position: absolute;
-  top: 2rpx;
+  top: -6rpx;
   left: 50%;
-  z-index: 4;
+  z-index: 5;
   width: 0;
   height: 0;
-  border-top: 66rpx solid #0a8a52;
-  border-right: 30rpx solid transparent;
-  border-left: 30rpx solid transparent;
+  border-top: 56rpx solid #006d42;
+  border-right: 26rpx solid transparent;
+  border-left: 26rpx solid transparent;
+  filter: drop-shadow(0 6rpx 8rpx rgba(0, 48, 29, 0.22));
   transform: translateX(-50%);
   transform-origin: 50% 0;
 }
@@ -105,24 +37,35 @@
   position: absolute;
   inset: 0;
   overflow: hidden;
-  background: #ffffff;
-  border: 14rpx solid #0a8a52;
+  background: #fff8e7;
   border-radius: 50%;
-  box-shadow: 0 18rpx 40rpx rgba(10, 100, 62, 0.18);
   box-sizing: border-box;
   transform-origin: center center;
 }
 
-.wheel-sectors {
+.wheel-rim {
   position: absolute;
   inset: 0;
+  z-index: 1;
+  border: 16rpx solid #f4c95d;
+  border-radius: 50%;
+  box-sizing: border-box;
+  box-shadow:
+    inset 0 0 0 6rpx #006d42,
+    0 16rpx 36rpx rgba(0, 76, 45, 0.16);
+  pointer-events: none;
+}
+
+.wheel-sectors {
+  position: absolute;
+  inset: 16rpx;
   border-radius: 50%;
   background: conic-gradient(
     from -45deg,
-    #0a8a52 0deg 90deg,
-    #f5c04e 90deg 180deg,
-    #1d8f5f 180deg 270deg,
-    #f4f0e2 270deg 360deg
+    #006d42 0deg 90deg,
+    #f4c95d 90deg 180deg,
+    #008a52 180deg 270deg,
+    #fff8e7 270deg 360deg
   );
 }
 
@@ -138,19 +81,19 @@
 }
 
 .wheel-disc.winner-0 .wheel-sectors::after {
-  background: conic-gradient(from -45deg, rgba(255, 255, 255, 0.24) 0deg 90deg, transparent 90deg 360deg);
+  background: conic-gradient(from -45deg, rgba(255, 255, 255, 0.22) 0deg 90deg, transparent 90deg 360deg);
 }
 
 .wheel-disc.winner-1 .wheel-sectors::after {
-  background: conic-gradient(from -45deg, transparent 0deg 90deg, rgba(255, 255, 255, 0.3) 90deg 180deg, transparent 180deg 360deg);
+  background: conic-gradient(from -45deg, transparent 0deg 90deg, rgba(255, 255, 255, 0.28) 90deg 180deg, transparent 180deg 360deg);
 }
 
 .wheel-disc.winner-2 .wheel-sectors::after {
-  background: conic-gradient(from -45deg, transparent 0deg 180deg, rgba(255, 255, 255, 0.22) 180deg 270deg, transparent 270deg 360deg);
+  background: conic-gradient(from -45deg, transparent 0deg 180deg, rgba(255, 255, 255, 0.2) 180deg 270deg, transparent 270deg 360deg);
 }
 
 .wheel-disc.winner-3 .wheel-sectors::after {
-  background: conic-gradient(from -45deg, transparent 0deg 270deg, rgba(245, 192, 78, 0.32) 270deg 360deg);
+  background: conic-gradient(from -45deg, transparent 0deg 270deg, rgba(244, 201, 93, 0.34) 270deg 360deg);
 }
 
 .wheel-label {
@@ -161,31 +104,31 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 140rpx;
+  width: 148rpx;
   height: 72rpx;
   margin-top: -36rpx;
-  margin-left: -70rpx;
+  margin-left: -74rpx;
   transform-origin: center center;
 }
 
 .wheel-label.tone-0,
 .wheel-label.tone-2 {
-  color: #ffffff;
+  color: #fff8e7;
 }
 
 .wheel-label.tone-1,
 .wheel-label.tone-3 {
-  color: #17352a;
+  color: #122019;
 }
 
 .wheel-label.is-winner {
-  background: rgba(255, 255, 255, 0.94);
-  border: 3rpx solid #0a8a52;
+  background: rgba(255, 248, 231, 0.94);
+  border: 3rpx solid #006d42;
   border-radius: 18rpx;
 }
 
 .wheel-label.is-winner .prize-name {
-  color: #0a8a52;
+  color: #006d42;
 }
 
 .prize-name {
@@ -203,140 +146,43 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 104rpx;
-  height: 104rpx;
-  color: #ffffff;
-  font-size: 34rpx;
-  font-weight: 900;
-  background: #17352a;
-  border: 8rpx solid #ffffff;
+  width: 112rpx;
+  height: 112rpx;
+  flex-direction: column;
+  color: #fff8e7;
+  background: #006d42;
+  border: 8rpx solid #fff8e7;
   border-radius: 50%;
-  box-shadow: 0 8rpx 18rpx rgba(8, 20, 14, 0.22);
+  box-shadow: 0 8rpx 18rpx rgba(8, 20, 14, 0.2);
   transform: translate(-50%, -50%);
 }
 
-.state-copy {
-  padding: 10rpx 12rpx 0;
+.hub-mark,
+.hub-caption {
+  display: block;
   text-align: center;
 }
 
-.state-copy__title,
-.state-copy__desc {
-  display: block;
+.hub-mark {
+  font-family: "STKaiti", "KaiTi", "PingFang SC", sans-serif;
+  font-size: 36rpx;
+  font-weight: 900;
+  line-height: 40rpx;
 }
 
-.state-copy__title {
-  color: #17352a;
-  font-size: 26rpx;
-  font-weight: 800;
-  line-height: 36rpx;
-}
-
-.state-copy__desc {
-  margin-top: 6rpx;
-  color: #6d7a72;
-  font-size: 21rpx;
-  line-height: 30rpx;
-}
-
-.result-card {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 20rpx;
-  margin-top: 8rpx;
-  padding: 24rpx;
-  background: #f2f6f3;
-  border-radius: 20rpx;
-}
-
-.result-card__main {
-  display: flex;
-  flex: 1;
-  min-width: 0;
-  flex-direction: column;
-}
-
-.result-card__kicker {
-  color: #7a867f;
-  font-size: 19rpx;
-  line-height: 27rpx;
-}
-
-.result-card__title {
+.hub-caption {
   margin-top: 2rpx;
-  overflow: hidden;
-  color: #17352a;
-  font-size: 28rpx;
-  font-weight: 900;
-  line-height: 38rpx;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.result-card__discount {
-  margin-top: 4rpx;
-  color: #0a8a52;
-  font-size: 23rpx;
+  font-size: 18rpx;
   font-weight: 800;
+  letter-spacing: 2rpx;
 }
 
-.result-card__gift,
-.result-card__plain {
-  margin-top: 4rpx;
-  color: #5c6a61;
-  font-size: 20rpx;
-  line-height: 28rpx;
-}
-
-.result-card__payable {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: flex-end;
-  flex-direction: column;
-}
-
-.result-card__label {
-  color: #7a867f;
-  font-size: 19rpx;
-}
-
-.result-card__amount {
-  margin-top: 4rpx;
-  color: #0a8a52;
-  font-size: 30rpx;
-  font-weight: 900;
-}
-
-.lucky-action {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  height: 86rpx;
-  margin-top: 24rpx;
-  color: #ffffff;
-  font-size: 28rpx;
-  font-weight: 900;
-  line-height: 86rpx;
-  background: #0a8a52;
-  border-radius: 999rpx;
-}
-
-.lucky-action::after {
-  border: 0;
-}
-
-.lucky-action.is-disabled {
-  color: rgba(255, 255, 255, 0.72);
-  background: #9db0a6;
-}
-
-.lucky-footnote {
-  display: block;
-  margin-top: 14rpx;
-  color: #8b978f;
-  font-size: 19rpx;
-  line-height: 27rpx;
-  text-align: center;
+.wheel-shadow {
+  position: absolute;
+  right: 48rpx;
+  bottom: -18rpx;
+  left: 48rpx;
+  height: 36rpx;
+  background: radial-gradient(ellipse at center, rgba(18, 32, 25, 0.18), transparent 72%);
+  pointer-events: none;
 }

@@ -5,5 +5,7 @@
   "navigationBarTextStyle": "black",
   "backgroundColor": "#FFF8E7",
   "enableShareTimeline": true,
-  "usingComponents": {}
+  "usingComponents": {
+    "lucky-wheel": "/components/lucky-wheel/index"
+  }
 }

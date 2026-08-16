@@ -1,4 +1,3 @@
-const { yuan } = require("../../utils/format");
 const { SLOT_COUNT, SPIN_TURNS, resolvePrizeIndex, targetRotation } = require("./wheel-math");
 
 const SPIN_DURATION = 4200;
@@ -19,36 +18,8 @@ function hasResult(result) {
   );
 }
 
-function isGiftResult(result) {
-  const type = String((result && result.prizeType) || "").toUpperCase();
-  return Boolean(
-    result
-    && (
-      result.productId
-      || result.skuId
-      || (result.gifts || []).length
-      || ["PRODUCT", "GIFT", "PHYSICAL", "SKU", "GOODS"].includes(type)
-      || type.includes("GIFT")
-      || type.includes("PRODUCT")
-    )
-  );
-}
-
 Component({
   properties: {
-    visible: {
-      type: Boolean,
-      value: false,
-      observer(visible) {
-        if (!visible) {
-          return;
-        }
-        this.preparePrizes();
-        if (hasResult(this.properties.initialResult) && !this.data.spinning) {
-          setTimeout(() => this.restoreResult(this.properties.initialResult), 0);
-        }
-      }
-    },
     prizes: {
       type: Array,
       value: [],
@@ -60,22 +31,10 @@ Component({
       type: Object,
       value: null,
       observer(result) {
-        if (this.properties.visible && hasResult(result) && !this.data.spinning) {
+        if (hasResult(result) && !this.data.spinning) {
           setTimeout(() => this.restoreResult(result), 0);
         }
       }
-    },
-    drawLoading: {
-      type: Boolean,
-      value: false
-    },
-    continueLoading: {
-      type: Boolean,
-      value: false
-    },
-    continueText: {
-      type: String,
-      value: "按最终金额继续支付"
     }
   },
 
@@ -84,19 +43,16 @@ Component({
     wheelRotation: 0,
     wheelTransition: "none",
     spinning: false,
-    showResult: false,
     winnerIndex: -1,
-    localResult: null,
-    resultTitle: "",
-    resultDiscountText: "",
-    resultPayableText: "0.00",
-    resultHasGift: false,
-    resultImageUrl: ""
+    localResult: null
   },
 
   lifetimes: {
     attached() {
       this.preparePrizes();
+      if (hasResult(this.properties.initialResult)) {
+        this.restoreResult(this.properties.initialResult);
+      }
     },
     detached() {
       this.clearSpinTimer();
@@ -133,20 +89,6 @@ Component({
       return resolvePrizeIndex(this.data.displayPrizes, result);
     },
 
-    resultViewData(result) {
-      const discountAmount = Number((result && result.discountAmount) || 0);
-      const resultHasGift = isGiftResult(result);
-      return {
-        localResult: result,
-        winnerIndex: this.resultIndex(result),
-        resultTitle: (result && result.prizeName) || (discountAmount > 0 ? "本单减免" : "菜篮鲜礼"),
-        resultDiscountText: discountAmount > 0 ? `本单立减 ¥${yuan(discountAmount)}` : "",
-        resultPayableText: yuan(result && result.payableAmount),
-        resultHasGift,
-        resultImageUrl: (result && result.imageUrl) || ""
-      };
-    },
-
     targetRotation(result, withTurns) {
       return targetRotation({
         index: this.resultIndex(result),
@@ -159,10 +101,9 @@ Component({
 
     showResultWithoutSpin(result, source) {
       this.setData({
-        ...this.resultViewData(result),
+        localResult: result,
         wheelTransition: "none",
         spinning: false,
-        showResult: true,
         winnerIndex: -1
       });
       this.triggerEvent("finish", { result, source });
@@ -179,8 +120,7 @@ Component({
       }
       const rotation = this.targetRotation(result, true);
       this.setData({
-        ...this.resultViewData(result),
-        showResult: false,
+        localResult: result,
         spinning: true,
         winnerIndex: -1,
         wheelTransition: "none"
@@ -205,11 +145,11 @@ Component({
       }
       this.clearSpinTimer();
       this.setData({
-        ...this.resultViewData(result),
+        localResult: result,
         wheelRotation: this.targetRotation(result, false),
         wheelTransition: "none",
         spinning: false,
-        showResult: true
+        winnerIndex: this.resultIndex(result)
       });
     },
 
@@ -220,7 +160,6 @@ Component({
       this.clearSpinTimer();
       this.setData({
         spinning: false,
-        showResult: true,
         winnerIndex: this.resultIndex(this.data.localResult)
       });
       this.triggerEvent("finish", {
@@ -242,41 +181,6 @@ Component({
 
     handleTransitionEnd() {
       this.finishSpin("transitionend");
-    },
-
-    handleDraw() {
-      if (this.data.spinning || this.properties.drawLoading) {
-        return;
-      }
-      this.triggerEvent("draw");
-    },
-
-    emitClose(source) {
-      if (this.data.spinning || this.properties.drawLoading || this.properties.continueLoading) {
-        return;
-      }
-      this.triggerEvent("close", {
-        hasResult: this.data.showResult,
-        result: this.data.localResult,
-        source
-      });
-    },
-
-    handleClose() {
-      this.emitClose("button");
-    },
-
-    handleMaskTap() {
-      this.emitClose("mask");
-    },
-
-    handleContinue() {
-      if (!this.data.showResult || this.data.spinning || this.properties.continueLoading) {
-        return;
-      }
-      this.triggerEvent("continue", { result: this.data.localResult });
-    },
-
-    stopPanelTap() {}
+    }
   }
 });

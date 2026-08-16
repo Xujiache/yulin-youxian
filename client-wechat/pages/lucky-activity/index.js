@@ -1,8 +1,13 @@
 const {
+  createLotteryChallenge,
+  drawLottery,
   getOrderLottery,
   getPublicLottery,
+  recoverLotteryDrawAfterFailure,
   reportLotteryShareTrigger
 } = require("../../api/marketing");
+const { yuan } = require("../../utils/format");
+const { mergeLotteryState } = require("../../utils/lottery-flow");
 const {
   readLotterySession,
   updateLotterySession
@@ -46,6 +51,69 @@ function delay(milliseconds) {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
+function isGiftResult(result) {
+  const type = String((result && result.prizeType) || "").toUpperCase();
+  return Boolean(
+    result
+    && (
+      result.productId
+      || result.skuId
+      || (result.gifts || []).length
+      || ["PRODUCT", "GIFT", "PHYSICAL", "SKU", "GOODS"].includes(type)
+      || type.includes("GIFT")
+      || type.includes("PRODUCT")
+    )
+  );
+}
+
+function resultCopy(result) {
+  const discountAmount = Number((result && result.discountAmount) || 0);
+  return {
+    resultTitle: (result && result.prizeName) || (discountAmount > 0 ? "本单减免" : "菜篮鲜礼"),
+    resultDiscountText: discountAmount > 0 ? `本单立减 ¥${yuan(discountAmount)}` : "",
+    resultPayableText: yuan(result && result.payableAmount),
+    resultHasGift: isGiftResult(result)
+  };
+}
+
+function pageCopy(phase, campaign) {
+  if (phase === "result") {
+    return {
+      pageTitle: "开奖结果",
+      pageDesc: "结果已由服务端锁定，可按最终金额继续支付"
+    };
+  }
+  if (phase === "draw") {
+    return {
+      pageTitle: "分享资格已点亮",
+      pageDesc: "资格已确认，转动这只转盘抽取本单鲜礼"
+    };
+  }
+  if (phase === "share") {
+    return {
+      pageTitle: campaign.name || "分享后抽取本单鲜礼",
+      pageDesc: campaign.shareDescription || "点右上角分享到朋友圈后，同一只转盘即可开奖"
+    };
+  }
+  return {
+    pageTitle: campaign.name || "把一篮新鲜，也分享给你",
+    pageDesc: campaign.shareDescription || "符合条件并分享活动页的订单，可抽取一次随机减免。"
+  };
+}
+
+function resolvePhase({ landingMode, drawn, shareTriggered }) {
+  if (landingMode) {
+    return "landing";
+  }
+  if (drawn) {
+    return "result";
+  }
+  if (shareTriggered) {
+    return "draw";
+  }
+  return "share";
+}
+
 Page({
   data: {
     landingMode: false,
@@ -53,7 +121,6 @@ Page({
     loadError: "",
     campaign: {},
     prizes: [],
-    campaignEnabled: true,
     campaignNotice: null,
     orderId: 0,
     source: "",
@@ -62,7 +129,19 @@ Page({
     shareMenuAvailable: true,
     reporting: false,
     shareReported: false,
-    statusText: ""
+    statusText: "",
+    phase: "share",
+    pageTitle: "菜篮鲜礼签",
+    pageDesc: "",
+    spinning: false,
+    drawLoading: false,
+    continueLoading: false,
+    continueText: "按最终金额继续支付",
+    wheelInitialResult: null,
+    resultTitle: "",
+    resultDiscountText: "",
+    resultPayableText: "0.00",
+    resultHasGift: false
   },
 
   onLoad(options = {}) {
@@ -80,13 +159,17 @@ Page({
     );
     const landingMode = !hasOrderContext
       && (getCurrentScene(options) === LANDING_SCENE || options.landing === "1");
-    this.setData({ landingMode });
+    const paymentMethod = session && session.paymentMethod === "FRIEND" ? "FRIEND" : "WECHAT";
+    this.setData({
+      landingMode,
+      continueText: paymentMethod === "FRIEND" ? "锁定金额并邀请好友" : "按最终金额继续支付"
+    });
     this.enableTimelineMenu();
     if (landingMode) {
       this.loadLandingContent();
       return;
     }
-    this.loadNormalActivity(options);
+    this.loadOrderWheel(options);
   },
 
   onShow() {
@@ -109,15 +192,17 @@ Page({
       return shareData;
     }
     if (
-      !this.data.shareReady
+      this.data.phase !== "share"
+      || !this.data.shareReady
       || !this.data.orderId
       || !this.data.challengeToken
       || this.data.reporting
     ) {
-      // 帖子照样会发出去，但资格没记录；静默返回会让用户白发一条朋友圈
-      const hint = this.data.reporting
-        ? "上一次分享正在记录，请稍候"
-        : "活动还没准备好，请稍候再分享";
+      const hint = this.data.phase !== "share"
+        ? "本单已记录资格，无需再次分享"
+        : this.data.reporting
+          ? "上一次分享正在记录，请稍候"
+          : "活动还没准备好，请稍候再分享";
       wx.showToast({ title: hint, icon: "none" });
       this.setData({ statusText: hint });
       return shareData;
@@ -138,28 +223,21 @@ Page({
       .then((state) => ({ ok: true, state }))
       .catch((error) => ({ ok: false, error }));
     this._shareReportPromise.then((report) => {
-      if (
-        this._returned
-        || !report.ok
-        || !report.state
-        || (!report.state.shareTriggered && !report.state.drawn)
-      ) {
+      if (this._returned || !report.ok || !report.state) {
         return;
       }
-      const challengeToken = report.state.challengeToken || this.data.challengeToken;
-      updateLotterySession({ action: "shared", challengeToken });
-      this.setData({
+      if (!report.state.shareTriggered && !report.state.drawn) {
+        return;
+      }
+      this.applyOrderState(report.state, {
         reporting: false,
         shareReported: true,
-        challengeToken,
-        statusText: "分享入口已记录，关闭面板后将自动返回"
+        statusText: "分享入口已记录，可以抽取本单鲜礼"
       });
     });
     return shareData;
   },
 
-  // 微信要求页面先声明“发送给朋友”，右上角才会展示“分享到朋友圈”。
-  // 好友分享只打开活动展示页，不授予本订单抽奖资格。
   onShareAppMessage() {
     return publicFriendShareData(this.data.campaign);
   },
@@ -177,23 +255,58 @@ Page({
     });
   },
 
+  applyOrderState(state, extra = {}) {
+    const campaign = (state && state.campaign) || this.data.campaign || {};
+    const drawn = Boolean(state && state.drawn && state.result);
+    const shareTriggered = Boolean(state && (state.shareTriggered || drawn));
+    const phase = extra.phase || resolvePhase({
+      landingMode: this.data.landingMode,
+      drawn,
+      shareTriggered
+    });
+    const copy = pageCopy(phase, campaign);
+    const result = drawn ? resultCopy(state.result) : {};
+    const challengeToken = (state && state.challengeToken) || this.data.challengeToken || "";
+    this.setData({
+      campaign,
+      prizes: (state && state.prizes) || this.data.prizes || [],
+      challengeToken,
+      shareReady: Boolean(challengeToken && phase === "share"),
+      shareReported: shareTriggered || this.data.shareReported,
+      phase,
+      pageTitle: copy.pageTitle,
+      pageDesc: copy.pageDesc,
+      wheelInitialResult: drawn ? state.result : null,
+      ...result,
+      ...extra
+    });
+    if (challengeToken) {
+      updateLotterySession({
+        challengeToken,
+        action: drawn ? "drawn" : shareTriggered ? "shared" : "pending"
+      });
+    }
+    return phase;
+  },
+
   async loadLandingContent() {
     this.setData({ loading: true, loadError: "" });
     try {
       const state = await getPublicLottery();
-      // 服务端直接下发活动配置、不做时间窗过滤，落地页必须自己判断 startAt/endAt，
-      // 否则未开始或已结束时访客照样看到完整奖品列表。
       const notice = campaignNotice(state.campaign);
+      const campaign = state.campaign || {};
+      const copy = pageCopy("landing", campaign);
       this.setData({
-        campaign: state.campaign || {},
+        campaign,
         prizes: state.prizes || [],
-        campaignEnabled: !notice,
         campaignNotice: notice,
+        phase: "landing",
+        pageTitle: copy.pageTitle,
+        pageDesc: copy.pageDesc,
         loadError: ""
       });
     } catch (error) {
       this.setData({
-        campaignEnabled: false,
         campaignNotice: null,
         loadError: (error && error.message) || "活动信息暂时没有加载出来"
       });
@@ -202,7 +315,7 @@ Page({
     }
   },
 
-  async loadNormalActivity(options = {}) {
+  async loadOrderWheel(options = {}) {
     const session = readLotterySession();
     const orderId = Number(options.orderId || (session && session.orderId) || 0);
     const source = options.source || (session && session.source) || "";
@@ -221,32 +334,33 @@ Page({
       challengeToken: session.challengeToken || ""
     });
     try {
-      const state = await getOrderLottery(orderId);
-      if (state.drawn || state.shareTriggered) {
+      let state = await getOrderLottery(orderId);
+      if (
+        !state.drawn
+        && !state.shareTriggered
+        && (!state.challengeToken || challengeInvalid(state))
+      ) {
+        const challenged = await createLotteryChallenge(orderId);
+        state = mergeLotteryState(state, challenged);
+        state = mergeLotteryState(state, await getOrderLottery(orderId));
+      }
+      if (state.drawn && !state.result) {
         this.setData({
           campaign: state.campaign || {},
           prizes: state.prizes || [],
-          shareReported: true,
-          statusText: "资格已经记录，正在返回付款页"
+          loadError: "本单已经抽取，结果暂未完整返回。请稍后重新进入。"
         });
-        updateLotterySession({
-          action: "shared",
-          challengeToken: state.challengeToken || session.challengeToken || ""
-        });
-        setTimeout(() => this.returnToPayment("shared"), 280);
         return;
       }
-      if (!state.eligible || !campaignEnabled(state)) {
+      if (!state.drawn && !state.shareTriggered && (!state.eligible || !campaignEnabled(state))) {
         this.setData({
           campaign: state.campaign || {},
           prizes: state.prizes || [],
-          campaignEnabled: campaignEnabled(state),
           loadError: stateMessage(state, "本单暂不符合活动条件")
         });
         return;
       }
-      const challengeToken = state.challengeToken || session.challengeToken || "";
-      if (!challengeToken || challengeInvalid(state)) {
+      if (!state.drawn && !state.shareTriggered && (!state.challengeToken || challengeInvalid(state))) {
         this.setData({
           campaign: state.campaign || {},
           prizes: state.prizes || [],
@@ -254,15 +368,7 @@ Page({
         });
         return;
       }
-      updateLotterySession({ challengeToken, action: "pending" });
-      this.setData({
-        campaign: state.campaign || {},
-        prizes: state.prizes || [],
-        campaignEnabled: true,
-        challengeToken,
-        shareReady: true,
-        statusText: ""
-      });
+      this.applyOrderState(state, { statusText: "" });
     } catch (error) {
       this.setData({
         loadError: (error && error.message) || "活动状态加载失败，请检查网络后重试"
@@ -294,23 +400,16 @@ Page({
         }
       }
       if (state && (state.shareTriggered || state.drawn)) {
-        const challengeToken = state.challengeToken || this.data.challengeToken;
-        updateLotterySession({ action: "shared", challengeToken });
-        this.setData({
+        this.applyOrderState(state, {
           reporting: false,
           shareReported: true,
-          challengeToken,
-          statusText: "分享入口已记录，正在返回抽奖"
+          statusText: state.drawn ? "本单已经开过签" : "分享入口已记录，可以抽取本单鲜礼"
         });
-        this.returnToPayment("shared");
         return;
       }
       if (state && state.eligible && campaignEnabled(state) && !challengeInvalid(state)) {
-        const challengeToken = state.challengeToken || this.data.challengeToken;
-        updateLotterySession({ action: "pending", challengeToken });
-        this.setData({
+        this.applyOrderState(state, {
           reporting: false,
-          challengeToken,
           statusText: "资格尚未记录，请重新从右上角进入朋友圈分享"
         });
         this._shareCallbackObserved = false;
@@ -343,37 +442,170 @@ Page({
     }
   },
 
+  wheel() {
+    return this.selectComponent("#activityLuckyWheel");
+  },
+
+  async handleDraw() {
+    if (
+      this.data.landingMode
+      || this.data.phase !== "draw"
+      || this.data.drawLoading
+      || this.data.spinning
+      || !this.data.orderId
+    ) {
+      return;
+    }
+    const orderId = Number(this.data.orderId);
+    const challengeToken = this.data.challengeToken || "";
+    if (!challengeToken) {
+      wx.showToast({ title: "分享凭证已失效，请重新进入活动", icon: "none" });
+      return;
+    }
+    this.setData({ drawLoading: true, statusText: "" });
+    try {
+      const beforeDraw = await getOrderLottery(orderId);
+      if (beforeDraw.drawn && beforeDraw.result) {
+        this.applyOrderState(beforeDraw);
+        const wheel = this.wheel();
+        if (wheel) {
+          wheel.restoreResult(beforeDraw.result);
+        }
+        return;
+      }
+      if (challengeInvalid(beforeDraw)) {
+        this.applyOrderState(beforeDraw, {
+          loadError: beforeDraw.eligible && campaignEnabled(beforeDraw)
+            ? "分享凭证已失效，请重新从右上角分享"
+            : stateMessage(beforeDraw)
+        });
+        return;
+      }
+      if (!beforeDraw.shareTriggered) {
+        this.applyOrderState(beforeDraw, {
+          statusText: "分享资格尚未生效，请重新从右上角进入朋友圈分享"
+        });
+        this._shareCallbackObserved = false;
+        return;
+      }
+      const response = await drawLottery(orderId, beforeDraw.challengeToken || challengeToken);
+      const result = response.result;
+      if (!result) {
+        throw new Error("服务端未返回完整抽奖结果");
+      }
+      const nextState = mergeLotteryState(beforeDraw, {
+        ...response.state,
+        shareTriggered: true,
+        drawn: true,
+        result
+      });
+      this.applyOrderState(nextState, {
+        phase: "draw",
+        spinning: true,
+        wheelInitialResult: null
+      });
+      const wheel = this.wheel();
+      if (wheel) {
+        wheel.spinTo(result);
+      } else {
+        this.handleWheelFinish({ detail: { result } });
+      }
+    } catch (error) {
+      let latest = null;
+      try {
+        latest = await getOrderLottery(orderId);
+      } catch {}
+      const recovery = recoverLotteryDrawAfterFailure({
+        getState: latest,
+        getFailed: !latest
+      });
+      if (recovery.action === "restore") {
+        this.applyOrderState(recovery.state, {
+          phase: "draw",
+          spinning: true,
+          wheelInitialResult: null
+        });
+        const wheel = this.wheel();
+        if (wheel) {
+          wheel.spinTo(recovery.result);
+        } else {
+          this.handleWheelFinish({ detail: { result: recovery.result } });
+        }
+        return;
+      }
+      if (latest && challengeInvalid(latest)) {
+        this.applyOrderState(latest, {
+          loadError: latest.eligible && campaignEnabled(latest)
+            ? "分享凭证已失效，请重新从右上角分享"
+            : stateMessage(latest)
+        });
+        return;
+      }
+      if (latest && !latest.shareTriggered) {
+        this.applyOrderState(latest, {
+          statusText: "分享资格已变化，请重新从右上角进入朋友圈分享"
+        });
+        this._shareCallbackObserved = false;
+        return;
+      }
+      wx.showModal({
+        title: recovery.title || "抽奖资格仍在",
+        content: latest
+          ? "本次没有生成中奖结果，资格未消耗，可检查网络后重试。"
+          : `${(error && error.message) || "网络连接失败"}。请保留订单，重新进入后会先恢复服务端结果。`,
+        showCancel: false
+      });
+    } finally {
+      this.setData({ drawLoading: false });
+    }
+  },
+
+  handleWheelFinish(event) {
+    const result = event && event.detail && event.detail.result;
+    this.setData({ spinning: false });
+    if (!result) {
+      return;
+    }
+    this.applyOrderState({
+      campaign: this.data.campaign,
+      prizes: this.data.prizes,
+      challengeToken: this.data.challengeToken,
+      shareTriggered: true,
+      drawn: true,
+      result
+    });
+  },
+
+  handleContinuePay() {
+    if (this.data.phase !== "result" || this.data.continueLoading || this.data.spinning) {
+      return;
+    }
+    this.returnToPayment("continue");
+  },
+
+  handleSkipPay() {
+    if (
+      this.data.landingMode
+      || this.data.reporting
+      || this.data.drawLoading
+      || this.data.spinning
+      || this.data.phase === "result"
+    ) {
+      return;
+    }
+    this.returnToPayment("skip");
+  },
+
   handleRetry() {
     if (this.data.landingMode) {
       this.loadLandingContent();
       return;
     }
     this._shareCallbackObserved = false;
-    this.loadNormalActivity({
+    this.loadOrderWheel({
       orderId: this.data.orderId,
       source: this.data.source
     });
-  },
-
-  handleOriginalPay() {
-    if (this.data.reporting) {
-      return;
-    }
-    this.returnToPayment("skip");
-  },
-
-  handleBackToPayment() {
-    if (this.data.reporting) {
-      return;
-    }
-    this.returnToPayment("pending");
-  },
-
-  handleReturnAfterShare() {
-    if (!this.data.shareReported) {
-      return;
-    }
-    this.returnToPayment("shared");
   },
 
   returnToPayment(action) {
@@ -381,6 +613,7 @@ Page({
       return;
     }
     this._returned = true;
+    this.setData({ continueLoading: action === "continue" });
     updateLotterySession({
       action,
       challengeToken: this.data.challengeToken

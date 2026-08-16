@@ -15,11 +15,7 @@ const {
   getPaymentShare,
   restartOrder
 } = require("../../api/orders");
-const {
-  createLotteryChallenge,
-  drawLottery,
-  getOrderLottery
-} = require("../../api/marketing");
+const { getOrderLottery } = require("../../api/marketing");
 const { syncTheme } = require("../../utils/theme");
 const {
   EMPTY_DELIVERY,
@@ -32,14 +28,15 @@ const {
   buildMapPolylines
 } = require("./tracking");
 const {
+  openLotteryPage,
+  shouldResumePayment
+} = require("../../utils/lottery-flow");
+const {
   clearLotterySession,
-  readLotterySession,
-  writeLotterySession
+  readLotterySession
 } = require("../../utils/lottery-session");
 const {
   hasActivePaymentShare,
-  isChallengeInvalid: lotteryChallengeInvalid,
-  lotteryCampaignEnabled,
   lotteryReasonText
 } = require("../../utils/lottery-status");
 const {
@@ -212,14 +209,14 @@ function buildLotteryEntry(state) {
       desc: discountAmount > 0
         ? `本单立减 ¥${yuan(discountAmount)}，最终应付 ¥${yuan(result.payableAmount)}`
         : "鲜礼已随本单锁定，可继续完成支付",
-      actionText: "查看鲜礼并继续支付"
+      actionText: "打开转盘"
     };
   }
   return {
     mode: "shared",
     title: "分享资格已记录",
-    desc: "本单还没有开签，点击即可抽取鲜礼",
-    actionText: "抽取本单鲜礼"
+    desc: "本单还没有开签，点击打开转盘抽取",
+    actionText: "打开转盘"
   };
 }
 
@@ -362,15 +359,6 @@ Page({
     lotteryState: null,
     lotteryEntry: null,
     lotteryEntryBusy: false,
-    lotteryBusy: false,
-    showLotteryChoice: false,
-    showLuckyWheel: false,
-    wheelPrizes: [],
-    wheelInitialResult: null,
-    lotteryResult: null,
-    drawLoading: false,
-    lotteryContinueLoading: false,
-    wheelContinueText: "按最终金额微信支付",
     delivery: { ...EMPTY_DELIVERY },
     mapScale: 15,
     markers: [],
@@ -534,8 +522,6 @@ Page({
       || this._resumingLottery
       || !this.data.isPendingPayment
       || !this.data.orderId
-      || this.data.showLuckyWheel
-      || this.data.showLotteryChoice
     ) {
       return;
     }
@@ -547,7 +533,6 @@ Page({
       }
       this.setData({
         lotteryState: state,
-        wheelPrizes: state.prizes || [],
         lotteryEntry: buildLotteryEntry(state)
       });
     } catch {}
@@ -916,8 +901,6 @@ Page({
       && !this.data.showPaymentMethodModal
       && !this.data.showCancelModal
       && !this.data.showRatingSheet
-      && !this.data.showLotteryChoice
-      && !this.data.showLuckyWheel
     );
   },
 
@@ -1316,7 +1299,7 @@ Page({
       await this.handleLotteryCheckFailure(error, paymentMethod);
       return;
     }
-    const intercepted = this.applyLotteryGate(state, paymentMethod);
+    const intercepted = await this.applyLotteryGate(state, paymentMethod);
     this.setData({ paying: false });
     if (intercepted) {
       return;
@@ -1324,19 +1307,55 @@ Page({
     await this.runFinalPayment(paymentMethod);
   },
 
-  applyLotteryGate(state, paymentMethod) {
+  applyLotteryResult(state) {
+    const result = state && state.result;
+    if (!result) {
+      return;
+    }
+    this.setData({
+      payableText: yuan(result.payableAmount),
+      lotteryDiscountText: yuan(result.discountAmount),
+      hasLotteryDiscount: Number(result.discountAmount || 0) > 0
+    });
+  },
+
+  async applyLotteryGate(state, paymentMethod) {
+    const orderId = Number(this.data.orderId || 0);
     this.setData({
       lotteryState: state,
       lotteryEntry: buildLotteryEntry(state),
       flowPaymentMethod: paymentMethod,
       selectedPaymentMethod: paymentMethod,
-      wheelPrizes: (state && state.prizes) || [],
-      wheelContinueText: paymentMethod === "FRIEND"
-        ? "锁定金额并邀请好友"
-        : "按最终金额微信支付"
+      showPaymentMethodModal: false
     });
-    if (state && state.drawn) {
-      if (!state.result) {
+    this.applyLotteryResult(state);
+    if (state && state.drawn && !state.result) {
+      wx.showModal({
+        title: "鲜礼结果同步中",
+        content: "本单已经抽取，结果暂未完整返回。请稍后再次点击继续支付恢复结果。",
+        showCancel: false
+      });
+      return true;
+    }
+    if (!orderId) {
+      return false;
+    }
+    try {
+      const opened = await openLotteryPage({
+        orderId,
+        source: "order-detail",
+        paymentMethod,
+        state
+      });
+      this.setData({
+        lotteryState: opened.state,
+        lotteryEntry: buildLotteryEntry(opened.state)
+      });
+      this.applyLotteryResult(opened.state);
+      if (opened.opened) {
+        return true;
+      }
+      if (opened.reason === "RESULT_PENDING") {
         wx.showModal({
           title: "鲜礼结果同步中",
           content: "本单已经抽取，结果暂未完整返回。请稍后再次点击继续支付恢复结果。",
@@ -1344,163 +1363,12 @@ Page({
         });
         return true;
       }
-      this.openLuckyWheel(state, false);
-      return true;
-    }
-    if (state && lotteryChallengeInvalid(state)) {
-      if (state.eligible && lotteryCampaignEnabled(state)) {
-        this.setData({
-          showPaymentMethodModal: false,
-          showLotteryChoice: true,
-          showLuckyWheel: false,
-          wheelInitialResult: null,
-          lotteryResult: null
-        });
-        return true;
-      }
-      return false;
-    }
-    if (state && state.shareTriggered) {
-      this.openLuckyWheel(state, false);
-      return true;
-    }
-    if (state && state.eligible && lotteryCampaignEnabled(state)) {
-      this.setData({
-        showPaymentMethodModal: false,
-        showLotteryChoice: true,
-        showLuckyWheel: false,
-        wheelInitialResult: null,
-        lotteryResult: null
-      });
-      return true;
-    }
-    clearLotterySession(this.data.orderId, "order-detail");
-    return false;
-  },
-
-  openLuckyWheel(state, animateResult) {
-    const result = state && state.result;
-    const nextData = {
-      lotteryState: state,
-      showPaymentMethodModal: false,
-      showLotteryChoice: false,
-      showLuckyWheel: true,
-      wheelPrizes: (state && state.prizes) || this.data.wheelPrizes || [],
-      wheelInitialResult: result && !animateResult ? result : null,
-      lotteryResult: result || null,
-      drawLoading: false,
-      lotteryContinueLoading: false
-    };
-    if (result) {
-      nextData.payableText = yuan(result.payableAmount);
-      nextData.lotteryDiscountText = yuan(result.discountAmount);
-      nextData.hasLotteryDiscount = Number(result.discountAmount || 0) > 0;
-    }
-    this.setData(nextData, () => {
-      if (!result) {
-        return;
-      }
-      const wheel = this.selectComponent("#detailLuckyWheel");
-      if (!wheel) {
-        return;
-      }
-      if (animateResult) {
-        wheel.spinTo(result);
-      } else {
-        wheel.restoreResult(result);
-      }
-    });
-  },
-
-  async handleUnlockLottery() {
-    if (this.data.lotteryBusy || !this.data.orderId) {
-      return;
-    }
-    const orderId = Number(this.data.orderId);
-    const paymentMethod = this.data.flowPaymentMethod || this.data.paymentMethod || "WECHAT";
-    let state = this.data.lotteryState || {};
-    this.setData({ lotteryBusy: true });
-    try {
-      if (!state.challengeToken || lotteryChallengeInvalid(state)) {
-        const challenged = await createLotteryChallenge(orderId);
-        state = {
-          ...state,
-          ...challenged,
-          campaign: challenged.campaign || state.campaign,
-          prizes: challenged.prizes && challenged.prizes.length ? challenged.prizes : state.prizes
-        };
-      }
-      const latest = await getOrderLottery(orderId);
-      state = {
-        ...state,
-        ...latest,
-        campaign: latest.campaign || state.campaign,
-        prizes: latest.prizes && latest.prizes.length ? latest.prizes : state.prizes
-      };
-      if (state.drawn || state.shareTriggered) {
-        this.applyLotteryGate(state, paymentMethod);
-        return;
-      }
-      if (
-        !state.eligible
-        || !lotteryCampaignEnabled(state)
-        || !state.challengeToken
-        || lotteryChallengeInvalid(state)
-      ) {
-        throw new Error(lotteryReasonText(state));
-      }
-      writeLotterySession({
-        orderId,
-        source: "order-detail",
-        challengeToken: state.challengeToken,
-        paymentMethod,
-        action: "pending"
-      });
-      this.setData({
-        lotteryState: state,
-        showLotteryChoice: false,
-        lotteryBusy: false
-      });
-      wx.navigateTo({
-        url: `/pages/lucky-activity/index?orderId=${orderId}&source=order-detail`,
-        fail: () => {
-          clearLotterySession(orderId, "order-detail");
-          this.setData({ showLotteryChoice: true });
-          wx.showToast({ title: "活动页打开失败，请重试", icon: "none" });
-        }
-      });
     } catch (error) {
-      let latest = null;
-      try {
-        latest = await getOrderLottery(orderId);
-      } catch {}
-      if (latest && (latest.drawn || latest.shareTriggered)) {
-        this.applyLotteryGate(latest, paymentMethod);
-        return;
-      }
-      const originalPay = await modalChoice({
-        title: "分享资格暂不可用",
-        content: `${(error && error.message) || "分享凭证获取失败"}。可重试，或按原价继续支付。`,
-        confirmText: "原价支付",
-        cancelText: "留在这里"
-      });
-      if (originalPay) {
-        this.setData({ showLotteryChoice: false });
-        await this.runFinalPayment(paymentMethod);
-      }
-    } finally {
-      this.setData({ lotteryBusy: false });
+      await this.handleLotteryCheckFailure(error, paymentMethod);
+      return true;
     }
-  },
-
-  async handleSkipLottery() {
-    if (this.data.lotteryBusy || this.data.paying || !this.data.orderId) {
-      return;
-    }
-    const paymentMethod = this.data.flowPaymentMethod || this.data.paymentMethod || "WECHAT";
-    clearLotterySession(this.data.orderId, "order-detail");
-    this.setData({ showLotteryChoice: false });
-    await this.runFinalPayment(paymentMethod);
+    clearLotterySession(orderId, "order-detail");
+    return false;
   },
 
   async resumeLotterySession() {
@@ -1520,24 +1388,18 @@ Page({
     const paymentMethod = session.paymentMethod === "FRIEND" ? "FRIEND" : "WECHAT";
     this.setData({ flowPaymentMethod: paymentMethod, selectedPaymentMethod: paymentMethod });
     try {
-      if (session.action === "skip") {
+      if (shouldResumePayment(session.action)) {
         clearLotterySession(orderId, "order-detail");
-        this.setData({ showLotteryChoice: false, showLuckyWheel: false });
         await this.runFinalPayment(paymentMethod);
         return;
       }
-      if (session.action === "reporting") {
-        await new Promise((resolve) => setTimeout(resolve, 350));
-      }
       const state = await getOrderLottery(orderId);
       clearLotterySession(orderId, "order-detail");
-      // 从活动页返回不代表用户要付款，只更新状态并把付款交还给用户点击
-      if (!this.applyLotteryGate(state, paymentMethod)) {
-        wx.showToast({
-          title: lotteryReasonText(state, "本单暂不能参与鲜礼，可直接继续支付"),
-          icon: "none"
-        });
-      }
+      this.setData({
+        lotteryState: state,
+        lotteryEntry: buildLotteryEntry(state)
+      });
+      this.applyLotteryResult(state);
     } catch (error) {
       await this.handleLotteryCheckFailure(error, paymentMethod, { allowPay: false });
     } finally {
@@ -1565,174 +1427,6 @@ Page({
       return;
     }
     this.refitMapSoon();
-  },
-
-  async handleLotteryDraw() {
-    if (
-      this.data.drawLoading
-      || this.data.lotteryContinueLoading
-      || !this.data.orderId
-    ) {
-      return;
-    }
-    const orderId = Number(this.data.orderId);
-    const state = this.data.lotteryState || {};
-    const challengeToken = state.challengeToken || "";
-    if (!challengeToken) {
-      wx.showToast({ title: "分享凭证已失效，请重新进入活动", icon: "none" });
-      return;
-    }
-    this.setData({ drawLoading: true });
-    try {
-      const beforeDraw = await getOrderLottery(orderId);
-      if (beforeDraw.drawn && beforeDraw.result) {
-        this.openLuckyWheel(beforeDraw, false);
-        return;
-      }
-      if (lotteryChallengeInvalid(beforeDraw)) {
-        this.setData({
-          lotteryState: beforeDraw,
-          showLuckyWheel: false,
-          showLotteryChoice: Boolean(beforeDraw.eligible && lotteryCampaignEnabled(beforeDraw))
-        });
-        if (beforeDraw.eligible && lotteryCampaignEnabled(beforeDraw)) {
-          wx.showToast({ title: "分享凭证已失效，请重新解锁", icon: "none" });
-        } else {
-          await this.handleLotteryCheckFailure(
-            new Error(lotteryReasonText(beforeDraw)),
-            this.data.flowPaymentMethod || this.data.paymentMethod
-          );
-        }
-        return;
-      }
-      if (!beforeDraw.shareTriggered) {
-        this.setData({ showLuckyWheel: false });
-        this.applyLotteryGate(beforeDraw, this.data.flowPaymentMethod || this.data.paymentMethod);
-        wx.showToast({ title: "分享资格尚未生效，请重新确认", icon: "none" });
-        return;
-      }
-      const response = await drawLottery(
-        orderId,
-        beforeDraw.challengeToken || challengeToken
-      );
-      const result = response.result;
-      if (!result) {
-        throw new Error("服务端未返回完整抽奖结果");
-      }
-      const nextState = {
-        ...beforeDraw,
-        ...response.state,
-        campaign: response.state.campaign || beforeDraw.campaign,
-        prizes: response.state.prizes && response.state.prizes.length
-          ? response.state.prizes
-          : beforeDraw.prizes,
-        shareTriggered: true,
-        drawn: true,
-        result
-      };
-      this.openLuckyWheel(nextState, true);
-    } catch (error) {
-      let latest = null;
-      try {
-        latest = await getOrderLottery(orderId);
-      } catch {}
-      if (latest && latest.drawn && latest.result) {
-        this.openLuckyWheel(latest, true);
-        return;
-      }
-      if (latest && lotteryChallengeInvalid(latest)) {
-        this.setData({
-          lotteryState: latest,
-          showLuckyWheel: false,
-          showLotteryChoice: Boolean(latest.eligible && lotteryCampaignEnabled(latest))
-        });
-        if (latest.eligible && lotteryCampaignEnabled(latest)) {
-          wx.showToast({ title: "分享凭证已失效，请重新解锁", icon: "none" });
-        } else {
-          await this.handleLotteryCheckFailure(
-            new Error(lotteryReasonText(latest)),
-            this.data.flowPaymentMethod || this.data.paymentMethod
-          );
-        }
-        return;
-      }
-      if (latest && !latest.shareTriggered) {
-        this.setData({ showLuckyWheel: false });
-        this.applyLotteryGate(latest, this.data.flowPaymentMethod || this.data.paymentMethod);
-        wx.showToast({ title: "分享资格已变化，请重新进入", icon: "none" });
-        return;
-      }
-      wx.showModal({
-        title: latest ? "抽奖资格仍在" : "抽奖结果暂未确认",
-        content: latest
-          ? "本次没有生成中奖结果，资格未消耗，可检查网络后重试。"
-          : `${(error && error.message) || "网络连接失败"}。重新进入时会先恢复服务端结果。`,
-        showCancel: false
-      });
-    } finally {
-      this.setData({ drawLoading: false });
-    }
-  },
-
-  handleLotteryFinish() {},
-
-  async handleLuckyWheelContinue() {
-    if (this.data.lotteryContinueLoading || this.data.drawLoading) {
-      return;
-    }
-    this.setData({
-      showLuckyWheel: false,
-      lotteryContinueLoading: true
-    });
-    await this.runFinalPayment(this.data.flowPaymentMethod || this.data.paymentMethod || "WECHAT");
-    this.setData({ lotteryContinueLoading: false });
-  },
-
-  async handleLuckyWheelClose(event) {
-    if (!this.data.orderId || this.data.drawLoading || this.data.lotteryContinueLoading) {
-      return;
-    }
-    const detail = (event && event.detail) || {};
-    const paymentMethod = this.data.flowPaymentMethod || this.data.paymentMethod || "WECHAT";
-    const hasResult = Boolean(
-      detail.hasResult
-      || (this.data.lotteryState && this.data.lotteryState.drawn)
-    );
-    this.setData({ showLuckyWheel: false });
-    this.refitMapSoon();
-    // 点遮罩只是收起弹层，绝不触发任何支付动作
-    if (detail.source === "mask") {
-      wx.showToast({
-        title: hasResult ? "鲜礼已保存，可从待支付区域继续" : "已收起，可从待支付区域继续抽取",
-        icon: "none"
-      });
-      return;
-    }
-    if (!hasResult) {
-      const keepDrawing = await modalChoice({
-        title: "先不抽鲜礼？",
-        content: paymentMethod === "FRIEND"
-          ? "生成代付链接后本单会按原价锁定，不再参与本次鲜礼抽奖。"
-          : "按原价支付后本单不再参与本次鲜礼抽奖；也可以先抽完再付款。",
-        confirmText: "继续抽奖",
-        cancelText: "原价支付"
-      });
-      if (keepDrawing) {
-        this.setData({ showLuckyWheel: true });
-        return;
-      }
-      await this.runFinalPayment(paymentMethod);
-      return;
-    }
-    const continueNow = await modalChoice({
-      title: "鲜礼结果已保存",
-      content: "本单金额已经锁定，可现在继续支付，也可稍后回来恢复。",
-      confirmText: "继续支付",
-      cancelText: "稍后再付"
-    });
-    if (continueNow) {
-      await this.runFinalPayment(paymentMethod);
-    }
   },
 
   // 后端在生成新代付链接时会作废该订单已有的全部链接并轮换支付单号，

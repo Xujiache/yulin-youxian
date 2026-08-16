@@ -42,6 +42,11 @@ const {
   targetRotation
 } = require("../components/lucky-wheel/wheel-math");
 const {
+  shouldOpenLotteryPage,
+  shouldResumePayment,
+  sessionActionForState
+} = require("../utils/lottery-flow");
+const {
   isPaidOrder,
   paymentShareConfirmationState,
   waitForPaymentShareResult
@@ -369,6 +374,23 @@ test("wheel never lands on a wrong slot when the prize index is unusable", () =>
   assert.equal(targetRotation({ index: 1, count: 4, currentRotation: 0, withTurns: true }), 2430);
   assert.equal(targetRotation({ index: -1, count: 4, currentRotation: 240, withTurns: true }), 240);
   assert.equal(targetRotation({ index: 9, count: 4, currentRotation: 240 }), 240);
+});
+
+test("payment pages only open the wheel page for eligible shared or drawn orders", () => {
+  assert.equal(shouldOpenLotteryPage(null), false);
+  assert.equal(shouldOpenLotteryPage({ eligible: false }), false);
+  assert.equal(shouldOpenLotteryPage({ eligible: true, campaign: { enabled: false } }), false);
+  assert.equal(shouldOpenLotteryPage({ eligible: true, campaign: { enabled: true } }), true);
+  assert.equal(shouldOpenLotteryPage({ shareTriggered: true }), true);
+  assert.equal(shouldOpenLotteryPage({ drawn: true }), false);
+  assert.equal(shouldOpenLotteryPage({ drawn: true, result: { prizeCode: "FIRST" } }), true);
+  assert.equal(shouldResumePayment("pending"), false);
+  assert.equal(shouldResumePayment("shared"), false);
+  assert.equal(shouldResumePayment("skip"), true);
+  assert.equal(shouldResumePayment("continue"), true);
+  assert.equal(sessionActionForState({ drawn: true }), "drawn");
+  assert.equal(sessionActionForState({ shareTriggered: true }), "shared");
+  assert.equal(sessionActionForState({ eligible: true }), "pending");
 });
 
 test("draw recovery prefers the GET result and keeps eligibility when both fail", () => {

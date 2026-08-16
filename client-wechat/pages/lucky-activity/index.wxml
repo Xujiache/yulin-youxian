@@ -1,114 +1,96 @@
-<view class="activity-page {{landingMode ? 'is-landing' : 'is-normal'}}">
-  <view wx:if="{{loading}}" class="activity-loading">
+<view class="ticket-page {{landingMode ? 'is-landing' : 'is-order'}}">
+  <view wx:if="{{loading}}" class="ticket-loading">
     <view class="loading-ring"></view>
-    <text>正在加载活动信息…</text>
+    <text>正在展开本单鲜礼签…</text>
   </view>
 
-  <block wx:elif="{{landingMode}}">
-    <view class="landing-head">
-      <text class="landing-kicker">禹邻优鲜 · 随机减免</text>
-      <text class="landing-title">{{campaign.name || '分享解锁一次抽奖'}}</text>
-      <text class="landing-desc">{{campaign.shareDescription || '符合条件并分享活动页的订单，可抽取一次随机减免。'}}</text>
-    </view>
-
-    <view wx:if="{{loadError}}" class="landing-notice">
-      <text class="landing-notice-title">活动信息暂时没有加载出来</text>
-      <text class="landing-notice-desc">{{loadError}}，稍后再来看看。</text>
-    </view>
-
-    <view wx:elif="{{campaignNotice}}" class="landing-notice">
-      <text class="landing-notice-title">{{campaignNotice.title}}</text>
-      <text class="landing-notice-desc">{{campaignNotice.desc}}</text>
-    </view>
-
-    <view wx:else class="landing-prizes-card">
-      <text class="landing-prizes-title">本期奖项</text>
-      <view class="landing-prizes">
-        <view wx:for="{{prizes}}" wx:key="id" class="landing-prize tone-{{index % 4}}">
-          <text class="landing-prize-name">{{item.name}}</text>
-        </view>
-      </view>
-    </view>
-
-    <view class="landing-rules">
-      <text class="landing-rules-title">活动说明</text>
-      <text class="landing-rules-line">活动是否开放、订单门槛和抽取结果，以发起人的付款订单页为准。</text>
-      <text class="landing-rules-line">中奖后减免会按最终应付金额锁定；每个符合条件的订单仅有一次机会。</text>
-    </view>
-    <text class="landing-footnote">本页仅展示活动内容，不读取登录信息</text>
-  </block>
-
   <block wx:else>
-    <view class="guide-head">
-      <text class="guide-kicker">随机减免</text>
-      <text class="guide-title">{{campaign.name || '分享后抽取本单减免'}}</text>
-      <text class="guide-desc">结果由服务端先锁定，再回到付款页转到对应奖项</text>
-    </view>
+    <view class="ticket-card">
+      <view class="ticket-head">
+        <text class="ticket-eyebrow">菜篮鲜礼签</text>
+        <text class="ticket-title">{{pageTitle}}</text>
+        <text class="ticket-desc">{{pageDesc}}</text>
+      </view>
 
-    <view class="guide-menu">
-      <view class="guide-menu-dots"><text>···</text></view>
-      <text class="guide-menu-title">点右上角进入分享菜单</text>
-      <text class="guide-menu-desc">再选择「分享到朋友圈」</text>
-    </view>
+      <view class="ticket-perforation">
+        <view class="ticket-cut cut-left"></view>
+        <view class="ticket-dash"></view>
+        <view class="ticket-cut cut-right"></view>
+      </view>
 
-    <view class="guide-steps">
-      <view class="guide-step">
-        <text class="step-index">1</text>
-        <view>
-          <text class="step-title">打开右上角 ···</text>
-          <text class="step-desc">微信不允许页面替你拉起朋友圈分享</text>
+      <lucky-wheel
+        id="activityLuckyWheel"
+        prizes="{{prizes}}"
+        initial-result="{{wheelInitialResult}}"
+        bind:finish="handleWheelFinish"
+      />
+
+      <view wx:if="{{phase === 'result'}}" class="result-copy">
+        <text class="result-kicker">本次抽中</text>
+        <text class="result-title">{{resultTitle}}</text>
+        <text wx:if="{{resultDiscountText}}" class="result-discount">{{resultDiscountText}}</text>
+        <text wx:elif="{{resultHasGift}}" class="result-plain">将作为赠品随本单送达</text>
+        <text wx:else class="result-plain">本次未减免，订单按原价结算</text>
+        <view class="result-payable">
+          <text>最终应付</text>
+          <text class="result-amount">¥{{resultPayableText}}</text>
         </view>
       </view>
-      <view class="step-rail"></view>
-      <view class="guide-step">
-        <text class="step-index">2</text>
-        <view>
-          <text class="step-title">选择分享到朋友圈</text>
-          <text class="step-desc">进入该入口时记录资格，不核验最终是否发布</text>
+
+      <view wx:elif="{{phase === 'draw'}}" class="state-copy">
+        <text class="state-title">{{spinning ? '正在按服务端结果落签' : '资格已确认，可以抽取一次'}}</text>
+        <text class="state-desc">{{spinning ? '转动结束前请不要关闭页面' : '中奖结果由服务端先锁定；网络失败不会消耗资格'}}</text>
+      </view>
+
+      <view wx:elif="{{phase === 'share'}}" class="state-copy">
+        <view class="share-guide">
+          <view class="share-dots">···</view>
+          <text class="state-title">点右上角进入分享菜单</text>
+          <text class="state-desc">再选择「分享到朋友圈」。进入该入口时记录资格，不核验最终是否发布。</text>
         </view>
       </view>
-      <view class="step-rail"></view>
-      <view class="guide-step">
-        <text class="step-index">3</text>
-        <view>
-          <text class="step-title">关闭面板，自动返回</text>
-          <text class="step-desc">付款页会再次向服务端确认，再打开转盘</text>
-        </view>
+
+      <view wx:else class="state-copy">
+        <text class="state-title">{{campaignNotice ? campaignNotice.title : '朋友圈里也能看到这只转盘'}}</text>
+        <text class="state-desc">{{campaignNotice ? campaignNotice.desc : (campaign.shareDescription || '符合条件并分享活动页的订单，可抽取一次随机减免。')}}</text>
       </view>
     </view>
 
-    <view wx:if="{{!shareMenuAvailable}}" class="activity-alert">
+    <view wx:if="{{!shareMenuAvailable && phase === 'share'}}" class="ticket-alert">
       当前微信版本暂不支持朋友圈分享，可返回按原价支付。
     </view>
 
-    <view wx:if="{{statusText}}" class="activity-status {{shareReported ? 'is-success' : ''}}">
+    <view wx:if="{{statusText}}" class="ticket-status {{shareReported ? 'is-success' : ''}}">
       <view class="status-dot"></view>
       <text>{{statusText}}</text>
     </view>
 
-    <view wx:if="{{loadError}}" class="activity-error">
-      <text class="activity-error-title">本次资格还没有确认</text>
-      <text class="activity-error-desc">{{loadError}}</text>
-      <view class="activity-error-actions">
-        <button class="error-retry" bindtap="handleRetry">重新确认</button>
-        <button class="error-back" bindtap="handleOriginalPay">按原价支付</button>
-      </view>
+    <view wx:if="{{loadError}}" class="ticket-error">
+      <text class="ticket-error-title">本次资格还没有确认</text>
+      <text class="ticket-error-desc">{{loadError}}</text>
+      <button class="ticket-retry" bindtap="handleRetry">重新确认</button>
     </view>
 
-    <view class="activity-bottom-space"></view>
-    <view class="activity-actions">
+    <view wx:if="{{!landingMode}}" class="ticket-actions">
       <button
-        wx:if="{{shareReported}}"
-        class="return-draw-button"
-        bindtap="handleReturnAfterShare"
-      >返回付款页抽奖</button>
-      <block wx:else>
-        <text class="actions-tip">{{reporting ? '正在记录，请关闭微信分享面板后稍候' : '不进入朋友圈分享就不会获得抽奖资格'}}</text>
-        <view class="actions-row">
-          <button class="back-button" disabled="{{reporting}}" bindtap="handleBackToPayment">返回付款页</button>
-          <button class="original-button" disabled="{{reporting}}" bindtap="handleOriginalPay">原价支付</button>
-        </view>
-      </block>
+        wx:if="{{phase === 'draw'}}"
+        class="ticket-primary {{drawLoading || spinning ? 'is-disabled' : ''}}"
+        disabled="{{drawLoading || spinning}}"
+        bindtap="handleDraw"
+      >{{drawLoading ? '正在提交抽奖…' : spinning ? '开奖中…' : '抽取本单鲜礼'}}</button>
+
+      <button
+        wx:elif="{{phase === 'result'}}"
+        class="ticket-primary {{continueLoading ? 'is-disabled' : ''}}"
+        disabled="{{continueLoading}}"
+        bindtap="handleContinuePay"
+      >{{continueLoading ? '正在返回付款…' : continueText}}</button>
+
+      <text
+        wx:if="{{phase === 'share' || phase === 'draw'}}"
+        class="ticket-skip {{reporting || drawLoading || spinning ? 'is-locked' : ''}}"
+        bindtap="handleSkipPay"
+      >不参加，按原价支付</text>
     </view>
   </block>
 </view>

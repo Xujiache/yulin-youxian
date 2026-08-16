@@ -1,76 +1,24 @@
-<view wx:if="{{visible}}" class="lucky-mask" catchtap="handleMaskTap">
-  <view class="lucky-card" catchtap="stopPanelTap">
-    <view class="lucky-card__head">
-      <view>
-        <text class="lucky-card__eyebrow">随机减免</text>
-        <text class="lucky-card__title">{{showResult ? '开奖结果' : '本单抽奖'}}</text>
-      </view>
-      <view
-        class="lucky-card__close {{spinning || drawLoading || continueLoading ? 'is-locked' : ''}}"
-        catchtap="handleClose"
-      >{{spinning ? '转动中' : '关闭'}}</view>
+<view class="wheel-stage">
+  <view class="wheel-pointer {{spinning ? 'is-wobbling' : ''}}"></view>
+  <view
+    class="wheel-disc {{spinning ? 'is-spinning' : ''}} {{winnerIndex >= 0 && !spinning ? 'has-winner winner-' + winnerIndex : ''}}"
+    style="transform: rotate({{wheelRotation}}deg); transition: {{wheelTransition}};"
+    bindtransitionend="handleTransitionEnd"
+  >
+    <view class="wheel-rim"></view>
+    <view class="wheel-sectors"></view>
+    <view
+      wx:for="{{displayPrizes}}"
+      wx:key="slot"
+      class="wheel-label tone-{{item.tone}} {{winnerIndex === index && !spinning ? 'is-winner' : ''}}"
+      style="{{item.labelStyle}}"
+    >
+      <text class="prize-name">{{item.label}}</text>
     </view>
-
-    <view class="lucky-card__stage">
-      <view class="wheel-pointer {{spinning ? 'is-wobbling' : ''}}"></view>
-      <view
-        class="wheel-disc {{spinning ? 'is-spinning' : ''}} {{winnerIndex >= 0 && showResult && !spinning ? 'has-winner winner-' + winnerIndex : ''}}"
-        style="transform: rotate({{wheelRotation}}deg); transition: {{wheelTransition}};"
-        bindtransitionend="handleTransitionEnd"
-      >
-        <view class="wheel-sectors"></view>
-        <view
-          wx:for="{{displayPrizes}}"
-          wx:key="slot"
-          class="wheel-label tone-{{item.tone}} {{winnerIndex === index && showResult && !spinning ? 'is-winner' : ''}}"
-          style="{{item.labelStyle}}"
-        >
-          <text class="prize-name">{{item.label}}</text>
-        </view>
-        <view class="wheel-hub">抽</view>
-      </view>
+    <view class="wheel-hub">
+      <text class="hub-mark">鲜</text>
+      <text class="hub-caption">开签</text>
     </view>
-
-    <view wx:if="{{showResult}}" class="result-card">
-      <view class="result-card__main">
-        <text class="result-card__kicker">本次抽中</text>
-        <text class="result-card__title">{{resultTitle}}</text>
-        <text wx:if="{{resultDiscountText}}" class="result-card__discount">{{resultDiscountText}}</text>
-        <text wx:if="{{resultHasGift}}" class="result-card__gift">将作为赠品随本单送达</text>
-        <text wx:elif="{{!resultDiscountText}}" class="result-card__plain">本次未减免，订单按原价结算</text>
-      </view>
-      <view class="result-card__payable">
-        <text class="result-card__label">最终应付</text>
-        <text class="result-card__amount">¥{{resultPayableText}}</text>
-      </view>
-    </view>
-
-    <view wx:elif="{{spinning}}" class="state-copy">
-      <text class="state-copy__title">正在按服务端结果落签</text>
-      <text class="state-copy__desc">转动结束前请不要关闭页面</text>
-    </view>
-
-    <view wx:else class="state-copy">
-      <text class="state-copy__title">分享资格已确认，可以抽取一次</text>
-      <text class="state-copy__desc">中奖结果由服务端先锁定；网络失败不会消耗资格</text>
-    </view>
-
-    <button
-      wx:if="{{!showResult}}"
-      class="lucky-action {{drawLoading || spinning ? 'is-disabled' : ''}}"
-      disabled="{{drawLoading || spinning}}"
-      bindtap="handleDraw"
-    >{{drawLoading ? '正在提交抽奖…' : spinning ? '开奖中…' : '开始抽奖'}}</button>
-
-    <button
-      wx:else
-      class="lucky-action {{continueLoading ? 'is-disabled' : ''}}"
-      disabled="{{continueLoading}}"
-      bindtap="handleContinue"
-    >{{continueLoading ? '正在锁定金额…' : continueText}}</button>
-
-    <text class="lucky-footnote">
-      {{spinning ? '转动中不可关闭' : showResult ? '结果已保存，重新进入仍可查看' : '每个符合条件的订单仅有一次机会'}}
-    </text>
   </view>
+  <view class="wheel-shadow"></view>
 </view>
