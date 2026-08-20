@@ -49,13 +49,11 @@
       <ElTable v-loading="loading" :data="items" border empty-text="所选日期暂无需备货订单">
         <ElTableColumn label="图片" width="86">
           <template #default="{ row }">
-            <ElImage
+            <FreshImage
               v-if="row.imageUrl"
               class="image-thumb"
-              :src="imageUrl(row.imageUrl)"
+              :src="row.imageUrl"
               fit="cover"
-              :preview-src-list="[imageUrl(row.imageUrl)]"
-              preview-teleported
             />
             <div v-else class="image-thumb empty-thumb">无图</div>
           </template>
@@ -107,6 +105,7 @@
     type StockOverviewSpecItem
   } from '@/api/admin'
   import { resolveFreshAssetUrl } from '@/utils/fresh-assets'
+  import FreshImage from '@/components/business/fresh-image/index.vue'
 
   defineOptions({ name: 'FreshStockOverview' })
 
@@ -129,7 +128,6 @@
   const exporting = ref(false)
   const selectedDate = ref(dateText(1))
   const items = ref<StockOverviewItem[]>([])
-  const imageUrl = resolveFreshAssetUrl
   const money = (value: number) => `￥${(Number(value || 0) / 100).toFixed(2)}`
 
   const quantityText = (quantity: number | string, unit?: string) => {

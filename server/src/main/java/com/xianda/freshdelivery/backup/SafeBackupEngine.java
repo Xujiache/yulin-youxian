@@ -206,10 +206,9 @@ public final class SafeBackupEngine {
         return createBackupInternal(type, false);
     }
 
-    public synchronized List<BackupService.BackupMetadata> listBackups() {
+    public List<BackupService.BackupMetadata> listBackups() {
         try {
             Files.createDirectories(backupDirectory);
-            cleanupStaleTemporaryFiles();
             try (Stream<Path> paths = Files.list(backupDirectory)) {
                 return paths.filter(path -> Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS))
                         .filter(path -> path.getFileName().toString().endsWith(".zip"))
@@ -1251,7 +1250,7 @@ public final class SafeBackupEngine {
                     type,
                     createdAt,
                     Files.size(path),
-                    sha256(path)
+                    ""
             );
         } catch (IOException | RuntimeException exception) {
             throw new IllegalStateException("读取备份信息失败：" + path, exception);

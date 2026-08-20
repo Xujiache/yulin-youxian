@@ -18,13 +18,11 @@
       <ElTable v-loading="loading" :data="categories" border empty-text="暂无分类">
         <ElTableColumn label="分类图标" width="110">
           <template #default="{ row }">
-            <ElImage
+            <FreshImage
               v-if="row.iconUrl"
               class="category-icon"
-              :src="assetUrl(row.iconUrl)"
+              :src="row.iconUrl"
               fit="contain"
-              :preview-src-list="[assetUrl(row.iconUrl)]"
-              preview-teleported
             />
             <div v-else class="category-icon category-icon--empty">无图</div>
           </template>
@@ -86,6 +84,7 @@
     type Category
   } from '@/api/admin'
   import { resolveFreshAssetUrl } from '@/utils/fresh-assets'
+  import FreshImage from '@/components/business/fresh-image/index.vue'
 
   defineOptions({ name: 'FreshCategories' })
 

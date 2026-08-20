@@ -15,7 +15,7 @@
 
     <ElAlert
       title="恢复会覆盖当前业务数据"
-      description="恢复前系统会自动生成一份恢复保护备份。请确认备份时间和校验值后再执行恢复。"
+      description="恢复前系统会自动生成一份恢复保护备份；恢复时会对备份内容执行完整校验。"
       type="warning"
       :closable="false"
       show-icon
@@ -41,10 +41,10 @@
         <ElTableColumn label="大小" width="110">
           <template #default="{ row }">{{ formatBytes(row.sizeBytes) }}</template>
         </ElTableColumn>
-        <ElTableColumn label="校验值" min-width="160">
+        <ElTableColumn label="完整性" min-width="160">
           <template #default="{ row }">
-            <ElTooltip :content="row.sha256" placement="top">
-              <span class="checksum">{{ row.sha256.slice(0, 12) }}…</span>
+            <ElTooltip content="恢复时会对备份中的数据和文件执行完整 SHA-256 校验" placement="top">
+              <span class="checksum">恢复时完整校验</span>
             </ElTooltip>
           </template>
         </ElTableColumn>

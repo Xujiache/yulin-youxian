@@ -183,7 +183,9 @@ public class WechatPayClient {
         body.put("notify_url", properties.getRefundNotifyUrl());
         body.put("amount", Map.of(
                 "refund", refund.refundAmount(),
-                "total", order.payableAmount(),
+                "total", order.paidAmount() == null || order.paidAmount() <= 0
+                        ? order.payableAmount()
+                        : order.paidAmount(),
                 "currency", "CNY"
         ));
         JsonNode response = postJson("/v3/refund/domestic/refunds", body);

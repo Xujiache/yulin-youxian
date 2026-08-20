@@ -3,7 +3,7 @@
     <div class="fresh-page__head">
       <div>
         <h1 class="fresh-page__title">订单管理</h1>
-        <p class="fresh-page__desc">按配送日期、区域和楼栋智能归组，减少往返配送。</p>
+        <p class="fresh-page__desc">默认优先显示最近下单的配送分组，也可切回配送顺序。</p>
       </div>
       <ElButton type="primary" :loading="loading" @click="loadOrders">刷新订单</ElButton>
     </div>
@@ -13,19 +13,13 @@
         <div class="order-filter__head">
           <div>
             <strong>订单筛选</strong>
-            <span>先缩小订单范围，再进行全选、备货或配送</span>
+            <span>先确定订单状态和配送日期</span>
           </div>
-          <ElButton link type="primary" @click="resetFilters">重置筛选</ElButton>
-        </div>
-        <div class="order-filter__status">
           <div class="order-filter__status-group">
             <span>订单状态</span>
             <ElSegmented v-model="status" :options="statuses" @change="loadOrders" />
           </div>
-          <div class="order-filter__status-group">
-            <span>打印状态</span>
-            <ElSegmented v-model="printStatus" :options="printStatuses" @change="loadOrders" />
-          </div>
+          <ElButton link type="primary" @click="resetFilters">重置筛选</ElButton>
         </div>
         <div class="order-filter__fields">
           <ElInput
@@ -42,6 +36,15 @@
             clearable
             @change="loadOrders"
           />
+          <ElButton plain @click="advancedFiltersVisible = !advancedFiltersVisible">
+            {{ advancedFiltersVisible ? '收起条件' : '更多条件' }}
+          </ElButton>
+        </div>
+        <div v-show="advancedFiltersVisible" class="order-filter__advanced">
+          <div class="order-filter__status-group">
+            <span>打印状态</span>
+            <ElSegmented v-model="printStatus" :options="printStatuses" @change="loadOrders" />
+          </div>
           <ElSelect
             v-model="filterDeliverySlots"
             multiple
@@ -83,38 +86,30 @@
             当前显示 <b>{{ filteredOrders.length }}</b> / {{ orders.length }} 单， 共
             {{ groupCount }} 个配送分组
           </span>
-          <div class="delivery-toolbar__summary">
-            <span class="delivery-toolbar__signal"></span>
-            <strong>智能配送顺序已开启</strong>
+          <div class="order-filter__footer-actions">
+            <div class="order-filter__sort">
+              <span>排列方式</span>
+              <ElSegmented v-model="sortMode" :options="sortModes" />
+            </div>
+            <div v-if="sortMode === 'delivery'" class="delivery-toolbar__summary">
+              <span class="delivery-toolbar__signal"></span>
+              <strong>智能配送顺序</strong>
+            </div>
           </div>
         </div>
       </div>
 
-      <div v-if="selectableOrders.length > 0" class="batch-toolbar">
+      <div v-if="selectedOrderIds.length > 0" class="batch-toolbar">
         <div class="batch-toolbar__selection">
-          <strong>批量处理</strong>
+          <strong>已选择 {{ selectedOrderIds.length }} 单</strong>
           <ElCheckbox
             :model-value="isAllSelected"
             :indeterminate="selectedOrderIds.length > 0 && !isAllSelected"
             @change="toggleSelectAll"
           >
-            全选筛选结果（{{ selectableOrders.length }}）
+            全选当前 {{ selectableOrders.length }} 单
           </ElCheckbox>
-          <ElButton
-            plain
-            :disabled="filteredPrepareIds.length === 0"
-            @click="selectEligibleOrders('prepare')"
-          >
-            只选可备货（{{ filteredPrepareIds.length }}）
-          </ElButton>
-          <ElButton
-            plain
-            :disabled="filteredDeliverIds.length === 0"
-            @click="selectEligibleOrders('deliver')"
-          >
-            只选可配送（{{ filteredDeliverIds.length }}）
-          </ElButton>
-          <span class="batch-toolbar__count">已选 {{ selectedOrderIds.length }} 单</span>
+          <ElButton link @click="clearSelection">取消选择</ElButton>
         </div>
         <div class="batch-toolbar__actions">
           <ElButton
@@ -158,9 +153,6 @@
           >
             导出微信发货单（{{ selectedWechatExportIds.length }}）
           </ElButton>
-          <ElButton v-if="selectedOrderIds.length > 0" link @click="clearSelection"
-            >清空选择</ElButton
-          >
         </div>
       </div>
       <div v-if="selectedOrderIds.length > 0" class="batch-hint">
@@ -179,6 +171,14 @@
         empty-text="暂无订单"
       >
         <ElTableColumn v-if="filteredOrders.length > 0" width="48" align="center" fixed="left">
+          <template #header>
+            <ElCheckbox
+              :model-value="isAllSelected"
+              :indeterminate="selectedOrderIds.length > 0 && !isAllSelected"
+              aria-label="全选当前订单"
+              @change="toggleSelectAll"
+            />
+          </template>
           <template #default="{ row }">
             <ElCheckbox
               :model-value="selectedOrderIds.includes(row.id)"
@@ -186,25 +186,31 @@
             />
           </template>
         </ElTableColumn>
-        <ElTableColumn label="顺序" width="64" align="center" fixed="left">
+        <ElTableColumn
+          :label="sortMode === 'recent' ? '下单时间' : '配送序'"
+          :width="sortMode === 'recent' ? 96 : 64"
+          align="center"
+          fixed="left"
+        >
           <template #default="{ row }">
-            <span class="delivery-sequence">{{ row.deliverySequence }}</span>
+            <span v-if="sortMode === 'recent'" class="order-created-at">
+              {{ dateTimeText(row.createdAt) }}
+            </span>
+            <span v-else class="delivery-sequence">{{ row.deliverySequence }}</span>
           </template>
         </ElTableColumn>
-        <ElTableColumn label="配送分组" width="210">
+        <ElTableColumn label="配送分组" width="180">
           <template #default="{ row }">
             <div class="delivery-group">
-              <ElTag type="success" effect="light" size="small">{{ row.deliveryDate }}</ElTag>
-              <strong>{{ row.deliveryArea }}</strong>
+              <strong>{{ row.deliveryDate }} · {{ row.deliveryArea }}</strong>
               <div class="delivery-group__building">
                 <span>{{ row.deliveryBuilding }}</span>
                 <b>{{ displayGroupCount(row) }} 单</b>
               </div>
-              <small>同组订单已连续排列</small>
             </div>
           </template>
         </ElTableColumn>
-        <ElTableColumn label="收货地址" min-width="300">
+        <ElTableColumn label="收货地址" min-width="240">
           <template #default="{ row }">
             <div class="address-cell">
               <strong>{{ fullAddress(row) }}</strong>
@@ -235,11 +241,11 @@
             </ElTag>
           </template>
         </ElTableColumn>
-        <ElTableColumn label="订单信息" min-width="190">
+        <ElTableColumn label="订单信息" min-width="170">
           <template #default="{ row }">
             <div class="order-summary">
               <strong>{{ row.orderNo }}</strong>
-              <span>{{ row.summary }}</span>
+              <span>下单 {{ dateTimeText(row.createdAt) }} · {{ row.summary }}</span>
               <div v-if="row.discountAmount || row.gifts?.length" class="order-promotion-tags">
                 <ElTag v-if="row.discountAmount" type="success" size="small" effect="light">
                   随机减 {{ money(row.discountAmount) }}
@@ -251,7 +257,7 @@
             </div>
           </template>
         </ElTableColumn>
-        <ElTableColumn prop="deliverySlot" label="预约配送" width="235" />
+        <ElTableColumn prop="deliverySlot" label="预约配送" width="200" />
         <ElTableColumn label="金额" width="100">
           <template #default="{ row }">
             <div class="order-amount-cell">
@@ -260,7 +266,7 @@
             </div>
           </template>
         </ElTableColumn>
-        <ElTableColumn v-if="deliveryEnabled" label="配送" width="180">
+        <ElTableColumn v-if="deliveryEnabled" label="配送" width="150">
           <template #default="{ row }">
             <div v-if="deliveryBriefs[row.id]" class="delivery-brief">
               <ElTag
@@ -285,36 +291,14 @@
             <span v-else class="muted">—</span>
           </template>
         </ElTableColumn>
-        <ElTableColumn label="操作" width="240" fixed="right">
+        <ElTableColumn label="操作" width="190" fixed="right">
           <template #default="{ row }">
             <div class="order-actions">
-              <ElButton size="small" @click="openDetail(row.id)">详情</ElButton>
-              <ElButton
-                v-if="isSelectable(row)"
-                size="small"
-                type="success"
-                plain
-                :disabled="row.printStatus === 'PENDING'"
-                :loading="printingOrderId === row.id"
-                @click="handlePrintOne(row)"
-              >
-                {{
-                  row.printStatus === 'PENDING'
-                    ? '打印中'
-                    : row.printStatus === 'SUCCESS'
-                      ? '补打'
-                      : '打印'
-                }}
-              </ElButton>
+              <ElButton size="small" link type="primary" @click="openDetail(row.id)">详情</ElButton>
               <template v-if="hasDeliveryTask(row)">
-                <ElButton
-                  size="small"
-                  type="primary"
-                  @click="openDeliveryTask(deliveryBriefs[row.id].taskNo)"
-                >
-                  任务处理
+                <ElButton size="small" type="primary" @click="openDeliveryTask(deliveryBriefs[row.id].taskNo)">
+                  处理任务
                 </ElButton>
-                <ElButton size="small" plain @click="openExceptionCenter">异常处理</ElButton>
               </template>
               <template v-else-if="legacyActionsAllowed(row)">
                 <ElButton
@@ -326,7 +310,7 @@
                   接单
                 </ElButton>
                 <ElButton
-                  v-if="canDeliver(row) && deliveryEnabled"
+                  v-else-if="canDeliver(row) && deliveryEnabled"
                   size="small"
                   type="success"
                   @click="openPickDialog([row.id])"
@@ -336,28 +320,50 @@
                 <ElButton
                   v-else-if="canDeliver(row)"
                   size="small"
+                  type="primary"
                   @click="runAction(row.id, 'deliver')"
                 >
                   配送
                 </ElButton>
                 <ElButton
-                  v-if="canComplete(row)"
+                  v-else-if="canComplete(row)"
                   size="small"
                   type="success"
                   @click="runAction(row.id, 'complete')"
                 >
                   完成
                 </ElButton>
-                <ElButton
-                  v-if="canCancel(row)"
-                  size="small"
-                  type="danger"
-                  plain
-                  @click="runAction(row.id, 'cancel')"
-                >
-                  取消
-                </ElButton>
               </template>
+              <ElDropdown trigger="click">
+                <ElButton size="small" plain>更多</ElButton>
+                <template #dropdown>
+                  <ElDropdownMenu>
+                    <ElDropdownItem
+                      v-if="isSelectable(row)"
+                      :disabled="row.printStatus === 'PENDING' || printingOrderId === row.id"
+                      @click="handlePrintOne(row)"
+                    >
+                      {{
+                        row.printStatus === 'PENDING' || printingOrderId === row.id
+                          ? '正在打印'
+                          : row.printStatus === 'SUCCESS'
+                            ? '补打小票'
+                            : '打印小票'
+                      }}
+                    </ElDropdownItem>
+                    <ElDropdownItem v-if="hasDeliveryTask(row)" @click="openExceptionCenter">
+                      异常处理
+                    </ElDropdownItem>
+                    <ElDropdownItem
+                      v-if="legacyActionsAllowed(row) && canCancel(row)"
+                      divided
+                      @click="runAction(row.id, 'cancel')"
+                    >
+                      取消订单
+                    </ElDropdownItem>
+                  </ElDropdownMenu>
+                </template>
+              </ElDropdown>
             </div>
           </template>
         </ElTableColumn>
@@ -384,7 +390,7 @@
         <ElTableColumn label="商品" min-width="220">
           <template #default="{ row }">
             <div class="order-item">
-              <ElImage v-if="row.imageUrl" class="image-thumb" :src="row.imageUrl" fit="cover" />
+              <FreshImage v-if="row.imageUrl" class="image-thumb" :src="row.imageUrl" fit="cover" :preview="false" />
               <div v-else class="image-thumb empty-thumb">无图</div>
               <div>
                 <strong>{{ row.productName }}</strong>
@@ -418,7 +424,7 @@
           <ElTableColumn label="赠品" min-width="240">
             <template #default="{ row }">
               <div class="order-item">
-                <ElImage v-if="row.imageUrl" class="image-thumb" :src="row.imageUrl" fit="cover" />
+                <FreshImage v-if="row.imageUrl" class="image-thumb" :src="row.imageUrl" fit="cover" :preview="false" />
                 <div v-else class="image-thumb empty-thumb">赠</div>
                 <div>
                   <strong>{{ row.productName }}</strong>
@@ -525,6 +531,7 @@
 </template>
 
 <script setup lang="ts">
+  import FreshImage from '@/components/business/fresh-image/index.vue'
   import { ElMessage, ElMessageBox } from 'element-plus'
   import * as XLSX from 'xlsx'
   import {
@@ -550,14 +557,20 @@
     type ColdChainLevel,
     type OrderDeliveryBrief
   } from '@/api/delivery'
-  import { clockText, taskStatusTag, taskStatusText } from '../delivery/utils'
+  import { clockText, dateTimeText, taskStatusTag, taskStatusText } from '../delivery/utils'
 
   defineOptions({ name: 'FreshOrders' })
 
   const statuses = ['全部', '待支付', '待接单', '备货中', '配送中', '已完成', '售后']
   const printStatuses = ['全部', '未打印', '已打印', '打印失败']
+  const sortModes = [
+    { label: '最近下单', value: 'recent' },
+    { label: '配送顺序', value: 'delivery' }
+  ]
   const status = ref('全部')
   const printStatus = ref('全部')
+  const sortMode = ref<'recent' | 'delivery'>('recent')
+  const advancedFiltersVisible = ref(false)
   const deliveryDate = ref('')
   const keyword = ref('')
   const filterDeliverySlots = ref<string[]>([])
@@ -680,12 +693,36 @@
   const deliveryBuildings = computed(() =>
     [...new Set(orders.value.map((order) => order.deliveryBuilding).filter(Boolean))].sort()
   )
+  const createdAtTimestamp = (value?: string) => {
+    const timestamp = new Date(String(value || '').trim().replace(' ', 'T')).getTime()
+    return Number.isNaN(timestamp) ? 0 : timestamp
+  }
+  const sortRecentGroups = (items: OrderSummary[]) => {
+    const groups = new Map<string, OrderSummary[]>()
+    items.forEach((order) => {
+      const key = order.deliveryGroupKey || String(order.id)
+      const group = groups.get(key) || []
+      group.push(order)
+      groups.set(key, group)
+    })
+    const latestCreatedAt = (group: OrderSummary[]) =>
+      Math.max(...group.map((order) => createdAtTimestamp(order.createdAt)))
+    return [...groups.values()]
+      .sort((left, right) => latestCreatedAt(right) - latestCreatedAt(left))
+      .flatMap((group) =>
+        [...group].sort(
+          (left, right) =>
+            createdAtTimestamp(right.createdAt) - createdAtTimestamp(left.createdAt) ||
+            right.id - left.id
+        )
+      )
+  }
   const filteredOrders = computed(() => {
     const normalizedKeyword = keyword.value.trim().toLowerCase()
     const slotSet = new Set(filterDeliverySlots.value)
     const areaSet = new Set(filterDeliveryAreas.value)
     const buildingSet = new Set(filterDeliveryBuildings.value)
-    return orders.value.filter((order) => {
+    const matchedOrders = orders.value.filter((order) => {
       if (slotSet.size > 0 && !slotSet.has(deliveryTimeRange(order.deliverySlot))) return false
       if (areaSet.size > 0 && !areaSet.has(order.deliveryArea)) return false
       if (buildingSet.size > 0 && !buildingSet.has(order.deliveryBuilding)) return false
@@ -705,6 +742,7 @@
         .toLowerCase()
       return searchable.includes(normalizedKeyword)
     })
+    return sortMode.value === 'recent' ? sortRecentGroups(matchedOrders) : matchedOrders
   })
   const groupCount = computed(
     () => new Set(filteredOrders.value.map((order) => order.deliveryGroupKey)).size
@@ -725,16 +763,6 @@
     return meta
   })
   const selectableOrders = computed(() => filteredOrders.value)
-  const filteredPrepareIds = computed(() =>
-    filteredOrders.value
-      .filter((order) => order.status === '已支付/待接单' && legacyActionsAllowed(order))
-      .map((order) => order.id)
-  )
-  const filteredDeliverIds = computed(() =>
-    filteredOrders.value
-      .filter((order) => order.status === '备货中' && legacyActionsAllowed(order))
-      .map((order) => order.id)
-  )
   const selectedOrders = computed(() =>
     filteredOrders.value.filter((order) => selectedOrderIds.value.includes(order.id))
   )
@@ -788,14 +816,6 @@
     selectedOrderIds.value = []
   }
 
-  const selectEligibleOrders = (action: 'prepare' | 'deliver') => {
-    selectedOrderIds.value =
-      action === 'prepare' ? [...filteredPrepareIds.value] : [...filteredDeliverIds.value]
-    ElMessage.success(
-      `已选中 ${selectedOrderIds.value.length} 个可${action === 'prepare' ? '备货' : '配送'}订单`
-    )
-  }
-
   watch(
     [keyword, filterDeliverySlots, filterDeliveryAreas, filterDeliveryBuildings],
     clearSelection,
@@ -830,6 +850,7 @@
     printStatus.value = '全部'
     deliveryDate.value = ''
     keyword.value = ''
+    advancedFiltersVisible.value = false
     filterDeliverySlots.value = []
     filterDeliveryAreas.value = []
     filterDeliveryBuildings.value = []
@@ -841,7 +862,7 @@
     try {
       const mappedPrintStatus = printStatusMap[printStatus.value]
       const [result, slotResult] = await Promise.all([
-        getOrders(status.value, deliveryDate.value || undefined, mappedPrintStatus || undefined),
+        getOrders(status.value, deliveryDate.value || undefined, mappedPrintStatus || undefined, 1, 100),
         getDeliverySlots()
       ])
       orders.value = result.items || []
@@ -1211,8 +1232,8 @@
 
   .order-filter {
     display: grid;
-    gap: 14px;
-    padding: 16px;
+    gap: 12px;
+    padding: 14px 16px;
     margin-bottom: 18px;
     border: 1px solid var(--el-border-color);
     border-radius: 12px;
@@ -1222,8 +1243,11 @@
     &__footer {
       display: flex;
       align-items: center;
-      justify-content: space-between;
       gap: 16px;
+    }
+
+    &__head {
+      justify-content: space-between;
     }
 
     &__head > div {
@@ -1241,14 +1265,6 @@
       }
     }
 
-    &__status {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      gap: 12px 22px;
-      overflow-x: auto;
-    }
-
     &__status-group {
       display: flex;
       align-items: center;
@@ -1263,7 +1279,7 @@
 
     &__fields {
       display: grid;
-      grid-template-columns: minmax(260px, 2fr) repeat(4, minmax(165px, 1fr));
+      grid-template-columns: minmax(280px, 2fr) minmax(180px, 1fr) auto;
       gap: 12px;
 
       :deep(.el-date-editor),
@@ -1272,7 +1288,20 @@
       }
     }
 
+    &__advanced {
+      display: grid;
+      grid-template-columns: minmax(310px, 1.5fr) repeat(3, minmax(165px, 1fr));
+      gap: 12px;
+      padding-top: 12px;
+      border-top: 1px dashed var(--el-border-color);
+
+      :deep(.el-select) {
+        width: 100%;
+      }
+    }
+
     &__footer {
+      justify-content: space-between;
       padding-top: 12px;
       border-top: 1px dashed var(--el-border-color);
       color: var(--el-text-color-secondary);
@@ -1281,6 +1310,19 @@
       b {
         color: var(--el-color-primary);
       }
+    }
+
+    &__footer-actions,
+    &__sort {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    &__sort > span {
+      color: var(--el-text-color-secondary);
+      font-size: 12px;
+      white-space: nowrap;
     }
   }
 
@@ -1343,10 +1385,6 @@
       justify-content: flex-end;
     }
 
-    &__count {
-      color: var(--el-text-color-secondary);
-      font-size: 14px;
-    }
   }
 
   .batch-hint {
@@ -1366,15 +1404,23 @@
     background: var(--el-color-primary-light-9);
   }
 
+  .order-created-at {
+    display: inline-block;
+    color: var(--el-color-primary);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.35;
+  }
+
   .delivery-group {
     display: grid;
     min-width: 0;
-    gap: 7px;
-    padding: 6px 2px;
+    gap: 6px;
+    padding: 2px;
 
     > strong {
       color: var(--el-text-color-primary);
-      font-size: 15px;
+      font-size: 13px;
       overflow-wrap: anywhere;
     }
 
@@ -1392,10 +1438,6 @@
         font-size: 12px;
         background: var(--el-color-primary-light-8);
       }
-    }
-
-    small {
-      color: var(--el-text-color-secondary);
     }
   }
 
@@ -1512,6 +1554,10 @@
         grid-template-columns: repeat(2, minmax(0, 1fr));
       }
 
+      &__advanced {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
       &__keyword {
         grid-column: 1 / -1;
       }
@@ -1532,6 +1578,10 @@
         grid-template-columns: 1fr;
       }
 
+      &__advanced {
+        grid-template-columns: 1fr;
+      }
+
       &__keyword {
         grid-column: auto;
       }
@@ -1539,6 +1589,10 @@
       &__footer {
         align-items: flex-start;
         flex-direction: column;
+      }
+
+      &__footer-actions {
+        flex-wrap: wrap;
       }
     }
   }

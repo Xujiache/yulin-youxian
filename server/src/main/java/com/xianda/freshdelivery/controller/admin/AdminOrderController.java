@@ -33,14 +33,21 @@ public class AdminOrderController {
     public ApiResponse<PageResult<AdminOrderDto>> orders(
             @RequestParam(required = false) String status,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate deliveryDate,
-            @RequestParam(required = false) String printStatus
+            @RequestParam(required = false) String printStatus,
+            @RequestParam(defaultValue = "1") Integer page,
+            @RequestParam(defaultValue = "30") Integer pageSize
     ) {
-        return ApiResponse.ok(PageResult.of(storefrontService.adminOrders(status, deliveryDate, printStatus)));
+        return ApiResponse.ok(PageResult.page(storefrontService.adminOrders(status, deliveryDate, printStatus), page, pageSize));
     }
 
     @GetMapping("/{id}")
     public ApiResponse<OrderDetailDto> order(@PathVariable Long id) {
         return ApiResponse.ok(storefrontService.adminOrder(id));
+    }
+
+    @GetMapping("/lookup")
+    public ApiResponse<OrderDetailDto> lookup(@RequestParam String keyword) {
+        return ApiResponse.ok(storefrontService.findAdminOrder(keyword));
     }
 
     @PostMapping("/{id}/accept")

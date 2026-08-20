@@ -105,13 +105,11 @@
         <ElTableColumn label="商品" min-width="250" fixed="left">
           <template #default="{ row }">
             <div class="product-cell">
-              <ElImage
+              <FreshImage
                 v-if="row.imageUrl"
                 class="image-thumb"
-                :src="imageUrl(row.imageUrl)"
+                :src="row.imageUrl"
                 fit="cover"
-                :preview-src-list="[imageUrl(row.imageUrl)]"
-                preview-teleported
               />
               <div v-else class="image-thumb empty-thumb">无图</div>
               <div class="product-copy">
@@ -233,6 +231,7 @@
     type Product
   } from '@/api/admin'
   import { resolveFreshAssetUrl } from '@/utils/fresh-assets'
+  import FreshImage from '@/components/business/fresh-image/index.vue'
 
   defineOptions({ name: 'FreshProducts' })
 
@@ -263,7 +262,6 @@
   const centToYuan = (value: number) => Number((Number(value || 0) / 100).toFixed(2))
   const yuanToCent = (value: number) => Math.max(0, Math.round(Number(value || 0) * 100))
   const money = (value: number) => `￥${centToYuan(value).toFixed(2)}`
-  const imageUrl = resolveFreshAssetUrl
   const priceText = (product: Product) => {
     const min = Number(product.minUnitPrice ?? product.unitPrice)
     const max = Number(product.maxUnitPrice ?? product.unitPrice)
@@ -320,7 +318,7 @@
   const loadProducts = async () => {
     loading.value = true
     try {
-      const result = await getProducts({})
+      const result = await getProducts({ page: 1, pageSize: 100 })
       products.value = (result.items || []).map((item) => ({
         ...item,
         skuEnabled: Boolean(item.skuEnabled),

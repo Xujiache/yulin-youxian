@@ -250,6 +250,28 @@ class OrderPaymentSafetyTests {
         assertEquals("部分退款", service.adminOrder(1004L).status());
     }
 
+    @Test
+    void refundAmountMismatchQueriesTheOriginalWechatRefundBeforeAnyRetry() {
+        StorefrontService service = newService();
+        StubWechatPayClient client = new StubWechatPayClient();
+        WechatPaymentService payments = new WechatPaymentService(null, service, client, null);
+        RefundDto refund = service.createAdminRefund(new AdminRefundCreateRequest(
+                10001L,
+                1004L,
+                100,
+                "退款参数不一致测试"
+        ));
+
+        client.submissionFailure = new BusinessException(
+                502,
+                "微信支付接口调用失败: 订单金额或退款金额与之前请求不一致，请核实后再试"
+        );
+        client.submissionStatus = "SUCCESS";
+        RefundDto reconciled = payments.approveRefund(refund.id());
+        assertEquals(refund.refundNo(), reconciled.refundNo());
+        assertEquals("退款成功", reconciled.status());
+    }
+
     private StorefrontService newService() {
         return new StorefrontService(tempDir.resolve("order-payment-state.json").toString(), true);
     }

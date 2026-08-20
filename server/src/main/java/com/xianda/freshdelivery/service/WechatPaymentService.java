@@ -210,7 +210,15 @@ public class WechatPaymentService {
     }
 
     public RefundDto retryRefund(Long refundId) {
+        RefundDto refund = storefrontService.adminRefund(refundId);
+        if (storefrontService.requiresManualRefundReconcile(refund)) {
+            throw new BusinessException(409, "该退款的微信状态未确认，请先同步微信状态，不能直接重新发起");
+        }
         return submitRefund(refundId);
+    }
+
+    public RefundDto reconcileRefund(Long refundId) {
+        return reconcileRefund(storefrontService.adminRefund(refundId));
     }
 
     public RefundDto confirmRefund(RefundNotifyRequest request) {
@@ -258,6 +266,9 @@ public class WechatPaymentService {
             RefundNotifyRequest result = wechatPayClient.requestRefund(submitting, order);
             return storefrontService.confirmRefund(result);
         } catch (BusinessException exception) {
+            if (isRefundRequestMismatch(exception)) {
+                return reconcileMismatchRefund(submitting, exception);
+            }
             return storefrontService.markRefundFailed(
                     refundId,
                     refundFailureCode(exception),
@@ -273,22 +284,38 @@ public class WechatPaymentService {
         }
     }
 
-    private void reconcileRefund(RefundDto refund) {
+    private RefundDto reconcileRefund(RefundDto refund) {
         try {
             RefundNotifyRequest result = wechatPayClient.queryRefund(refund);
-            storefrontService.confirmRefund(result);
+            return storefrontService.confirmRefund(result);
         } catch (BusinessException exception) {
-            storefrontService.markRefundFailed(
+            return storefrontService.markRefundFailed(
                     refund.id(),
                     "QUERY_HTTP_" + exception.code(),
                     exception.getMessage()
             );
         } catch (RuntimeException exception) {
             LOGGER.error("Wechat refund reconciliation failed, refundId={}", refund.id(), exception);
-            storefrontService.markRefundFailed(
+            return storefrontService.markRefundFailed(
                     refund.id(),
                     "QUERY_EXCEPTION",
                     exception.getMessage()
+            );
+        }
+    }
+
+    private RefundDto reconcileMismatchRefund(RefundDto refund, BusinessException submissionException) {
+        try {
+            RefundNotifyRequest result = wechatPayClient.queryRefund(refund);
+            return storefrontService.confirmRefund(result);
+        } catch (RuntimeException queryException) {
+            return storefrontService.markRefundFailed(
+                    refund.id(),
+                    "REFUND_STATUS_UNCONFIRMED",
+                    "微信拒绝本次退款请求且无法确认原退款状态；请先同步微信状态或在商户平台按退款单号核对。提交结果："
+                            + submissionException.getMessage()
+                            + "；查询结果："
+                            + queryException.getMessage()
             );
         }
     }
@@ -321,6 +348,9 @@ public class WechatPaymentService {
 
     private String refundFailureCode(BusinessException exception) {
         String message = exception.getMessage() == null ? "" : exception.getMessage().toUpperCase();
+        if (message.contains("订单金额或退款金额与之前请求不一致".toUpperCase())) {
+            return "REFUND_REQUEST_MISMATCH";
+        }
         if (message.contains("ABNORMAL")) {
             return "ABNORMAL";
         }
@@ -328,5 +358,10 @@ public class WechatPaymentService {
             return "CLOSED";
         }
         return "HTTP_" + exception.code();
+    }
+
+    private boolean isRefundRequestMismatch(BusinessException exception) {
+        String message = exception.getMessage() == null ? "" : exception.getMessage();
+        return message.contains("订单金额或退款金额与之前请求不一致");
     }
 }

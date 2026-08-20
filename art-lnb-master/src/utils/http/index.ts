@@ -24,8 +24,8 @@ import { BaseResponse } from '@/types'
 /** 请求配置常量 */
 const REQUEST_TIMEOUT = 15000
 const LOGOUT_DELAY = 500
-const MAX_RETRIES = 0
-const RETRY_DELAY = 1000
+const MAX_RETRIES = 2
+const RETRY_DELAY = 500
 const UNAUTHORIZED_DEBOUNCE_TIME = 3000
 
 /** 401防抖状态 */
@@ -179,8 +179,10 @@ async function retryRequest<T>(
   try {
     return await request<T>(config)
   } catch (error) {
-    if (retries > 0 && error instanceof HttpError && shouldRetry(error.code)) {
-      await delay(RETRY_DELAY)
+    const method = String(config.method || 'GET').toUpperCase()
+    const retryableNetworkFailure = error instanceof HttpError && error.code === ApiStatus.error
+    if (method === 'GET' && retries > 0 && error instanceof HttpError && (retryableNetworkFailure || shouldRetry(error.code))) {
+      await delay(RETRY_DELAY * (MAX_RETRIES - retries + 1))
       return retryRequest<T>(config, retries - 1)
     }
     throw error

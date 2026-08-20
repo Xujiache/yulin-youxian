@@ -80,6 +80,12 @@
 			<artifactId>apk-parser</artifactId>
 			<version>2.6.10</version>
 		</dependency>
+		<!-- 生成后台列表使用的 WebP 缩略图；jar 内含 Linux x86_64 JNI 库。 -->
+		<dependency>
+			<groupId>com.github.usefulness</groupId>
+			<artifactId>webp-imageio</artifactId>
+			<version>0.11.0</version>
+		</dependency>
 
 		<dependency>
 			<groupId>org.projectlombok</groupId>

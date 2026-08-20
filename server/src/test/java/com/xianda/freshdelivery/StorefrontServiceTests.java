@@ -86,6 +86,39 @@ class StorefrontServiceTests {
     }
 
     @Test
+    void adminCanFindAnOrderByIdOrOrderNoAndRefundKeepsItsPaymentOrderNo() {
+        StorefrontService service = newService();
+        CurrentUserContext.setUserId(1000L);
+        Long addressId = service.createAddress(addressRequest()).id();
+        service.addCartItem(106L, BigDecimal.ONE);
+        OrderDetailDto created = service.createOrder(new CreateOrderRequest(
+                addressId,
+                1L,
+                "",
+                service.cart().items().stream().map(item -> item.id()).toList()
+        ));
+
+        assertEquals(created.id(), service.findAdminOrder(String.valueOf(created.id())).id());
+        assertEquals(created.id(), service.findAdminOrder(created.orderNo()).id());
+
+        service.confirmPayment(new PaymentNotifyRequest(
+                created.paymentOrderNo(),
+                "TX-REFUND-PAYMENT-NO",
+                "SUCCESS",
+                "wx-test-app",
+                "test-mch",
+                created.payableAmount()
+        ));
+        RefundDto refund = service.createAdminRefund(new AdminRefundCreateRequest(
+                1000L,
+                created.id(),
+                100,
+                "退款测试"
+        ));
+        assertEquals(created.paymentOrderNo(), refund.paymentOrderNo());
+    }
+
+    @Test
     void productSortOrderControlsStorefrontAndRecommendedProductOrder() {
         StorefrontService service = newService();
 

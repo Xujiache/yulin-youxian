@@ -968,6 +968,25 @@ public class StorefrontService {
         return toOrderDetailDto(adminOrderState(id));
     }
 
+    public synchronized OrderDetailDto findAdminOrder(String keyword) {
+        String lookup = cleanText(keyword);
+        if (lookup.isBlank()) {
+            throw new BusinessException(400, "请输入订单 ID 或订单号");
+        }
+        try {
+            long id = Long.parseLong(lookup);
+            if (id > 0) {
+                return adminOrder(id);
+            }
+        } catch (NumberFormatException ignored) {
+        }
+        return orders.values().stream()
+                .filter(order -> lookup.equalsIgnoreCase(order.orderNo()) || lookup.equalsIgnoreCase(paymentOrderNo(order)))
+                .findFirst()
+                .map(this::toOrderDetailDto)
+                .orElseThrow(() -> new BusinessException(404, "未找到该订单"));
+    }
+
     public synchronized OrderDetailDto recordPaymentTransaction(Long id, String transactionId) {
         OrderState order = adminOrderState(id);
         if (transactionId == null || transactionId.isBlank()) {
@@ -1377,10 +1396,19 @@ public class StorefrontService {
     }
 
     public synchronized List<RefundDto> adminRefunds(Long userId, Long orderId) {
+        return adminRefunds(userId, orderId, null);
+    }
+
+    public synchronized List<RefundDto> adminRefunds(Long userId, Long orderId, String keyword) {
+        String lookup = cleanText(keyword);
         return refunds.values().stream()
                 .map(this::normalizeRefund)
                 .filter(refund -> userId == null || refund.userId().equals(userId))
                 .filter(refund -> orderId == null || refund.orderId().equals(orderId))
+                .filter(refund -> lookup.isBlank()
+                        || lookup.equalsIgnoreCase(refund.refundNo())
+                        || lookup.equalsIgnoreCase(refund.orderNo())
+                        || lookup.equals(String.valueOf(refund.orderId())))
                 .sorted(Comparator.comparing(RefundDto::id).reversed())
                 .toList();
     }
@@ -1446,7 +1474,7 @@ public class StorefrontService {
         }
         int retryCount = current.retryCount() + 1;
         String refundNo = current.refundNo();
-        if (REFUND_STATUS_FAILED.equals(current.status()) && requiresNewRefundAttemptNo(current.failureCode())) {
+        if (REFUND_STATUS_FAILED.equals(current.status()) && requiresNewRefundAttemptNo(current)) {
             refundNo = "RF" + current.id() + "R" + retryCount;
         }
         RefundDto nextRefund = copyRefundState(
@@ -1530,6 +1558,7 @@ public class StorefrontService {
         return refunds.values().stream()
                 .map(this::normalizeRefund)
                 .filter(refund -> REFUND_STATUS_FAILED.equals(refund.status()))
+                .filter(refund -> !requiresManualRefundReconcile(refund))
                 .sorted(Comparator.comparing(RefundDto::id))
                 .limit(50)
                 .toList();
@@ -1547,7 +1576,9 @@ public class StorefrontService {
     public synchronized RefundDto rejectRefund(Long id, String reason) {
         RefundState state = refundState(id);
         RefundDto current = normalizeRefund(state);
-        if (!"待审核".equals(current.status())) {
+        boolean confirmedWechatFailure = REFUND_STATUS_FAILED.equals(current.status())
+                && List.of("CLOSED", "ABNORMAL").contains(current.failureCode());
+        if (!"待审核".equals(current.status()) && !confirmedWechatFailure) {
             throw new BusinessException(409, "当前退款状态不可拒绝");
         }
         RefundDto nextRefund = copyRefund(
@@ -3431,7 +3462,12 @@ public class StorefrontService {
                 userId,
                 order.orderNo(),
                 source,
-                LocalDateTime.now(STORE_ZONE).format(DateTimeFormatter.ISO_LOCAL_DATE_TIME)
+                LocalDateTime.now(STORE_ZONE).format(DateTimeFormatter.ISO_LOCAL_DATE_TIME),
+                "",
+                "",
+                0,
+                "",
+                paymentOrderNo(order)
         );
     }
 
@@ -3576,10 +3612,17 @@ public class StorefrontService {
                 .orElseThrow(() -> new BusinessException(404, "退款申请不存在"));
     }
 
-    private boolean requiresNewRefundAttemptNo(String failureCode) {
-        return List.of("CLOSED", "ABNORMAL", "UNKNOWN_STATUS").contains(
-                failureCode == null ? "" : failureCode.toUpperCase()
-        );
+    public boolean requiresManualRefundReconcile(RefundDto refund) {
+        String failureCode = refund.failureCode() == null ? "" : refund.failureCode().toUpperCase();
+        String failureMessage = refund.failureMessage() == null ? "" : refund.failureMessage();
+        return "REFUND_REQUEST_MISMATCH".equals(failureCode)
+                || "REFUND_STATUS_UNCONFIRMED".equals(failureCode)
+                || failureMessage.contains("订单金额或退款金额与之前请求不一致");
+    }
+
+    private boolean requiresNewRefundAttemptNo(RefundDto refund) {
+        String failureCode = refund.failureCode() == null ? "" : refund.failureCode().toUpperCase();
+        return List.of("CLOSED", "ABNORMAL", "UNKNOWN_STATUS").contains(failureCode);
     }
 
     private String cleanFailureMessage(String message) {

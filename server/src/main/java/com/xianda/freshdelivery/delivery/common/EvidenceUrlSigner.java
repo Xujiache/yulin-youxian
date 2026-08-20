@@ -104,9 +104,15 @@ public class EvidenceUrlSigner {
         if (clock.instant().getEpochSecond() > deadline) {
             return false;
         }
-        return MessageDigest.isEqual(
-                signature(path, deadline).getBytes(StandardCharsets.US_ASCII),
-                signature.trim().getBytes(StandardCharsets.US_ASCII));
+        byte[] supplied = signature.trim().getBytes(StandardCharsets.US_ASCII);
+        if (MessageDigest.isEqual(signature(path, deadline).getBytes(StandardCharsets.US_ASCII), supplied)) {
+            return true;
+        }
+        // A thumbnail is derived exclusively from its signed original. Reusing the original
+        // ticket avoids exposing a second public URL while keeping the ticket path-bound.
+        String original = originalPathForThumbnail(path);
+        return original != null && MessageDigest.isEqual(
+                signature(original, deadline).getBytes(StandardCharsets.US_ASCII), supplied);
     }
 
     private String signature(String path, long expiresAt) {
@@ -129,5 +135,16 @@ public class EvidenceUrlSigner {
     private static String stripQuery(String path) {
         int query = path.indexOf('?');
         return query < 0 ? path : path.substring(0, query);
+    }
+
+    private static String originalPathForThumbnail(String path) {
+        if (path == null || !(path.startsWith("/uploads/refunds/") || path.startsWith("/uploads/delivery/"))) {
+            return null;
+        }
+        int marker = path.lastIndexOf("/thumbnails/");
+        if (marker < 0 || !path.endsWith(".webp")) return null;
+        String fileName = path.substring(marker + "/thumbnails/".length(), path.length() - ".webp".length());
+        if (fileName.isBlank() || fileName.contains("/")) return null;
+        return path.substring(0, marker + 1) + fileName;
     }
 }

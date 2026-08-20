@@ -10,6 +10,8 @@ server {
     listen [::]:443 ssl http2;
     server_name ${PUBLIC_HOST};
     server_tokens off;
+    gzip_static on;
+    gzip_vary on;
 
     ssl_certificate ${TLS_CERTIFICATE};
     ssl_certificate_key ${TLS_CERTIFICATE_KEY};
@@ -70,7 +72,9 @@ server {
         add_header Accept-Ranges bytes;
     }
 
-    location /uploads/ {
+    # 上传图片优先于下方的图片扩展名正则；否则 /uploads/*.jpg 会被当成
+    # 管理后台静态文件从 admin/dist 读取，造成商品图和退款凭证 404。
+    location ^~ /uploads/ {
         proxy_pass http://127.0.0.1:${SERVER_PORT};
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
@@ -78,6 +82,18 @@ server {
         proxy_set_header X-Forwarded-Proto https;
         proxy_set_header Range $http_range;
         expires 1h;
+    }
+
+    # 小程序默认商品图由后端映射到 client-wechat/assets/products，不能落到
+    # 管理后台 dist 的静态目录。
+    location ^~ /assets/products/ {
+        proxy_pass http://127.0.0.1:${SERVER_PORT};
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        expires 7d;
+        add_header Cache-Control "public, immutable";
     }
 
     location ~* \.(?:js|css|svg|png|jpe?g|webp|woff2?)$ {
