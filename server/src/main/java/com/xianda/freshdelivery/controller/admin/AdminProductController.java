@@ -73,10 +73,18 @@ public class AdminProductController {
 
     @GetMapping("/products")
     public ApiResponse<PageResult<ProductDto>> products(@RequestParam(required = false) String categoryId,
+                                                        @RequestParam(required = false) String keyword,
+                                                        @RequestParam(required = false) String status,
+                                                        @RequestParam(required = false) String recommended,
+                                                        @RequestParam(required = false) String stock,
+                                                        @RequestParam(required = false) Integer minPrice,
+                                                        @RequestParam(required = false) Integer maxPrice,
+                                                        @RequestParam(required = false) String sort,
                                                         @RequestParam(defaultValue = "1") Integer page,
                                                         @RequestParam(defaultValue = "30") Integer pageSize) {
         Long parsedCategoryId = parseLongOrNull(categoryId);
-        return ApiResponse.ok(PageResult.page(storefrontService.products(parsedCategoryId, null), page, pageSize));
+        return ApiResponse.ok(storefrontService.adminProducts(
+                parsedCategoryId, keyword, status, recommended, stock, minPrice, maxPrice, sort, page, pageSize));
     }
 
     private Long parseLongOrNull(String value) {

@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.xianda.freshdelivery.common.BusinessException;
 import com.xianda.freshdelivery.common.CurrentUserContext;
+import com.xianda.freshdelivery.common.PageResult;
 import com.xianda.freshdelivery.dto.AddressDto;
 import com.xianda.freshdelivery.dto.AdminOrderDto;
 import com.xianda.freshdelivery.dto.AdminRefundCreateRequest;
@@ -66,6 +67,7 @@ import java.util.HashSet;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -283,6 +285,24 @@ public class StorefrontService {
                 .filter(product -> keyword == null || keyword.isBlank() || product.name().contains(keyword))
                 .sorted(productOrder())
                 .toList();
+    }
+
+    /** Filtering before paging keeps later records searchable in the admin infinite list. */
+    public synchronized PageResult<ProductDto> adminProducts(
+            Long categoryId, String keyword, String status, String recommended, String stock,
+            Integer minPrice, Integer maxPrice, String sort, Integer page, Integer pageSize
+    ) {
+        String normalizedKeyword = cleanText(keyword).toLowerCase(Locale.ROOT);
+        List<ProductDto> matched = products.values().stream()
+                .filter(product -> categoryId == null || product.categoryId().equals(categoryId))
+                .filter(product -> matchesAdminProductKeyword(product, normalizedKeyword))
+                .filter(product -> matchesAdminProductStatus(product, status))
+                .filter(product -> matchesAdminProductRecommendation(product, recommended))
+                .filter(product -> matchesAdminProductStock(product, stock))
+                .filter(product -> matchesAdminProductPrice(product, minPrice, maxPrice))
+                .sorted(adminProductOrder(sort))
+                .toList();
+        return PageResult.page(matched, page, pageSize);
     }
 
     public synchronized List<ProductDto> storefrontProducts(Long categoryId, String keyword) {
@@ -2636,6 +2656,58 @@ public class StorefrontService {
         return Comparator
                 .comparingInt((ProductDto product) -> product.sortOrder() == null ? Integer.MAX_VALUE : product.sortOrder())
                 .thenComparing(ProductDto::id);
+    }
+
+    private boolean matchesAdminProductKeyword(ProductDto product, String keyword) {
+        if (keyword == null || keyword.isBlank()) return true;
+        String searchable = String.join(" ",
+                Objects.toString(product.name(), ""),
+                Objects.toString(product.subtitle(), ""),
+                Objects.toString(product.badge(), ""))
+                .toLowerCase(Locale.ROOT);
+        return searchable.contains(keyword);
+    }
+
+    private boolean matchesAdminProductStatus(ProductDto product, String status) {
+        return switch (cleanText(status)) {
+            case "on-sale" -> product.status() != null && product.status() == 1;
+            case "off-sale" -> product.status() == null || product.status() != 1;
+            default -> true;
+        };
+    }
+
+    private boolean matchesAdminProductRecommendation(ProductDto product, String recommended) {
+        return switch (cleanText(recommended)) {
+            case "recommended" -> Boolean.TRUE.equals(product.recommended());
+            case "normal" -> !Boolean.TRUE.equals(product.recommended());
+            default -> true;
+        };
+    }
+
+    private boolean matchesAdminProductStock(ProductDto product, String stock) {
+        BigDecimal quantity = product.stockQty() == null ? BigDecimal.ZERO : product.stockQty();
+        return switch (cleanText(stock)) {
+            case "in-stock" -> quantity.compareTo(BigDecimal.ZERO) > 0;
+            case "sold-out" -> quantity.compareTo(BigDecimal.ZERO) <= 0;
+            case "low-stock" -> quantity.compareTo(BigDecimal.ZERO) > 0 && quantity.compareTo(BigDecimal.TEN) <= 0;
+            default -> true;
+        };
+    }
+
+    private boolean matchesAdminProductPrice(ProductDto product, Integer minPrice, Integer maxPrice) {
+        int price = product.minUnitPrice() == null ? product.unitPrice() : product.minUnitPrice();
+        return (minPrice == null || price >= minPrice) && (maxPrice == null || price <= maxPrice);
+    }
+
+    private Comparator<ProductDto> adminProductOrder(String sort) {
+        return switch (cleanText(sort)) {
+            case "price-asc" -> Comparator.comparingInt(product -> product.minUnitPrice() == null ? product.unitPrice() : product.minUnitPrice());
+            case "price-desc" -> Comparator.comparingInt((ProductDto product) -> product.minUnitPrice() == null ? product.unitPrice() : product.minUnitPrice()).reversed();
+            case "stock-asc" -> Comparator.comparing(product -> product.stockQty() == null ? BigDecimal.ZERO : product.stockQty());
+            case "stock-desc" -> Comparator.comparing((ProductDto product) -> product.stockQty() == null ? BigDecimal.ZERO : product.stockQty()).reversed();
+            case "name-asc" -> Comparator.comparing(ProductDto::name, java.text.Collator.getInstance(Locale.SIMPLIFIED_CHINESE));
+            default -> productOrder();
+        };
     }
 
     private boolean isStorefrontVisible(ProductDto product) {

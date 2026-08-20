@@ -415,7 +415,18 @@ export function uploadCategoryImage(file: File) {
   })
 }
 
-export function getProducts(params?: { categoryId?: number | null; page?: number; pageSize?: number }) {
+export function getProducts(params?: {
+  categoryId?: number | null
+  keyword?: string
+  status?: 'on-sale' | 'off-sale'
+  recommended?: 'recommended' | 'normal'
+  stock?: 'in-stock' | 'sold-out' | 'low-stock'
+  minPrice?: number
+  maxPrice?: number
+  sort?: 'default' | 'price-asc' | 'price-desc' | 'stock-asc' | 'stock-desc' | 'name-asc'
+  page?: number
+  pageSize?: number
+}) {
   return request.get<PageResult<Product>>({
     url: '/api/admin/products',
     params
