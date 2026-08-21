@@ -24,6 +24,7 @@ import com.xianda.freshdelivery.dto.ProductSkuDto;
 import com.xianda.freshdelivery.dto.ProductSpecGroupDto;
 import com.xianda.freshdelivery.dto.ProductSpecOptionDto;
 import com.xianda.freshdelivery.dto.RefundDto;
+import com.xianda.freshdelivery.dto.RefundNotifyRequest;
 import com.xianda.freshdelivery.dto.SettingsDto;
 import com.xianda.freshdelivery.dto.StockOverviewExportDto;
 import com.xianda.freshdelivery.dto.StockOverviewItemDto;
@@ -579,7 +580,16 @@ class StorefrontServiceTests {
         assertEquals(120, updated.refundAmount());
         assertTrue(service.adminOrder(1004L).refunds().stream().anyMatch(item -> item.id().equals(created.id())));
 
-        service.approveRefund(created.id());
+        OrderDetailDto order = service.adminOrder(created.orderId());
+        service.confirmRefund(new RefundNotifyRequest(
+                updated.refundNo(),
+                "SUCCESS",
+                updated.paymentOrderNo(),
+                "",
+                updated.refundAmount(),
+                order.paidAmount(),
+                "WX-REFUND-TEST"
+        ));
         assertEquals(120, service.adminOrder(1004L).refundedAmount());
     }
 

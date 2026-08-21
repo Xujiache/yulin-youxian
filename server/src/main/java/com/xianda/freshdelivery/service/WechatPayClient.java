@@ -220,9 +220,15 @@ public class WechatPayClient {
     public RefundNotifyRequest parseRefundNotify(String body, String timestamp, String nonce, String serial, String signature) {
         JsonNode payload = callbackPayload(body, timestamp, nonce, serial, signature);
         JsonNode decrypted = decryptResource(payload.path("resource"));
+        JsonNode amount = decrypted.path("amount");
         return new RefundNotifyRequest(
                 text(decrypted, "out_refund_no"),
-                text(decrypted, "refund_status")
+                text(decrypted, "refund_status"),
+                decrypted.path("out_trade_no").asText(""),
+                decrypted.path("transaction_id").asText(""),
+                integerOrNull(amount, "refund"),
+                integerOrNull(amount, "total"),
+                decrypted.path("refund_id").asText("")
         );
     }
 
@@ -511,7 +517,21 @@ public class WechatPayClient {
         if (!hasText(status)) {
             throw new BusinessException(502, "微信退款接口未返回退款状态");
         }
-        return new RefundNotifyRequest(refundNo, status);
+        JsonNode amount = response.path("amount");
+        return new RefundNotifyRequest(
+                refundNo,
+                status,
+                response.path("out_trade_no").asText(""),
+                response.path("transaction_id").asText(""),
+                integerOrNull(amount, "refund"),
+                integerOrNull(amount, "total"),
+                response.path("refund_id").asText("")
+        );
+    }
+
+    private Integer integerOrNull(JsonNode node, String field) {
+        JsonNode value = node.path(field);
+        return value.isIntegralNumber() && value.canConvertToInt() ? value.asInt() : null;
     }
 
     private boolean hasText(String value) {

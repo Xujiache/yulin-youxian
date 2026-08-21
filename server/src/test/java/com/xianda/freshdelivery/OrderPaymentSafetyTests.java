@@ -272,6 +272,46 @@ class OrderPaymentSafetyTests {
         assertEquals("退款成功", reconciled.status());
     }
 
+    @Test
+    void successfulWechatStatusWithDifferentPaymentIdentityCannotMarkRefundSuccessful() {
+        StorefrontService service = newService();
+        StubWechatPayClient client = new StubWechatPayClient();
+        WechatPaymentService payments = new WechatPaymentService(null, service, client, null);
+        RefundDto refund = service.createAdminRefund(new AdminRefundCreateRequest(
+                10001L,
+                1004L,
+                100,
+                "退款单号碰撞测试"
+        ));
+
+        client.submissionStatus = "SUCCESS";
+        client.remotePaymentOrderNo = "XD-OLD-PAYMENT";
+        client.remoteRefundAmount = 999;
+        RefundDto result = payments.approveRefund(refund.id());
+
+        assertEquals("退款失败", result.status());
+        assertEquals("REFUND_IDENTITY_MISMATCH", result.failureCode());
+        assertEquals(0, service.adminOrder(1004L).refundedAmount());
+        assertTrue(service.requiresManualRefundReconcile(result));
+    }
+
+    @Test
+    void refundNumbersStayUniqueWhenSeparateStateStoresReuseLocalIds() {
+        StorefrontService first = new StorefrontService(tempDir.resolve("first.json").toString(), true);
+        StorefrontService second = new StorefrontService(tempDir.resolve("second.json").toString(), true);
+
+        RefundDto firstRefund = first.createAdminRefund(new AdminRefundCreateRequest(
+                10001L, 1004L, 100, "唯一编号测试"
+        ));
+        RefundDto secondRefund = second.createAdminRefund(new AdminRefundCreateRequest(
+                10001L, 1004L, 100, "唯一编号测试"
+        ));
+
+        assertNotEquals(firstRefund.refundNo(), secondRefund.refundNo());
+        assertTrue(firstRefund.refundNo().matches("[A-Z0-9]+"));
+        assertTrue(firstRefund.refundNo().length() <= 64);
+    }
+
     private StorefrontService newService() {
         return new StorefrontService(tempDir.resolve("order-payment-state.json").toString(), true);
     }
@@ -321,6 +361,11 @@ class OrderPaymentSafetyTests {
     private static final class StubWechatPayClient extends WechatPayClient {
         private RuntimeException submissionFailure;
         private String submissionStatus = "PROCESSING";
+        private String remotePaymentOrderNo;
+        private Integer remoteRefundAmount;
+        private Integer remoteTotalAmount;
+        private String remoteTransactionId;
+        private OrderDetailDto submittedOrder;
 
         private StubWechatPayClient() {
             super(properties());
@@ -333,15 +378,40 @@ class OrderPaymentSafetyTests {
 
         @Override
         public RefundNotifyRequest requestRefund(RefundDto refund, OrderDetailDto order) {
+            submittedOrder = order;
             if (submissionFailure != null) {
                 throw submissionFailure;
             }
-            return new RefundNotifyRequest(refund.refundNo(), submissionStatus);
+            return refundResult(refund);
         }
 
         @Override
         public RefundNotifyRequest queryRefund(RefundDto refund) {
-            return new RefundNotifyRequest(refund.refundNo(), submissionStatus);
+            return refundResult(refund);
+        }
+
+        private RefundNotifyRequest refundResult(RefundDto refund) {
+            String paymentOrderNo = remotePaymentOrderNo == null
+                    ? refund.paymentOrderNo()
+                    : remotePaymentOrderNo;
+            Integer refundAmount = remoteRefundAmount == null
+                    ? refund.refundAmount()
+                    : remoteRefundAmount;
+            Integer totalAmount = remoteTotalAmount == null && submittedOrder != null
+                    ? submittedOrder.paidAmount()
+                    : remoteTotalAmount;
+            String transactionId = remoteTransactionId == null && submittedOrder != null
+                    ? submittedOrder.transactionId()
+                    : remoteTransactionId;
+            return new RefundNotifyRequest(
+                    refund.refundNo(),
+                    submissionStatus,
+                    paymentOrderNo,
+                    transactionId == null ? "" : transactionId,
+                    refundAmount,
+                    totalAmount,
+                    "WX-REFUND-TEST"
+            );
         }
 
         private static WechatPayProperties properties() {

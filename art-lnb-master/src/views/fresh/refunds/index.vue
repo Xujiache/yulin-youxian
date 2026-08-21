@@ -292,6 +292,7 @@
     row.status === '退款失败' &&
     (row.failureCode === 'REFUND_REQUEST_MISMATCH' ||
       row.failureCode === 'REFUND_STATUS_UNCONFIRMED' ||
+      row.failureCode === 'REFUND_IDENTITY_MISMATCH' ||
       row.failureMessage?.includes('订单金额或退款金额与之前请求不一致'))
   const canRestoreOrder = (row: Refund) =>
     row.status === '退款失败' && ['CLOSED', 'ABNORMAL'].includes(row.failureCode || '')

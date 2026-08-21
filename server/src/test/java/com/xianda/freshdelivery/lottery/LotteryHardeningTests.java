@@ -24,6 +24,7 @@ import com.xianda.freshdelivery.dto.CreateOrderRequest;
 import com.xianda.freshdelivery.dto.OrderDetailDto;
 import com.xianda.freshdelivery.dto.PaymentNotifyRequest;
 import com.xianda.freshdelivery.dto.RefundDto;
+import com.xianda.freshdelivery.dto.RefundNotifyRequest;
 import com.xianda.freshdelivery.dto.RefundRequest;
 import com.xianda.freshdelivery.lottery.LotteryDao.DrawGuardKey;
 import com.xianda.freshdelivery.lottery.LotteryModels.AdminDraw;
@@ -741,7 +742,15 @@ class LotteryHardeningTests {
                 order.paidAmount(),
                 "全额退款"
         ));
-        storefront.approveRefund(refund.id());
+        storefront.confirmRefund(new RefundNotifyRequest(
+                refund.refundNo(),
+                "SUCCESS",
+                refund.paymentOrderNo(),
+                "TX-" + orderId,
+                refund.refundAmount(),
+                order.paidAmount(),
+                "WX-REFUND-" + orderId
+        ));
     }
 
     private void disableGiftPrize() {

@@ -1449,7 +1449,7 @@ public class StorefrontService {
         return normalizeRefund(state);
     }
 
-    public synchronized RefundDto approveRefund(Long id) {
+    private synchronized RefundDto finalizeRefundSuccess(Long id) {
         RefundState state = refundState(id);
         RefundDto current = normalizeRefund(state);
         if (REFUND_STATUS_SUCCESS.equals(current.status())) {
@@ -1495,7 +1495,7 @@ public class StorefrontService {
         int retryCount = current.retryCount() + 1;
         String refundNo = current.refundNo();
         if (REFUND_STATUS_FAILED.equals(current.status()) && requiresNewRefundAttemptNo(current)) {
-            refundNo = "RF" + current.id() + "R" + retryCount;
+            refundNo = newRefundNo(current.orderId());
         }
         RefundDto nextRefund = copyRefundState(
                 current,
@@ -1618,12 +1618,26 @@ public class StorefrontService {
     public synchronized RefundDto confirmRefund(RefundNotifyRequest request) {
         RefundState state = refundStateByAttemptNo(request.refundNo());
         RefundDto refund = normalizeRefund(state);
-        if (REFUND_STATUS_SUCCESS.equals(refund.status())) {
-            return refund;
-        }
         String status = request.refundStatus() == null ? "" : request.refundStatus().trim().toUpperCase();
         if ("SUCCESS".equals(status)) {
-            return approveRefund(refund.id());
+            String mismatch = refundConfirmationMismatch(refund, request);
+            if (!mismatch.isBlank()) {
+                LOGGER.error(
+                        "Wechat refund identity mismatch, refundId={}, refundNo={}, detail={}",
+                        refund.id(),
+                        request.refundNo(),
+                        mismatch
+                );
+                return markRefundFailed(
+                        refund.id(),
+                        "REFUND_IDENTITY_MISMATCH",
+                        "微信退款结果与当前订单不匹配：" + mismatch
+                );
+            }
+            return finalizeRefundSuccess(refund.id());
+        }
+        if (REFUND_STATUS_SUCCESS.equals(refund.status())) {
+            return refund;
         }
         if (!refund.refundNo().equals(request.refundNo())) {
             return refund;
@@ -1639,6 +1653,38 @@ public class StorefrontService {
                 "UNKNOWN_STATUS",
                 "微信返回未知退款状态: " + (status.isBlank() ? "<empty>" : status)
         );
+    }
+
+    private String refundConfirmationMismatch(RefundDto refund, RefundNotifyRequest request) {
+        OrderState order = adminOrderState(refund.orderId());
+        String expectedPaymentOrderNo = refund.paymentOrderNo() == null || refund.paymentOrderNo().isBlank()
+                ? paymentOrderNo(order)
+                : refund.paymentOrderNo();
+        int expectedTotalAmount = order.paidAmount() == null || order.paidAmount() <= 0
+                ? order.payableAmount()
+                : order.paidAmount();
+        List<String> mismatches = new ArrayList<>();
+        if (request.paymentOrderNo() == null || request.paymentOrderNo().isBlank()) {
+            mismatches.add("微信结果缺少支付单号");
+        } else if (!expectedPaymentOrderNo.equals(request.paymentOrderNo())) {
+            mismatches.add("支付单号不一致");
+        }
+        if (request.refundAmount() == null) {
+            mismatches.add("微信结果缺少退款金额");
+        } else if (!Objects.equals(refund.refundAmount(), request.refundAmount())) {
+            mismatches.add("退款金额不一致");
+        }
+        if (request.totalAmount() == null) {
+            mismatches.add("微信结果缺少订单金额");
+        } else if (expectedTotalAmount != request.totalAmount()) {
+            mismatches.add("订单金额不一致");
+        }
+        String expectedTransactionId = paymentTransactionIds.getOrDefault(order.orderNo(), "");
+        if (!expectedTransactionId.isBlank()
+                && (request.transactionId() == null || !expectedTransactionId.equals(request.transactionId()))) {
+            mismatches.add("微信支付交易号不一致");
+        }
+        return String.join("；", mismatches);
     }
 
     public synchronized List<OrderStatusCountDto> orderStats() {
@@ -3526,7 +3572,7 @@ public class StorefrontService {
         return new RefundDto(
                 id,
                 order.id(),
-                "RF" + id,
+                newRefundNo(order.id()),
                 refundAmount,
                 reason,
                 REFUND_STATUS_PENDING,
@@ -3553,7 +3599,7 @@ public class StorefrontService {
             return existing;
         }
         long id = refundId.incrementAndGet();
-        String refundNo = "RF" + id;
+        String refundNo = newRefundNo(order.id());
         RefundDto refund = new RefundDto(
                 id,
                 order.id(),
@@ -3585,6 +3631,11 @@ public class StorefrontService {
                 .filter(refund -> "SYSTEM_PAYMENT_RECOVERY".equals(refund.source()))
                 .max(Comparator.comparing(RefundDto::id))
                 .orElse(null);
+    }
+
+    private String newRefundNo(Long orderId) {
+        String random = UUID.randomUUID().toString().replace("-", "").substring(0, 12).toUpperCase(Locale.ROOT);
+        return "RF" + orderId + "T" + System.currentTimeMillis() + random;
     }
 
     private RefundDto copyRefund(RefundDto source, Integer refundAmount, String reason, String status) {
@@ -3689,6 +3740,7 @@ public class StorefrontService {
         String failureMessage = refund.failureMessage() == null ? "" : refund.failureMessage();
         return "REFUND_REQUEST_MISMATCH".equals(failureCode)
                 || "REFUND_STATUS_UNCONFIRMED".equals(failureCode)
+                || "REFUND_IDENTITY_MISMATCH".equals(failureCode)
                 || failureMessage.contains("订单金额或退款金额与之前请求不一致");
     }
 
