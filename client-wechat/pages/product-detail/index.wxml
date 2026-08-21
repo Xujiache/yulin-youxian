@@ -26,6 +26,7 @@
       <text wx:if="{{product.skuEnabled && product.maxUnitPrice > product.minUnitPrice}}" class="price-range">-￥{{maxPriceText}}</text>
       <text class="unit">{{product.skuEnabled ? '规格价' : '当前小计'}}</text>
     </view>
+    <text wx:if="{{minOrderTip}}" class="min-order-hint">{{minOrderTip}}</text>
     <text wx:if="{{!unavailable && product.skuEnabled}}" class="stock">{{product.availableSkuCount}} 个规格有货，可按需选择</text>
     <text wx:elif="{{!unavailable}}" class="stock">库存充足，约 {{product.stockQty}}{{product.saleUnit}}</text>
     <text wx:else class="stock stock-empty">{{availabilityLabel}}，暂时无法购买</text>

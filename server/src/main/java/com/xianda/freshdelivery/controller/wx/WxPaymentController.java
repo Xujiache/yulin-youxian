@@ -3,11 +3,8 @@ package com.xianda.freshdelivery.controller.wx;
 import com.xianda.freshdelivery.common.ApiResponse;
 import com.xianda.freshdelivery.common.BusinessException;
 import com.xianda.freshdelivery.config.WechatPayProperties;
-import com.xianda.freshdelivery.dto.OrderDetailDto;
 import com.xianda.freshdelivery.dto.PaymentNotifyRequest;
-import com.xianda.freshdelivery.dto.RefundDto;
 import com.xianda.freshdelivery.dto.RefundNotifyRequest;
-import com.xianda.freshdelivery.service.StorefrontService;
 import com.xianda.freshdelivery.service.WechatPayClient;
 import com.xianda.freshdelivery.service.WechatPaymentService;
 import java.util.Map;
@@ -28,13 +25,11 @@ public class WxPaymentController {
     private static final Logger LOGGER = LoggerFactory.getLogger(WxPaymentController.class);
 
     private final WechatPayProperties wechatPayProperties;
-    private final StorefrontService storefrontService;
     private final WechatPayClient wechatPayClient;
     private final WechatPaymentService wechatPaymentService;
 
-    public WxPaymentController(WechatPayProperties wechatPayProperties, StorefrontService storefrontService, WechatPayClient wechatPayClient, WechatPaymentService wechatPaymentService) {
+    public WxPaymentController(WechatPayProperties wechatPayProperties, WechatPayClient wechatPayClient, WechatPaymentService wechatPaymentService) {
         this.wechatPayProperties = wechatPayProperties;
-        this.storefrontService = storefrontService;
         this.wechatPayClient = wechatPayClient;
         this.wechatPaymentService = wechatPaymentService;
     }
@@ -59,7 +54,7 @@ public class WxPaymentController {
             @RequestHeader(value = "Wechatpay-Serial", required = false) String serial,
             @RequestHeader(value = "Wechatpay-Signature", required = false) String signature) {
         RefundNotifyRequest request = wechatPayClient.parseRefundNotify(body, timestamp, nonce, serial, signature);
-        storefrontService.confirmRefund(request);
+        wechatPaymentService.confirmRefund(request);
         return Map.of("code", "SUCCESS", "message", "成功");
     }
 

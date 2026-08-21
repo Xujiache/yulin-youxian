@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  debug 专用:允许明文 HTTP,用于模拟器回环 10.0.2.2 与局域网联调。
+  这份文件只打进 debug 包,release 用 src/main 那份(禁止明文)。
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="user" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

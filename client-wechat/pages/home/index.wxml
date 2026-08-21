@@ -5,7 +5,7 @@
       <image class="brand-logo" src="{{storeLogoUrl}}" mode="aspectFill" />
       <view class="brand-copy">
         <text class="page-title">禹邻优鲜</text>
-        <text class="brand-subtitle">禹邻优鲜 · 门店配送</text>
+        <text class="brand-subtitle">{{brandSubtitle}}</text>
       </view>
     </view>
   </view>

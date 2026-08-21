@@ -41,7 +41,12 @@
             <ElOption label="上架中" value="on-sale" />
             <ElOption label="已下架" value="off-sale" />
           </ElSelect>
-          <ElSelect v-model="query.recommended" clearable placeholder="首页推荐" style="width: 130px">
+          <ElSelect
+            v-model="query.recommended"
+            clearable
+            placeholder="首页推荐"
+            style="width: 130px"
+          >
             <ElOption label="仅看推荐" value="recommended" />
             <ElOption label="普通商品" value="normal" />
           </ElSelect>
@@ -53,9 +58,23 @@
         </div>
         <div class="fresh-toolbar__left fresh-toolbar__filters">
           <span class="filter-label">价格（元）</span>
-          <ElInputNumber v-model="query.minPrice" :min="0" :precision="2" controls-position="right" placeholder="最低" style="width: 120px" />
+          <ElInputNumber
+            v-model="query.minPrice"
+            :min="0"
+            :precision="2"
+            controls-position="right"
+            placeholder="最低"
+            style="width: 120px"
+          />
           <span class="filter-separator">至</span>
-          <ElInputNumber v-model="query.maxPrice" :min="0" :precision="2" controls-position="right" placeholder="最高" style="width: 120px" />
+          <ElInputNumber
+            v-model="query.maxPrice"
+            :min="0"
+            :precision="2"
+            controls-position="right"
+            placeholder="最高"
+            style="width: 120px"
+          />
           <ElSelect v-model="query.sort" style="width: 160px">
             <ElOption label="默认排序" value="default" />
             <ElOption label="价格从低到高" value="price-asc" />
@@ -64,33 +83,31 @@
             <ElOption label="库存从高到低" value="stock-desc" />
             <ElOption label="名称 A-Z" value="name-asc" />
           </ElSelect>
-          <span class="filter-result">匹配 {{ filteredProducts.length }} / {{ products.length }} 件</span>
+          <span class="filter-result">已加载 {{ products.length }} / {{ total }} 件</span>
           <ElButton @click="resetFilters">重置筛选</ElButton>
-          <ElButton :loading="loading" @click="loadProducts">刷新数据</ElButton>
+          <ElButton :loading="loading" @click="reloadProducts">刷新数据</ElButton>
         </div>
         <div class="fresh-toolbar__right">
-          <span class="result-count">共 {{ filteredProducts.length }} 件商品</span>
+          <span class="result-count">共 {{ total }} 件商品</span>
           <ElButton @click="goCategories">管理分类</ElButton>
         </div>
       </div>
 
-      <ElTable
-        v-loading="loading"
-        :data="filteredProducts"
-        row-key="id"
-        border
-        empty-text="没有符合筛选条件的商品"
+      <div
+        v-infinite-scroll="loadNextPage"
+        :infinite-scroll-disabled="infiniteScrollDisabled"
+        :infinite-scroll-distance="120"
+        class="product-table-scroll"
       >
+      <ElTable v-loading="loading && products.length === 0" :data="products" row-key="id" border empty-text="没有符合筛选条件的商品">
         <ElTableColumn label="商品" min-width="250" fixed="left">
           <template #default="{ row }">
             <div class="product-cell">
-              <ElImage
+              <FreshImage
                 v-if="row.imageUrl"
                 class="image-thumb"
-                :src="imageUrl(row.imageUrl)"
+                :src="row.imageUrl"
                 fit="cover"
-                :preview-src-list="[imageUrl(row.imageUrl)]"
-                preview-teleported
               />
               <div v-else class="image-thumb empty-thumb">无图</div>
               <div class="product-copy">
@@ -195,6 +212,13 @@
           </template>
         </ElTableColumn>
       </ElTable>
+        <div class="load-more-state">
+          <ElButton v-if="loadError && hasMore" link type="primary" @click="loadNextPage">加载失败，点击重试</ElButton>
+          <span v-else-if="loading && products.length > 0">正在加载更多商品…</span>
+          <span v-else-if="hasMore">向下滚动加载更多</span>
+          <span v-else-if="total > 0">已加载全部 {{ total }} 件商品</span>
+        </div>
+      </div>
     </ElCard>
   </div>
 </template>
@@ -211,7 +235,7 @@
     type Category,
     type Product
   } from '@/api/admin'
-  import { resolveFreshAssetUrl } from '@/utils/fresh-assets'
+  import FreshImage from '@/components/business/fresh-image/index.vue'
 
   defineOptions({ name: 'FreshProducts' })
 
@@ -219,6 +243,11 @@
   const loading = ref(false)
   const categories = ref<Category[]>([])
   const products = ref<Product[]>([])
+  const total = ref(0)
+  const page = ref(0)
+  const loadError = ref(false)
+  let requestVersion = 0
+  let filterTimer: ReturnType<typeof setTimeout> | undefined
   const query = reactive<{
     categoryId?: number | null
     keyword: string
@@ -242,7 +271,6 @@
   const centToYuan = (value: number) => Number((Number(value || 0) / 100).toFixed(2))
   const yuanToCent = (value: number) => Math.max(0, Math.round(Number(value || 0) * 100))
   const money = (value: number) => `￥${centToYuan(value).toFixed(2)}`
-  const imageUrl = resolveFreshAssetUrl
   const priceText = (product: Product) => {
     const min = Number(product.minUnitPrice ?? product.unitPrice)
     const max = Number(product.maxUnitPrice ?? product.unitPrice)
@@ -252,60 +280,61 @@
   const categoryName = (categoryId: number | null) =>
     categories.value.find((item) => item.id === categoryId)?.name || '未分类'
 
-  const filteredProducts = computed(() => {
-    const keyword = query.keyword.trim().toLocaleLowerCase()
-    const minPrice = query.minPrice == null ? undefined : yuanToCent(query.minPrice)
-    const maxPrice = query.maxPrice == null ? undefined : yuanToCent(query.maxPrice)
-    const rows = products.value.filter((item) => {
-      const stock = Number(item.stockQty || 0)
-      const productPrice = Number(item.minUnitPrice ?? item.unitPrice ?? 0)
-      const text = `${item.name || ''} ${item.subtitle || ''} ${item.badge || ''}`.toLocaleLowerCase()
-      if (query.categoryId && item.categoryId !== query.categoryId) return false
-      if (keyword && !text.includes(keyword)) return false
-      if (query.status === 'on-sale' && item.status !== 1) return false
-      if (query.status === 'off-sale' && item.status === 1) return false
-      if (query.recommended === 'recommended' && !item.recommended) return false
-      if (query.recommended === 'normal' && item.recommended) return false
-      if (query.stock === 'in-stock' && stock <= 0) return false
-      if (query.stock === 'sold-out' && stock > 0) return false
-      if (query.stock === 'low-stock' && (stock <= 0 || stock > 10)) return false
-      if (minPrice != null && productPrice < minPrice) return false
-      if (maxPrice != null && productPrice > maxPrice) return false
-      return true
-    })
-
-    return [...rows].sort((left, right) => {
-      const leftPrice = Number(left.minUnitPrice ?? left.unitPrice ?? 0)
-      const rightPrice = Number(right.minUnitPrice ?? right.unitPrice ?? 0)
-      if (query.sort === 'price-asc') return leftPrice - rightPrice
-      if (query.sort === 'price-desc') return rightPrice - leftPrice
-      if (query.sort === 'stock-asc') return Number(left.stockQty || 0) - Number(right.stockQty || 0)
-      if (query.sort === 'stock-desc') return Number(right.stockQty || 0) - Number(left.stockQty || 0)
-      if (query.sort === 'name-asc') return left.name.localeCompare(right.name, 'zh-CN')
-      return Number(left.sortOrder || 0) - Number(right.sortOrder || 0) || Number(left.id || 0) - Number(right.id || 0)
-    })
-  })
+  const hasMore = computed(() => products.value.length < total.value)
+  const infiniteScrollDisabled = computed(() => loading.value || !hasMore.value)
 
   const loadCategories = async () => {
     categories.value = await getCategories()
   }
 
-  const loadProducts = async () => {
+  const normalizeProducts = (items: Product[]) => items.map((item) => ({
+    ...item,
+    skuEnabled: Boolean(item.skuEnabled),
+    specGroups: item.specGroups || [],
+    skus: item.skus || []
+  }))
+
+  const loadProducts = async (reset = false) => {
+    if (!reset && (loading.value || !hasMore.value)) return
+    const version = reset ? ++requestVersion : requestVersion
+    const requestedPage = reset ? 1 : page.value + 1
+    if (reset) {
+      products.value = []
+      total.value = 0
+      page.value = 0
+      loadError.value = false
+    }
     loading.value = true
     try {
-      const result = await getProducts({})
-      products.value = (result.items || []).map((item) => ({
-        ...item,
-        skuEnabled: Boolean(item.skuEnabled),
-        specGroups: item.specGroups || [],
-        skus: item.skus || []
-      }))
+      const result = await getProducts({
+        categoryId: query.categoryId,
+        keyword: query.keyword,
+        status: query.status || undefined,
+        recommended: query.recommended || undefined,
+        stock: query.stock || undefined,
+        minPrice: query.minPrice == null ? undefined : yuanToCent(query.minPrice),
+        maxPrice: query.maxPrice == null ? undefined : yuanToCent(query.maxPrice),
+        sort: query.sort,
+        page: requestedPage,
+        pageSize: 30
+      })
+      if (version !== requestVersion) return
+      const items = normalizeProducts(result.items || [])
+      products.value = reset ? items : [...products.value, ...items.filter((item) => !products.value.some((existing) => existing.id === item.id))]
+      total.value = result.total || 0
+      page.value = result.page || requestedPage
+      loadError.value = false
     } catch (error) {
+      if (version !== requestVersion) return
+      loadError.value = true
       ElMessage.error(error instanceof Error ? error.message : '商品加载失败')
     } finally {
-      loading.value = false
+      if (version === requestVersion) loading.value = false
     }
   }
+
+  const reloadProducts = () => loadProducts(true)
+  const loadNextPage = () => loadProducts(false)
 
   const resetFilters = () => {
     query.categoryId = null
@@ -317,6 +346,12 @@
     query.maxPrice = undefined
     query.sort = 'default'
   }
+
+  watch(query, () => {
+    if (filterTimer) clearTimeout(filterTimer)
+    filterTimer = setTimeout(reloadProducts, 350)
+  }, { deep: true })
+  onBeforeUnmount(() => filterTimer && clearTimeout(filterTimer))
 
   const openCreate = () => {
     router.push({ name: 'FreshProductEditor' })
@@ -330,11 +365,11 @@
     if (!row.id) return
     try {
       await updateProductStock(row.id, stockQty)
-      await loadProducts()
+      await reloadProducts()
       ElMessage.success('库存已更新')
     } catch (error) {
       ElMessage.error(error instanceof Error ? error.message : '库存更新失败')
-      await loadProducts()
+      await reloadProducts()
     }
   }
 
@@ -342,11 +377,11 @@
     if (!row.id) return
     try {
       await updateProductSortOrder(row.id, sortOrder)
-      await loadProducts()
+      await reloadProducts()
       ElMessage.success('小程序排序已更新')
     } catch (error) {
       ElMessage.error(error instanceof Error ? error.message : '商品排序更新失败')
-      await loadProducts()
+      await reloadProducts()
     }
   }
 
@@ -354,7 +389,7 @@
     if (!row.id) return
     try {
       await updateProductStatus(row.id, row.status === 1 ? 0 : 1)
-      await loadProducts()
+      await reloadProducts()
       ElMessage.success(row.status === 1 ? '商品已下架' : '商品已上架')
     } catch (error) {
       ElMessage.error(error instanceof Error ? error.message : '状态更新失败')
@@ -374,7 +409,7 @@
         }
       )
       await deleteProduct(row.id)
-      await loadProducts()
+      await reloadProducts()
       ElMessage.success('商品已删除')
     } catch (error) {
       if (error === 'cancel' || error === 'close') return
@@ -383,12 +418,12 @@
   }
 
   const goCategories = () => {
-    router.push('/fresh/categories')
+    router.push('/fresh/catalog/categories')
   }
 
   onMounted(async () => {
     await loadCategories()
-    await loadProducts()
+    await reloadProducts()
   })
 </script>
 
@@ -472,6 +507,21 @@
 
   .danger-action {
     color: var(--el-color-danger);
+  }
+
+  .product-table-scroll {
+    max-height: calc(100vh - 290px);
+    min-height: 360px;
+    overflow: auto;
+  }
+
+  .load-more-state {
+    display: flex;
+    min-height: 44px;
+    align-items: center;
+    justify-content: center;
+    color: var(--art-gray-500);
+    font-size: 13px;
   }
 
   :deep(.el-table__cell) {

@@ -76,3 +76,35 @@ export const getFirstMenuPath = (menuList: AppRouteRecord[]): string => {
 
   return ''
 }
+
+/**
+ * 菜单展示时拆掉仅作 Layout 容器的根节点。
+ * 路由仍按 /fresh/... 注册，但一级菜单直接是商品/订单/配送等经营模块，
+ * 这样混合菜单、双列菜单才能画出真正的二级导航。
+ */
+export const unwrapLayoutMenu = (menuList: AppRouteRecord[]): AppRouteRecord[] => {
+  if (menuList.length !== 1 || !menuList[0]?.children?.length) {
+    return menuList
+  }
+  const root = menuList[0]
+  const component = typeof root.component === 'string' ? root.component : ''
+  const isLayoutRoot =
+    !component || component === '/index/index' || component === 'Layout'
+  return isLayoutRoot ? root.children || menuList : menuList
+}
+
+/**
+ * 按最长路径前缀找到当前页所属的一级模块（兼容 /fresh/delivery/board）。
+ */
+export const findMenuByPath = (
+  menuList: AppRouteRecord[],
+  currentPath: string
+): AppRouteRecord | undefined => {
+  if (!currentPath) return undefined
+  return menuList
+    .filter((menu) => {
+      const path = menu.path || ''
+      return path === currentPath || currentPath.startsWith(`${path}/`)
+    })
+    .sort((a, b) => (b.path?.length || 0) - (a.path?.length || 0))[0]
+}

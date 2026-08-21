@@ -18,13 +18,11 @@
       <ElTable v-loading="loading" :data="categories" border empty-text="暂无分类">
         <ElTableColumn label="分类图标" width="110">
           <template #default="{ row }">
-            <ElImage
+            <FreshImage
               v-if="row.iconUrl"
               class="category-icon"
-              :src="assetUrl(row.iconUrl)"
+              :src="row.iconUrl"
               fit="contain"
-              :preview-src-list="[assetUrl(row.iconUrl)]"
-              preview-teleported
             />
             <div v-else class="category-icon category-icon--empty">无图</div>
           </template>
@@ -47,7 +45,12 @@
         </ElFormItem>
         <ElFormItem label="分类图标">
           <div class="upload-row">
-            <ElImage v-if="form.iconUrl" class="upload-preview" :src="assetUrl(form.iconUrl)" fit="contain" />
+            <ElImage
+              v-if="form.iconUrl"
+              class="upload-preview"
+              :src="assetUrl(form.iconUrl)"
+              fit="contain"
+            />
             <div v-else class="upload-preview upload-preview--empty">待上传</div>
             <ElUpload
               accept=".jpg,.jpeg,.png,.webp"
@@ -81,6 +84,7 @@
     type Category
   } from '@/api/admin'
   import { resolveFreshAssetUrl } from '@/utils/fresh-assets'
+  import FreshImage from '@/components/business/fresh-image/index.vue'
 
   defineOptions({ name: 'FreshCategories' })
 

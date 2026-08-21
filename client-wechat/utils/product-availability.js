@@ -109,6 +109,20 @@ function isUnavailable(product) {
   return getProductAvailability(product).state !== AVAILABLE;
 }
 
+function isProductListed(product) {
+  if (productStatus(product) !== 1) {
+    return false;
+  }
+  if (product && product.skuEnabled) {
+    return (product.skus || []).some((sku) => Number(sku.status) === 1);
+  }
+  return true;
+}
+
+function filterListedProducts(products) {
+  return (products || []).filter(isProductListed);
+}
+
 function sortAvailableFirst(products) {
   return [...(products || [])].sort((left, right) => (
     Number(isUnavailable(left)) - Number(isUnavailable(right))
@@ -120,7 +134,9 @@ module.exports = {
   OUT_OF_STOCK,
   OFF_SHELF,
   SPEC_CHANGED,
+  filterListedProducts,
   getProductAvailability,
+  isProductListed,
   isUnavailable,
   sortAvailableFirst
 };

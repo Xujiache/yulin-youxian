@@ -1,5 +1,6 @@
 package com.xianda.freshdelivery.dto;
 
+import com.xianda.freshdelivery.lottery.LotteryModels.Gift;
 import java.util.List;
 
 public record AdminOrderDto(
@@ -23,6 +24,12 @@ public record AdminOrderDto(
         Integer buildingOrderPosition,
         Integer sameAddressOrderCount,
         String printStatus,
-        Long printJobId
+        Long printJobId,
+        Integer discountAmount,
+        List<Gift> gifts
 ) {
+    public AdminOrderDto {
+        discountAmount = discountAmount == null ? 0 : discountAmount;
+        gifts = gifts == null ? List.of() : List.copyOf(gifts);
+    }
 }

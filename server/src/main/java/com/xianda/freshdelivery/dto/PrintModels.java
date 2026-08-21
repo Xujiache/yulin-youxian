@@ -58,8 +58,37 @@ public final class PrintModels {
             String deliveryFee,
             String packageFee,
             String payableAmount,
-            String remark
+            String remark,
+            String discountAmount,
+            List<PrintReceiptItemDto> gifts
     ) {
+        public PrintReceiptDto {
+            gifts = gifts == null ? List.of() : List.copyOf(gifts);
+            discountAmount = discountAmount == null ? "¥ 0.00" : discountAmount;
+        }
+
+        public PrintReceiptDto(
+                String storeName,
+                String title,
+                String orderNo,
+                String createdAt,
+                String deliverySlot,
+                String customerName,
+                String customerPhone,
+                String address,
+                List<PrintReceiptItemDto> items,
+                String productAmount,
+                String deliveryFee,
+                String packageFee,
+                String payableAmount,
+                String remark
+        ) {
+            this(
+                    storeName, title, orderNo, createdAt, deliverySlot, customerName, customerPhone,
+                    address, items, productAmount, deliveryFee, packageFee, payableAmount, remark,
+                    "¥ 0.00", List.of()
+            );
+        }
     }
 
     public record PrintJobDto(

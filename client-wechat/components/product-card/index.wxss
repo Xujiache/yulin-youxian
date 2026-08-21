@@ -57,13 +57,19 @@
 
 .body {
   position: relative;
+  display: flex;
+  flex-direction: column;
   min-height: 188rpx;
   padding: 18rpx 18rpx 20rpx;
 }
 
 .name {
-  display: block;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
   min-height: 74rpx;
+  max-height: 72rpx;
   color: #101815;
   font-size: 26rpx;
   font-weight: 700;
@@ -87,7 +93,8 @@
   align-items: center;
   justify-content: space-between;
   gap: 12rpx;
-  margin-top: 12rpx;
+  margin-top: auto;
+  padding-top: 12rpx;
 }
 
 .price {
@@ -127,15 +134,15 @@
 }
 
 .add-button {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  width: 60rpx;
-  min-width: 60rpx;
-  max-width: 60rpx;
-  height: 60rpx;
-  min-height: 60rpx;
+  width: 56rpx;
+  min-width: 56rpx;
+  height: 56rpx;
+  min-height: 56rpx;
   padding: 0;
   color: #ffffff;
   font-size: 32rpx;
@@ -143,7 +150,88 @@
   line-height: 1;
   background: #008a45;
   border-radius: 999rpx;
-  box-shadow: 0 8rpx 18rpx rgba(0, 122, 61, 0.18);
+  box-shadow: 0 6rpx 16rpx rgba(0, 122, 61, 0.2);
+}
+
+.add-button.is-sku-btn {
+  width: 116rpx;
+  min-width: 116rpx;
+  height: 52rpx;
+  min-height: 52rpx;
+  background: #008a45;
+  border-radius: 999rpx;
+}
+
+.sku-button-text {
+  color: #ffffff;
+  font-size: 22rpx;
+  font-weight: 800;
+}
+
+.sku-badge {
+  position: absolute;
+  top: -8rpx;
+  right: -8rpx;
+  min-width: 28rpx;
+  height: 28rpx;
+  padding: 0 6rpx;
+  color: #ffffff;
+  font-size: 18rpx;
+  font-weight: 800;
+  line-height: 28rpx;
+  text-align: center;
+  background: #ff4b2b;
+  border: 2rpx solid #ffffff;
+  border-radius: 999rpx;
+}
+
+/* Meituan Style Stepper Group: [- Count +] */
+.stepper-group {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  flex-shrink: 0;
+}
+
+.stepper-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 52rpx;
+  min-width: 52rpx;
+  height: 52rpx;
+  min-height: 52rpx;
+  padding: 0;
+  margin: 0;
+  box-sizing: border-box;
+  border-radius: 999rpx;
+}
+
+.stepper-btn::after {
+  border: 0;
+}
+
+.minus-btn {
+  background: #ffffff;
+  border: 2rpx solid #008a45;
+}
+
+.add-btn {
+  background: #008a45;
+  box-shadow: 0 4rpx 12rpx rgba(0, 122, 61, 0.25);
+}
+
+.stepper-icon {
+  width: 24rpx;
+  height: 24rpx;
+}
+
+.stepper-count {
+  min-width: 32rpx;
+  color: #1a1a1a;
+  font-size: 26rpx;
+  font-weight: 800;
+  text-align: center;
 }
 
 .add-icon {

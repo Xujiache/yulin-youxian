@@ -24,8 +24,8 @@ import { BaseResponse } from '@/types'
 /** 请求配置常量 */
 const REQUEST_TIMEOUT = 15000
 const LOGOUT_DELAY = 500
-const MAX_RETRIES = 0
-const RETRY_DELAY = 1000
+const MAX_RETRIES = 2
+const RETRY_DELAY = 500
 const UNAUTHORIZED_DEBOUNCE_TIME = 3000
 
 /** 401防抖状态 */
@@ -49,7 +49,7 @@ const axiosInstance = axios.create({
   transformResponse: [
     (data, headers) => {
       const contentType = headers['content-type']
-      if (contentType?.includes('application/json')) {
+      if (typeof contentType === 'string' && contentType.includes('application/json')) {
         try {
           return JSON.parse(data)
         } catch {
@@ -66,8 +66,14 @@ axiosInstance.interceptors.request.use(
   (request: InternalAxiosRequestConfig) => {
     const { accessToken } = useUserStore()
     if (accessToken) {
-      const authorization = accessToken.startsWith('Bearer ') ? accessToken : `Bearer ${accessToken}`
+      const authorization = accessToken.startsWith('Bearer ')
+        ? accessToken
+        : `Bearer ${accessToken}`
       request.headers.set('Authorization', authorization)
+    }
+
+    if (request.params) {
+      request.params = cleanParams(request.params)
     }
 
     if (request.data && !(request.data instanceof FormData) && !request.headers['Content-Type']) {
@@ -82,6 +88,26 @@ axiosInstance.interceptors.request.use(
     return Promise.reject(error)
   }
 )
+
+/** 清理请求参数，移除 null/undefined/空字符串/字符串 "null"/"undefined" */
+function cleanParams(params: Record<string, any>): Record<string, any> {
+  const cleaned: Record<string, any> = {}
+  for (const [key, value] of Object.entries(params)) {
+    if (value == null) continue
+    if (typeof value === 'string') {
+      const trimmed = value.trim()
+      if (
+        trimmed === '' ||
+        trimmed.toLowerCase() === 'null' ||
+        trimmed.toLowerCase() === 'undefined'
+      ) {
+        continue
+      }
+    }
+    cleaned[key] = value
+  }
+  return cleaned
+}
 
 /** 响应拦截器 */
 axiosInstance.interceptors.response.use(
@@ -153,8 +179,10 @@ async function retryRequest<T>(
   try {
     return await request<T>(config)
   } catch (error) {
-    if (retries > 0 && error instanceof HttpError && shouldRetry(error.code)) {
-      await delay(RETRY_DELAY)
+    const method = String(config.method || 'GET').toUpperCase()
+    const retryableNetworkFailure = error instanceof HttpError && error.code === ApiStatus.error
+    if (method === 'GET' && retries > 0 && error instanceof HttpError && (retryableNetworkFailure || shouldRetry(error.code))) {
+      await delay(RETRY_DELAY * (MAX_RETRIES - retries + 1))
       return retryRequest<T>(config, retries - 1)
     }
     throw error

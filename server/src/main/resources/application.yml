@@ -1,6 +1,8 @@
 spring:
   application:
     name: fresh-delivery-server
+  jackson:
+    time-zone: Asia/Shanghai
   datasource:
     url: ${MYSQL_URL:jdbc:mysql://127.0.0.1:3306/yulin_fresh?useUnicode=true&characterEncoding=UTF-8&connectionCollation=utf8mb4_unicode_ci&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true}
     username: ${MYSQL_USERNAME:yulin_fresh}
@@ -17,11 +19,14 @@ spring:
     validate-on-migrate: true
   servlet:
     multipart:
-      max-file-size: 5MB
-      max-request-size: 10MB
+      max-file-size: 150MB
+      max-request-size: 160MB
 
 server:
   port: ${SERVER_PORT:8080}
+  tomcat:
+    max-http-form-post-size: 160MB
+    max-swallow-size: 160MB
 
 management:
   endpoints:
@@ -50,21 +55,28 @@ wechat:
 
 auth:
   admin:
-    username: ${ADMIN_USERNAME:admin}
-    password: ${ADMIN_PASSWORD:Admin@123456}
+    username: ${ADMIN_USERNAME:}
+    password: ${ADMIN_PASSWORD:}
     additional-username: ${ADMIN_ADDITIONAL_USERNAME:}
     additional-password: ${ADMIN_ADDITIONAL_PASSWORD:}
+    session-ttl-ms: ${ADMIN_SESSION_TTL_MS:28800000}
+    login-rate-limit:
+      max-attempts: ${ADMIN_LOGIN_RATE_LIMIT_MAX_ATTEMPTS:0}
+      window-ms: ${ADMIN_LOGIN_RATE_LIMIT_WINDOW_MS:900000}
+  user:
+    session-ttl-ms: ${AUTH_USER_SESSION_TTL_MS:2592000000}
   profile-storage-path: ${AUTH_PROFILE_STORAGE_PATH:data/user-profiles.json}
 
 storefront:
   storage-path: ${STOREFRONT_STORAGE_PATH:data/storefront-state.json}
   seed-demo-data: ${STOREFRONT_SEED_DEMO_DATA:false}
+  order-expiration-scan-ms: ${ORDER_EXPIRATION_SCAN_MS:60000}
+  order-expiration-initial-delay-ms: ${ORDER_EXPIRATION_INITIAL_DELAY_MS:10000}
 
 persistence:
   mode: ${PERSISTENCE_MODE:mysql}
   mysql:
     shadow-write-legacy-json: ${MYSQL_SHADOW_WRITE_LEGACY_JSON:true}
-    reject-suspicious-question-marks: ${MYSQL_REJECT_SUSPICIOUS_QUESTION_MARKS:true}
 
 backup:
   directory: ${BACKUP_DIRECTORY:data/backups}
@@ -74,3 +86,49 @@ backup:
   realtime-debounce-ms: ${BACKUP_REALTIME_DEBOUNCE_MS:1500}
   scheduled-interval-ms: ${BACKUP_SCHEDULED_INTERVAL_MS:300000}
   scheduled-initial-delay-ms: ${BACKUP_SCHEDULED_INITIAL_DELAY_MS:30000}
+
+marketing:
+  lottery:
+    challenge-ttl-seconds: ${MARKETING_LOTTERY_CHALLENGE_TTL_SECONDS:600}
+    consistency-scan-ms: ${MARKETING_LOTTERY_CONSISTENCY_SCAN_MS:300000}
+    consistency-initial-delay-ms: ${MARKETING_LOTTERY_CONSISTENCY_INITIAL_DELAY_MS:30000}
+
+delivery:
+  enabled: ${DELIVERY_ENABLED:true}
+  store:
+    lat: ${DELIVERY_STORE_LAT:0}
+    lng: ${DELIVERY_STORE_LNG:0}
+  amap:
+    web-key: ${AMAP_WEB_KEY:}
+    js-key: ${AMAP_JS_KEY:}
+    enabled: ${AMAP_ENABLED:false}
+  push:
+    provider: ${PUSH_PROVIDER:NOOP}
+    jpush-app-key: ${JPUSH_APP_KEY:}
+    jpush-master-secret: ${JPUSH_MASTER_SECRET:}
+  privacy-number:
+    provider: ${PRIVACY_NUMBER_PROVIDER:NOOP}
+    aliyun-access-key-id: ${ALIYUN_AK_ID:}
+    aliyun-access-key-secret: ${ALIYUN_AK_SECRET:}
+    pool-key: ${ALIYUN_PNP_POOL_KEY:}
+  dispatch:
+    loop-enabled: ${DISPATCH_LOOP_ENABLED:true}
+    loop-interval-ms: ${DISPATCH_LOOP_INTERVAL_MS:5000}
+  tracking:
+    cleanup-cron: ${TRACKING_CLEANUP_CRON:0 30 3 * * *}
+    cleanup-zone: ${TRACKING_CLEANUP_ZONE:Asia/Shanghai}
+  upload:
+    delivery-path: ${DELIVERY_UPLOAD_PATH:data/uploads/delivery}
+    # 顾客端看送达照片走的是 URL 上的限时签名（小程序渲染图片带不了请求头）。
+    # 不配就每次启动随机生成，已发出的链接会在重启后失效；多实例必须显式配置成同一个值。
+    signing-secret: ${DELIVERY_UPLOAD_SIGNING_SECRET:}
+    signature-ttl-seconds: ${DELIVERY_UPLOAD_SIGNATURE_TTL_SECONDS:1800}
+  rider-app:
+    channel: ${RIDER_APP_CHANNEL:production}
+    package-name: ${RIDER_APP_PACKAGE_NAME:com.yulin.rider}
+    storage-path: ${RIDER_APP_STORAGE_PATH:../apk-releases}
+    public-base-url: ${RIDER_APP_PUBLIC_BASE_URL:https://hqhjxt.vip}
+    expected-cert-sha256: ${RIDER_EXPECTED_CERT_SHA256:}
+    publish-token: ${RIDER_APP_PUBLISH_TOKEN:}
+    max-file-size-bytes: ${RIDER_APP_MAX_FILE_SIZE_BYTES:157286400}
+    retain-apk-count: ${RIDER_APP_RETAIN_APK_COUNT:8}

@@ -1,5 +1,6 @@
 package com.xianda.freshdelivery.persistence;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -13,6 +14,7 @@ import java.nio.file.StandardCopyOption;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
+import java.util.Map;
 
 final class StatePayloadCodec {
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
@@ -21,22 +23,55 @@ final class StatePayloadCodec {
     }
 
     static String decodeAndValidate(byte[] payload) {
+        return decode(payload).json();
+    }
+
+    static void validateLegacyImport(byte[] payload) {
+        DecodedPayload decoded = decode(payload);
+        if (containsReplacementCharacter(decoded.root())) {
+            throw new IllegalStateException("状态数据包含 Unicode 替换字符，疑似已经发生乱码");
+        }
+    }
+
+    private static DecodedPayload decode(byte[] payload) {
         try {
             String json = StandardCharsets.UTF_8.newDecoder()
                     .onMalformedInput(CodingErrorAction.REPORT)
                     .onUnmappableCharacter(CodingErrorAction.REPORT)
                     .decode(ByteBuffer.wrap(payload))
                     .toString();
-            if (json.indexOf('\uFFFD') >= 0) {
-                throw new IllegalStateException("状态数据包含 Unicode 替换字符，疑似已经发生乱码");
+            JsonNode root = OBJECT_MAPPER.readTree(json);
+            if (root == null) {
+                throw new IllegalStateException("状态数据不是有效的 JSON");
             }
-            OBJECT_MAPPER.readTree(json);
-            return json;
+            return new DecodedPayload(json, root);
         } catch (CharacterCodingException exception) {
             throw new IllegalStateException("状态数据不是有效的 UTF-8 编码", exception);
         } catch (IOException exception) {
             throw new IllegalStateException("状态数据不是有效的 JSON", exception);
         }
+    }
+
+    private static boolean containsReplacementCharacter(JsonNode node) {
+        if (node.isTextual()) {
+            return node.textValue().indexOf('\uFFFD') >= 0;
+        }
+        if (node.isObject()) {
+            for (Map.Entry<String, JsonNode> field : node.properties()) {
+                if (field.getKey().indexOf('\uFFFD') >= 0 || containsReplacementCharacter(field.getValue())) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        if (node.isArray()) {
+            for (JsonNode child : node) {
+                if (containsReplacementCharacter(child)) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     static String sha256(byte[] payload) {
@@ -49,10 +84,6 @@ final class StatePayloadCodec {
 
     static byte[] utf8(String payload) {
         return payload.getBytes(StandardCharsets.UTF_8);
-    }
-
-    static boolean hasSuspiciousQuestionMarks(byte[] payload) {
-        return decodeAndValidate(payload).matches("(?s).*\\?{3,}.*");
     }
 
     static byte[] readValidated(Path path) {
@@ -96,5 +127,8 @@ final class StatePayloadCodec {
         } catch (IOException exception) {
             throw new IllegalStateException("创建迁移前备份失败: " + backupPath, exception);
         }
+    }
+
+    private record DecodedPayload(String json, JsonNode root) {
     }
 }

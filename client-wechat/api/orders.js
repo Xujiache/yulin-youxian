@@ -1,5 +1,11 @@
 const request = require("../utils/request");
-const { normalizeOrder, normalizeOrderItem, normalizeRefund } = require("./normalize");
+const {
+  normalizeGifts,
+  normalizeOrder,
+  normalizeOrderItem,
+  normalizePrizeResult,
+  normalizeRefund
+} = require("./normalize");
 const { API_BASE_URL } = require("../utils/config");
 
 function getBaseUrl() {
@@ -26,9 +32,15 @@ async function getOrder(id) {
   const order = await request({
     url: `/api/wx/orders/${id}`
   });
+  return normalizeOrderDetail(order);
+}
+
+function normalizeOrderDetail(order) {
   return {
     ...order,
     items: (order.items || []).map(normalizeOrderItem),
+    gifts: normalizeGifts(order.gifts),
+    lotteryResult: normalizePrizeResult(order.lotteryResult),
     refunds: (order.refunds || []).map(normalizeRefund)
   };
 }
@@ -60,11 +72,72 @@ function payOrder(id) {
   });
 }
 
-function refreshPaymentStatus(id) {
+function getPaymentMethod(id) {
   return request({
+    url: `/api/wx/orders/${id}/payment-method`
+  });
+}
+
+function changeToWechatPayment(id) {
+  return request({
+    url: `/api/wx/orders/${id}/payment-method/wechat`,
+    method: "POST"
+  });
+}
+
+function createPaymentShare(id) {
+  return request({
+    url: `/api/wx/orders/${id}/payment-share`,
+    method: "POST"
+  });
+}
+
+async function getPaymentShare(token) {
+  const share = await request({
+    url: `/api/public/payment-shares/${encodeURIComponent(token)}`,
+    skipAuth: true
+  });
+  if (!share) {
+    return share;
+  }
+  return {
+    ...share,
+    gifts: normalizeGifts(share.gifts),
+    lotteryResult: normalizePrizeResult(share.lotteryResult)
+  };
+}
+
+function payPaymentShare(token) {
+  return request({
+    url: `/api/wx/payment-shares/${encodeURIComponent(token)}/pay`,
+    method: "POST"
+  });
+}
+
+async function cancelOrder(id, returnToCart) {
+  const order = await request({
+    url: `/api/wx/orders/${id}/cancel`,
+    method: "POST",
+    data: { returnToCart: Boolean(returnToCart) }
+  });
+  return normalizeOrderDetail(order);
+}
+
+async function restartOrder(id, deliverySlotId) {
+  const order = await request({
+    url: `/api/wx/orders/${id}/restart`,
+    method: "POST",
+    data: deliverySlotId ? { deliverySlotId } : {}
+  });
+  return normalizeOrderDetail(order);
+}
+
+async function refreshPaymentStatus(id) {
+  const order = await request({
     url: `/api/wx/orders/${id}/payment-status`,
     method: "POST"
   });
+  return normalizeOrderDetail(order);
 }
 
 function submitRefund(data) {
@@ -119,9 +192,17 @@ function uploadRefundEvidence(filePath) {
 module.exports = {
   getOrders,
   getOrder,
+  normalizeOrderDetail,
   previewOrder,
   createOrder,
   payOrder,
+  getPaymentMethod,
+  changeToWechatPayment,
+  createPaymentShare,
+  getPaymentShare,
+  payPaymentShare,
+  cancelOrder,
+  restartOrder,
   refreshPaymentStatus,
   submitRefund,
   uploadRefundEvidence

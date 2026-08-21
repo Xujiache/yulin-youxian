@@ -1,0 +1,174 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: maven
+      - name: Run backend tests
+        working-directory: server
+        run: ./mvnw -B -ntp clean test
+
+  admin:
+    name: Admin locked build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.14.0
+          cache: npm
+          cache-dependency-path: art-lnb-master/package-lock.json
+      - name: Enforce Node toolchain
+        run: |
+          test "$(node --version)" = "v22.14.0"
+          test "$(npm --version)" = "10.9.2"
+      - name: Install from the committed lockfile
+        working-directory: art-lnb-master
+        env:
+          HUSKY: "0"
+        run: npm ci
+      - name: Type-check and build admin
+        working-directory: art-lnb-master
+        run: npm run build
+
+  android:
+    name: Android tests and debug APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Test and build debug APK
+        working-directory: rider-android
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon --no-build-cache clean testDebugUnitTest assembleDebug
+          (
+            cd app/build/outputs/apk/debug
+            sha256sum *.apk > SHA256SUMS.txt
+          )
+      - name: Upload mandatory debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: rider-debug-${{ github.sha }}
+          path: |
+            rider-android/app/build/outputs/apk/debug/*.apk
+            rider-android/app/build/outputs/apk/debug/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 14
+
+  miniprogram:
+    name: Mini-program Node check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.14.0
+      - name: Parse every mini-program JavaScript file
+        run: node .github/scripts/check-miniprogram.mjs client-wechat
+
+  print-agent:
+    name: Print agent build
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile and generate SHA256 manifest
+        shell: powershell
+        run: |
+          .\print-agent\build.ps1 -OutputDirectory "$env:RUNNER_TEMP\YulinPrintAgent"
+          .\print-agent\build.ps1 -OutputDirectory "$env:RUNNER_TEMP\YulinPrintAgent-rebuild"
+          $files = Get-ChildItem "$env:RUNNER_TEMP\YulinPrintAgent" -File
+          $rebuiltFiles = Get-ChildItem "$env:RUNNER_TEMP\YulinPrintAgent-rebuild" -File
+          if ($files.Count -ne $rebuiltFiles.Count) {
+            throw "Rebuilt print package file count differs"
+          }
+          foreach ($file in $files) {
+            $rebuilt = Join-Path "$env:RUNNER_TEMP\YulinPrintAgent-rebuild" $file.Name
+            if (-not (Test-Path -LiteralPath $rebuilt)) {
+              throw "Rebuilt package is missing $($file.Name)"
+            }
+            $firstHash = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash
+            $secondHash = (Get-FileHash -LiteralPath $rebuilt -Algorithm SHA256).Hash
+            if ($firstHash -ne $secondHash) {
+              throw "Print release is not reproducible: $($file.Name)"
+            }
+          }
+      - name: Upload print agent
+        uses: actions/upload-artifact@v4
+        with:
+          name: print-agent-${{ github.sha }}
+          path: ${{ runner.temp }}/YulinPrintAgent/**
+          if-no-files-found: error
+          retention-days: 30
+
+  operations:
+    name: Deployment template checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.14.0
+      - name: Validate deployment scripts and PM2 config
+        run: |
+          bash -n \
+            deploy/scripts/lib/common.sh \
+            deploy/scripts/validate-env.sh \
+            deploy/scripts/readiness.sh \
+            deploy/scripts/build-release.sh \
+            deploy/scripts/render-nginx.sh \
+            deploy/scripts/install-release.sh \
+            deploy/scripts/go-live.sh \
+            deploy/scripts/rollback.sh \
+            deploy/scripts/restore-drill.sh \
+            scripts/rider-publish.sh \
+            scripts/rider-configure-amap-key.sh
+          node --check deploy/pm2/ecosystem.config.cjs
+      - name: Assert Flyway V11 and 36-table readiness contract
+        run: python3 .github/scripts/check_release_contract.py
+
+  secret-scan:
+    name: Secret and tracked archive scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Audit tracked runtime files and archive members
+        run: python3 .github/scripts/audit_tracked_files.py
+      - name: Scan Git history for secrets
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_ENABLE_COMMENTS: "false"

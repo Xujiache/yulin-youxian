@@ -3,7 +3,9 @@
     <div class="fresh-page__head">
       <div>
         <h1 class="fresh-page__title">数据备份</h1>
-        <p class="fresh-page__desc">系统会在数据变更后自动备份，也可以手动创建或恢复完整数据快照。</p>
+        <p class="fresh-page__desc"
+          >系统会在数据变更后自动备份，也可以手动创建或恢复完整数据快照。</p
+        >
       </div>
       <div class="backup-actions">
         <ElButton :loading="loading" @click="loadBackups">刷新列表</ElButton>
@@ -13,7 +15,7 @@
 
     <ElAlert
       title="恢复会覆盖当前业务数据"
-      description="恢复前系统会自动生成一份恢复保护备份。请确认备份时间和校验值后再执行恢复。"
+      description="恢复前系统会自动生成一份恢复保护备份；恢复时会对备份内容执行完整校验。"
       type="warning"
       :closable="false"
       show-icon
@@ -24,7 +26,11 @@
         <ElTableColumn prop="fileName" label="备份文件" min-width="290" />
         <ElTableColumn prop="type" label="类型" width="120">
           <template #default="{ row }">
-            <ElTag :type="row.type === 'PRE_RESTORE' ? 'warning' : row.type === 'MANUAL' ? 'success' : 'info'">
+            <ElTag
+              :type="
+                row.type === 'PRE_RESTORE' ? 'warning' : row.type === 'MANUAL' ? 'success' : 'info'
+              "
+            >
               {{ typeLabel(row.type) }}
             </ElTag>
           </template>
@@ -35,10 +41,10 @@
         <ElTableColumn label="大小" width="110">
           <template #default="{ row }">{{ formatBytes(row.sizeBytes) }}</template>
         </ElTableColumn>
-        <ElTableColumn label="校验值" min-width="160">
+        <ElTableColumn label="完整性" min-width="160">
           <template #default="{ row }">
-            <ElTooltip :content="row.sha256" placement="top">
-              <span class="checksum">{{ row.sha256.slice(0, 12) }}…</span>
+            <ElTooltip content="恢复时会对备份中的数据和文件执行完整 SHA-256 校验" placement="top">
+              <span class="checksum">恢复时完整校验</span>
             </ElTooltip>
           </template>
         </ElTableColumn>

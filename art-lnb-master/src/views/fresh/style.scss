@@ -82,10 +82,10 @@
 }
 
 .metric-card {
-  padding: 20px;
-  border: 1px solid rgba(0, 132, 61, 0.1);
+  padding: 16px 18px;
+  border: 1px solid var(--art-border-color);
   border-radius: 12px;
-  background: linear-gradient(135deg, #ffffff 0%, #f4fbf6 100%);
+  background: var(--art-main-bg-color);
 }
 
 .metric-card__label {
@@ -94,9 +94,9 @@
 }
 
 .metric-card__value {
-  margin-top: 10px;
-  color: #007a39;
-  font-size: 28px;
+  margin-top: 8px;
+  color: var(--el-color-primary);
+  font-size: 26px;
   font-weight: 800;
 }
 

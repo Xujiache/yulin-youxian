@@ -1,4 +1,5 @@
 import { AppRouteRecordRaw } from '@/utils/router'
+import { HOME_PAGE_PATH } from '../routesAlias'
 
 export const staticRoutes: AppRouteRecordRaw[] = [
   {
@@ -45,6 +46,27 @@ export const staticRoutes: AppRouteRecordRaw[] = [
       }
     ]
   },
+  // 模板默认首页为 /dashboard，本项目已改为 /fresh/dashboard。
+  // 保留重定向以兼容浏览器书签和历史记录中残留的旧地址。
+  {
+    path: '/dashboard',
+    redirect: HOME_PAGE_PATH
+  },
+  {
+    path: '/dashboard/:pathMatch(.*)*',
+    redirect: HOME_PAGE_PATH
+  },
+  { path: '/fresh/categories', redirect: '/fresh/catalog/categories' },
+  { path: '/fresh/products/editor', redirect: '/fresh/catalog/products/editor' },
+  { path: '/fresh/products', redirect: '/fresh/catalog/products' },
+  { path: '/fresh/banners', redirect: '/fresh/catalog/banners' },
+  { path: '/fresh/orders', redirect: '/fresh/trade/orders' },
+  { path: '/fresh/stock-overview', redirect: '/fresh/trade/stock-overview' },
+  { path: '/fresh/refunds', redirect: '/fresh/trade/refunds' },
+  { path: '/fresh/delivery-slots', redirect: '/fresh/trade/delivery-slots' },
+  { path: '/fresh/settings', redirect: '/fresh/store/settings' },
+  { path: '/fresh/printing', redirect: '/fresh/store/printing' },
+  { path: '/fresh/backups', redirect: '/fresh/store/backups' },
   {
     path: '/:pathMatch(.*)*',
     name: 'Exception404',

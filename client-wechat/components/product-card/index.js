@@ -8,6 +8,10 @@ Component({
       type: Object,
       value: {}
     },
+    cartQuantity: {
+      type: Number,
+      value: 0
+    },
     eagerImage: {
       type: Boolean,
       value: false
@@ -69,6 +73,13 @@ Component({
         return;
       }
       this.triggerEvent("add", { product: this.properties.product });
+    },
+
+    handleMinus() {
+      if (this.data.unavailable) {
+        return;
+      }
+      this.triggerEvent("minus", { product: this.properties.product });
     }
   }
 });

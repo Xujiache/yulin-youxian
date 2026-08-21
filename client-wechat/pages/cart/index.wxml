@@ -1,8 +1,11 @@
 <view class="cart-page {{glassMode ? 'glass-mode' : ''}}">
   <skeleton wx:if="{{loading}}" type="list" has-tabbar="{{true}}" />
   <view class="page-header">
-    <text class="page-title">禹邻优鲜</text>
-    <text class="clear {{items.length ? '' : 'disabled'}}" bindtap="handleClearSelected">清空</text>
+    <view class="cart-heading">
+      <text class="page-title">购物车</text>
+      <text class="page-subtitle">{{items.length ? '共 ' + items.length + ' 件商品' : '新鲜好物，随心选购'}}</text>
+    </view>
+    <text class="clear {{selectedCount ? '' : 'disabled'}}" bindtap="handleClearSelected">清空已选</text>
   </view>
 
   <view wx:if="{{!items.length && !loading}}" class="cart-empty">
@@ -31,49 +34,90 @@
     </view>
   </view>
 
-  <view wx:else class="cart-list">
-    <view wx:for="{{items}}" wx:key="id" class="cart-item card {{item.unavailable ? 'is-unavailable' : ''}}">
-      <view class="cart-main">
-        <view class="check {{item.selected ? 'checked' : ''}}" data-id="{{item.id}}" bindtap="handleToggle">
-          <image wx:if="{{item.selected}}" class="check-icon" src="/assets/icons/check-white.svg" mode="aspectFit" />
+  <view wx:else class="cart-content">
+    <view class="cart-overview">
+      <image wx:if="{{storeLogoUrl}}" class="overview-logo-img" src="{{storeLogoUrl}}" mode="aspectFit" />
+      <view wx:else class="overview-icon"><text>鲜</text></view>
+      <view class="overview-copy">
+        <text class="overview-title">门店直送 · 新鲜到家</text>
+        <text class="overview-desc">禹邻优鲜正品保障 · 结算以下列价格为准</text>
+      </view>
+      <view class="overview-count">
+        <text class="overview-count-value">{{availableCount}}</text>
+        <text class="overview-count-label">件可结算</text>
+      </view>
+    </view>
+
+    <view wx:if="{{unavailableCount}}" class="availability-notice">
+      <view class="notice-mark">!</view>
+      <text class="notice-copy">有 {{unavailableCount}} 件商品状态发生变化，已为你标记</text>
+      <text class="notice-action {{clearingUnavailable ? 'disabled' : ''}}" bindtap="handleClearUnavailable">{{clearingUnavailable ? '清理中' : '清理失效'}}</text>
+    </view>
+
+    <view class="cart-list">
+      <view wx:for="{{items}}" wx:key="id" class="cart-item card {{item.unavailable ? 'is-unavailable' : ''}}">
+        <view
+          class="item-delete-button {{deletingItemId === item.id ? 'is-deleting' : ''}}"
+          data-id="{{item.id}}"
+          catchtap="handleDeleteItem"
+        >
+          <image class="item-delete-icon" src="/assets/icons/close-gray.svg" mode="aspectFit" />
         </view>
-        <view class="item-image-wrap">
-          <image class="item-image" src="{{item.image}}" mode="aspectFill" lazy-load="{{true}}" />
-          <text wx:if="{{item.unavailable}}" class="item-status-cover">{{item.availabilityLabel}}</text>
-        </view>
-        <view class="item-info">
-          <text class="item-name">{{item.name}}</text>
-          <text class="item-subtitle">{{item.subtitle}}</text>
+        <view class="cart-main">
           <view
-            wx:if="{{item.skuId || item.reselectionRequired}}"
-            class="item-spec {{item.canReselectSku ? 'is-editable' : ''}}"
+            class="check {{item.unavailable ? 'is-disabled' : (item.selected ? 'checked' : '')}}"
             data-id="{{item.id}}"
-            bindtap="handleReselectSku"
+            bindtap="handleToggle"
           >
-            <text class="item-spec-text">{{item.specificationText || '规格已调整，请重新选择'}}</text>
-            <text wx:if="{{item.canReselectSku}}" class="item-spec-action">{{item.unavailable ? '重新选择' : '修改'}}</text>
+            <image wx:if="{{item.selected && !item.unavailable}}" class="check-icon" src="/assets/icons/check-white.svg" mode="aspectFit" />
+            <text wx:elif="{{item.unavailable}}" class="check-disabled-mark">×</text>
           </view>
-          <text wx:if="{{item.unavailable}}" class="item-unavailable-tip">{{item.availabilityMessage}}</text>
-          <view class="item-bottom">
-            <text class="item-price">￥{{item.amountText}}</text>
-            <view wx:if="{{!item.unavailable}}" class="cart-stepper-shell">
-              <quantity-stepper
-                data-id="{{item.id}}"
-                value="{{item.quantity}}"
-                min="{{item.minPurchaseQty || 1}}"
-                max="{{item.stockQty}}"
-                step="{{item.stepQty || 1}}"
-                unit="{{item.saleUnit || ''}}"
-                bind:change="handleQuantityChange"
-              />
-            </view>
-            <text
-              wx:else
-              class="item-unavailable-action {{item.canReselectSku ? 'is-action' : ''}}"
+          <view class="item-image-wrap">
+            <image class="item-image" src="{{item.image}}" mode="aspectFill" lazy-load="{{true}}" />
+            <text wx:if="{{item.unavailable}}" class="item-status-cover">{{item.availabilityLabel}}</text>
+          </view>
+          <view class="item-info">
+            <text class="item-name">{{item.name}}</text>
+            <text class="item-subtitle">{{item.subtitle}}</text>
+            <view
+              wx:if="{{!item.unavailable && (item.skuId || item.skuSelectionRequired || item.reselectionRequired)}}"
+              class="item-spec {{item.canReselectSku ? 'is-editable' : ''}}"
               data-id="{{item.id}}"
               bindtap="handleReselectSku"
-            >{{item.canReselectSku ? '重新选择规格' : '暂不可购买'}}</text>
+            >
+              <text class="item-spec-text">{{item.specificationText || '规格已调整，请重新选择'}}</text>
+              <text wx:if="{{item.canReselectSku}}" class="item-spec-action">修改</text>
+            </view>
+            <text wx:if="{{item.unavailable}}" class="item-unavailable-tip">{{item.availabilityMessage}}</text>
+            <view wx:if="{{!item.unavailable}}" class="item-bottom">
+              <text class="item-price">￥{{item.amountText}}</text>
+              <view class="cart-item-controls">
+                <view class="cart-stepper-shell">
+                  <quantity-stepper
+                    data-id="{{item.id}}"
+                    value="{{item.quantity}}"
+                    min="{{item.minPurchaseQty || 1}}"
+                    max="{{item.stockQty}}"
+                    step="{{item.stepQty || 1}}"
+                    unit="{{item.saleUnit || ''}}"
+                    bind:change="handleQuantityChange"
+                  />
+                </view>
+              </view>
+            </view>
+            <view wx:else class="item-invalid-price-row">
+              <text class="item-price">￥{{item.amountText}}</text>
+            </view>
           </view>
+        </view>
+        <view wx:if="{{item.unavailable && item.canReselectSku}}" class="item-invalid-actions has-reselect">
+          <button
+            wx:if="{{item.canReselectSku}}"
+            class="item-action-button reselect"
+            data-id="{{item.id}}"
+            data-source="bottom-action"
+            bindtap="handleReselectSku"
+          >重选规格</button>
         </view>
       </view>
     </view>
@@ -81,20 +125,31 @@
 
   <view wx:if="{{items.length}}" class="checkout-bar">
     <view class="checkout-meta">
-      <view class="select-group {{items.length ? '' : 'muted'}}">
-        <view class="check {{items.length ? 'checked' : ''}}">
-          <image class="check-icon" src="/assets/icons/check-white.svg" mode="aspectFit" />
+      <view class="select-group {{availableCount ? '' : 'muted'}}" bindtap="handleToggleAll">
+        <view class="check {{allAvailableSelected ? 'checked' : ''}}">
+          <image wx:if="{{allAvailableSelected}}" class="check-icon" src="/assets/icons/check-white.svg" mode="aspectFit" />
         </view>
         <text class="select-all">全选</text>
       </view>
       <view class="total">
-        <text class="total-label">合计：</text>
-        <text class="total-price">￥{{totalText}}</text>
+        <view class="total-main">
+          <text class="total-label">合计</text>
+          <text class="total-symbol">￥</text>
+          <text class="total-price-integer">{{totalText}}</text>
+        </view>
+        <view class="total-sub">
+          <text class="total-count">已选{{selectedCount}}件</text>
+          <text wx:if="{{minOrderTip}}" class="min-order-tip {{minOrderMet ? '' : 'is-short'}}">· {{minOrderTip}}</text>
+        </view>
       </view>
     </view>
-    <button class="primary-button checkout-button {{selectedCount && !checkoutPreparing ? '' : 'disabled'}}" disabled="{{!selectedCount || checkoutPreparing}}" bindtap="handleCheckout">
-      <text>去结算</text>
-      <image class="checkout-arrow" src="/assets/icons/chevron-right-white.svg" mode="aspectFit" />
+    <button
+      class="primary-button checkout-button {{selectedCount && minOrderMet && !checkoutPreparing ? '' : 'disabled'}} {{minOrderTip && !minOrderMet ? 'is-min-order' : ''}}"
+      disabled="{{!selectedCount || !minOrderMet || checkoutPreparing}}"
+      bindtap="handleCheckout"
+    >
+      <text>{{checkoutPreparing ? '核对中' : checkoutLabel}}</text>
+      <image wx:if="{{minOrderMet}}" class="checkout-arrow" src="/assets/icons/chevron-right-white.svg" mode="aspectFit" />
     </button>
   </view>
 

@@ -12,7 +12,7 @@ persistence:
 auth:
   admin:
     username: admin
-    password: Admin@123456
+    password: "Test!River-2026#Violet"
   profile-storage-path: ${java.io.tmpdir}/fresh-delivery-tests/user-profiles.json
 
 storefront:

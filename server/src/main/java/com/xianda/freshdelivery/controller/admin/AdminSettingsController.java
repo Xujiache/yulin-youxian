@@ -5,6 +5,7 @@ import com.xianda.freshdelivery.common.BusinessException;
 import com.xianda.freshdelivery.dto.BannerDto;
 import com.xianda.freshdelivery.dto.SettingsDto;
 import com.xianda.freshdelivery.service.StorefrontService;
+import com.xianda.freshdelivery.service.ImageVariantService;
 import jakarta.validation.Valid;
 import java.io.IOException;
 import java.io.InputStream;
@@ -32,9 +33,11 @@ public class AdminSettingsController {
     private static final List<String> ALLOWED_IMAGE_EXTENSIONS = List.of(".jpg", ".jpeg", ".png", ".webp");
 
     private final StorefrontService storefrontService;
+    private final ImageVariantService imageVariantService;
 
-    public AdminSettingsController(StorefrontService storefrontService) {
+    public AdminSettingsController(StorefrontService storefrontService, ImageVariantService imageVariantService) {
         this.storefrontService = storefrontService;
+        this.imageVariantService = imageVariantService;
     }
 
     @GetMapping
@@ -89,7 +92,9 @@ public class AdminSettingsController {
         try (InputStream inputStream = file.getInputStream()) {
             Files.copy(inputStream, target, StandardCopyOption.REPLACE_EXISTING);
         }
-        return ApiResponse.ok(Map.of("url", urlPrefix + filename));
+        imageVariantService.generate(target);
+        String url = urlPrefix + filename;
+        return ApiResponse.ok(Map.of("url", url, "thumbnailUrl", urlPrefix + "thumbnails/" + filename + ".webp"));
     }
 
     private String extension(String filename) {

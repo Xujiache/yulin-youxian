@@ -1,0 +1,42 @@
+package com.xianda.freshdelivery.delivery.dto;
+
+import java.util.List;
+
+public record TaskCardDto(
+        Long taskId,
+        String taskNo,
+        String orderNo,
+        String status,
+        String statusText,
+        Integer seqNo,
+        Integer totalStops,
+        String receiverName,
+        String receiverPhoneMasked,
+        String callNumber,
+        Boolean phoneDegraded,
+        String addressDetail,
+        String areaLabel,
+        String buildingLabel,
+        Integer unitNo,
+        Integer floorNo,
+        String roomNo,
+        GeoPointDto location,
+        Integer distanceFromRiderMeters,
+        Integer itemCount,
+        Double totalWeightKg,
+        Integer packageCount,
+        String coldChainLevel,
+        String coldChainText,
+        String goodsSummary,
+        String customerRemark,
+        String deliveryInstruction,
+        List<String> highlightNotes,
+        String slotLabel,
+        String promisedAt,
+        String etaAt,
+        Integer remainingSeconds,
+        String overtimeRisk,
+        Boolean requireVerifyCode,
+        Boolean requirePhoto,
+        Integer sameAddressTaskCount
+) {}

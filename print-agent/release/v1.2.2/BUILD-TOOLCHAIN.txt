@@ -1,0 +1,4 @@
+compiler_file_version=4.8.9221.0 built by: NET481REL1LAST_25H2
+compiler_sha256=46809206887326d2d24db1eff1f3064de972c3451abe766b49111450a5e08e00
+vendor_sdk_sha256=5fdfaf4f82723569d17bb4581415624c58d081e07071d6ae72e2d2e27ca2435e
+platform=x64

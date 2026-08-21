@@ -1,0 +1,505 @@
+.pay-for-other-page {
+  min-height: 100vh;
+  padding: 190rpx 24rpx 56rpx;
+  box-sizing: border-box;
+  background: linear-gradient(180deg, #edf8f1 0%, #f7f9f8 44%, #f5f6f7 100%);
+}
+
+.page-header {
+  position: fixed;
+  top: 0;
+  right: 0;
+  left: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 176rpx;
+  padding: 88rpx 24rpx 0;
+  box-sizing: border-box;
+  background: rgba(237, 248, 241, 0.96);
+}
+
+.back,
+.placeholder {
+  width: 56rpx;
+}
+
+.back {
+  display: flex;
+  align-items: center;
+  height: 56rpx;
+}
+
+.back-icon {
+  width: 36rpx;
+  height: 36rpx;
+}
+
+.title {
+  position: absolute;
+  right: 120rpx;
+  bottom: 0;
+  left: 120rpx;
+  height: 88rpx;
+  color: #17211c;
+  font-size: 32rpx;
+  font-weight: 800;
+  line-height: 88rpx;
+  text-align: center;
+}
+
+.card {
+  background: #ffffff;
+  border-radius: 28rpx;
+  box-shadow: 0 10rpx 32rpx rgba(15, 64, 37, 0.08);
+}
+
+.loading-card {
+  padding: 52rpx 32rpx;
+  color: #708078;
+  font-size: 27rpx;
+  text-align: center;
+}
+
+.payment-card {
+  padding: 34rpx 32rpx 30rpx;
+}
+
+.payment-hero-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20rpx;
+}
+
+.payment-brand {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.payment-brand-icon {
+  flex: 0 0 auto;
+  width: 84rpx;
+  height: 84rpx;
+  border-radius: 24rpx;
+  box-shadow: 0 10rpx 24rpx rgba(0, 137, 73, 0.16);
+}
+
+.payment-brand-copy {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  margin-left: 18rpx;
+}
+
+.payment-status-pill {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  height: 44rpx;
+  padding: 0 16rpx;
+  color: #007a3d;
+  font-size: 21rpx;
+  font-weight: 800;
+  background: #e8f7ee;
+  border-radius: 999rpx;
+}
+
+.payment-status-pill.is-paid {
+  color: #ffffff;
+  background: #00a957;
+}
+
+.payment-status-pill.is-confirming {
+  color: #8a5a16;
+  background: #fff0ce;
+}
+
+.merchant-name {
+  display: block;
+  color: #1c2821;
+  font-size: 32rpx;
+  font-weight: 800;
+  line-height: 42rpx;
+}
+
+.payment-caption {
+  display: block;
+  margin-top: 4rpx;
+  color: #849089;
+  font-size: 24rpx;
+  line-height: 34rpx;
+}
+
+.payment-amount {
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-start;
+  margin-top: 30rpx;
+  padding-top: 26rpx;
+  color: #15231b;
+  border-top: 1rpx solid #edf2ef;
+}
+
+.amount-prefix {
+  margin-right: 6rpx;
+  font-size: 34rpx;
+  font-weight: 800;
+}
+
+.amount-value {
+  font-size: 64rpx;
+  font-weight: 900;
+  letter-spacing: -1rpx;
+}
+
+.expire-text {
+  display: block;
+  margin-top: 14rpx;
+  color: #d17732;
+  font-size: 23rpx;
+}
+
+.locked-lottery-card {
+  display: flex;
+  align-items: center;
+  gap: 18rpx;
+  margin-top: 24rpx;
+  padding: 24rpx 26rpx;
+  color: #122019;
+  background:
+    linear-gradient(90deg, rgba(0, 138, 82, 0.035) 1rpx, transparent 1rpx),
+    #fff8e7;
+  background-size: 22rpx 22rpx;
+  border: 2rpx solid rgba(244, 201, 93, 0.72);
+  border-radius: 26rpx;
+  box-shadow: 0 10rpx 28rpx rgba(61, 77, 26, 0.09);
+}
+
+.locked-lottery-mark {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 70rpx;
+  height: 70rpx;
+  color: #fff8e7;
+  font-family: "STKaiti", "KaiTi", sans-serif;
+  font-size: 34rpx;
+  font-weight: 900;
+  background: linear-gradient(145deg, #60c041, #008a52);
+  border: 5rpx solid #f4c95d;
+  border-radius: 22rpx 22rpx 28rpx 28rpx;
+}
+
+.locked-leaf {
+  position: absolute;
+  top: -12rpx;
+  right: 2rpx;
+  width: 25rpx;
+  height: 34rpx;
+  background: #006d42;
+  border-radius: 24rpx 4rpx 24rpx 4rpx;
+  transform: rotate(38deg);
+}
+
+.locked-lottery-copy {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.locked-lottery-title {
+  color: #122019;
+  font-size: 26rpx;
+  font-weight: 900;
+  line-height: 36rpx;
+}
+
+.locked-lottery-desc,
+.locked-lottery-prize,
+.locked-lottery-note {
+  margin-top: 4rpx;
+  color: #006d42;
+  font-size: 21rpx;
+  font-weight: 700;
+  line-height: 30rpx;
+}
+
+.locked-lottery-note {
+  color: #748078;
+  font-weight: 500;
+}
+
+.shared-order-card {
+  margin-top: 24rpx;
+  padding: 30rpx 28rpx 26rpx;
+}
+
+.section-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18rpx;
+  padding-bottom: 22rpx;
+  border-bottom: 1rpx solid #edf2ef;
+}
+
+.section-title,
+.section-subtitle {
+  display: block;
+}
+
+.section-title {
+  color: #19251e;
+  font-size: 30rpx;
+  font-weight: 850;
+  line-height: 42rpx;
+}
+
+.section-subtitle {
+  margin-top: 4rpx;
+  color: #91a098;
+  font-size: 21rpx;
+  line-height: 30rpx;
+}
+
+.item-count {
+  flex: 0 0 auto;
+  padding-top: 5rpx;
+  color: #718078;
+  font-size: 22rpx;
+}
+
+.shared-item {
+  display: flex;
+  align-items: center;
+  gap: 18rpx;
+  padding: 22rpx 0;
+  border-bottom: 1rpx solid #f1f4f2;
+}
+
+.shared-item:last-of-type {
+  border-bottom: 0;
+}
+
+.shared-item-image {
+  flex: 0 0 auto;
+  width: 112rpx;
+  height: 112rpx;
+  background: #f6f8f7;
+  border-radius: 20rpx;
+}
+
+.shared-item-info {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: 8rpx;
+}
+
+.shared-item-name {
+  overflow: hidden;
+  color: #202a24;
+  font-size: 27rpx;
+  font-weight: 750;
+  line-height: 38rpx;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shared-item-meta {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+  min-width: 0;
+}
+
+.shared-item-spec,
+.shared-item-quantity {
+  overflow: hidden;
+  color: #849089;
+  font-size: 22rpx;
+  line-height: 30rpx;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shared-item-spec {
+  max-width: 220rpx;
+  padding: 2rpx 10rpx;
+  color: #448060;
+  background: #edf8f1;
+  border-radius: 8rpx;
+}
+
+.shared-item-price {
+  flex: 0 0 auto;
+  color: #1c2821;
+  font-size: 27rpx;
+  font-weight: 800;
+}
+
+.shared-delivery {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+  margin-top: 2rpx;
+  padding: 14rpx 16rpx;
+  color: #16824f;
+  font-size: 22rpx;
+  font-weight: 650;
+  background: #f0f8f3;
+  border-radius: 14rpx;
+}
+
+.shared-delivery image {
+  width: 24rpx;
+  height: 24rpx;
+}
+
+.shared-amounts {
+  display: flex;
+  flex-direction: column;
+  gap: 12rpx;
+  margin-top: 22rpx;
+  padding-top: 20rpx;
+  border-top: 1rpx solid #edf2ef;
+}
+
+.shared-amount-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: #7c8982;
+  font-size: 23rpx;
+}
+
+.shared-amount-row.discount-row {
+  color: #008a52;
+  font-weight: 750;
+}
+
+.shared-amount-divider {
+  height: 1rpx;
+  margin: 5rpx 0;
+  background: #e5ece8;
+}
+
+.shared-amount-row.final-row {
+  color: #122019;
+  font-size: 27rpx;
+  font-weight: 900;
+}
+
+.shared-amount-row.final-row text:last-child {
+  color: #006d42;
+  font-size: 32rpx;
+}
+
+.owner-card,
+.payer-card,
+.error-card {
+  margin-top: 24rpx;
+  padding: 34rpx 32rpx;
+  text-align: center;
+}
+
+.owner-title,
+.payer-title,
+.error-title {
+  display: block;
+  color: #1a2620;
+  font-size: 30rpx;
+  font-weight: 800;
+}
+
+.owner-desc,
+.payer-desc,
+.error-desc {
+  display: block;
+  margin-top: 14rpx;
+  color: #728078;
+  font-size: 25rpx;
+  line-height: 37rpx;
+}
+
+.share-button,
+.view-order-button,
+.pay-button,
+.back-home-button {
+  width: 100%;
+  height: 84rpx;
+  margin-top: 30rpx;
+  color: #ffffff;
+  font-size: 28rpx;
+  font-weight: 800;
+  line-height: 84rpx;
+  background: linear-gradient(135deg, #00af5d 0%, #007b43 100%);
+  border-radius: 999rpx;
+  box-shadow: 0 10rpx 20rpx rgba(0, 123, 67, 0.2);
+}
+
+.share-button::after,
+.view-order-button::after,
+.pay-button::after,
+.back-home-button::after {
+  border: 0;
+}
+
+.pay-button.disabled {
+  background: #aebbb4;
+  box-shadow: none;
+}
+
+.view-order-button[disabled] {
+  color: #ffffff;
+  background: #aebbb4;
+  box-shadow: none;
+}
+
+.secondary-home-button {
+  margin-top: 16rpx;
+  color: #547066;
+  background: #eef4f1;
+  box-shadow: none;
+}
+
+.privacy-note {
+  display: block;
+  margin-top: 20rpx;
+  color: #98a29d;
+  font-size: 21rpx;
+  line-height: 32rpx;
+}
+
+.success-mark,
+.confirming-mark,
+.error-mark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 68rpx;
+  height: 68rpx;
+  margin: 0 auto 18rpx;
+  color: #ffffff;
+  font-size: 38rpx;
+  font-weight: 800;
+  background: #00a957;
+  border-radius: 50%;
+}
+
+.confirming-mark {
+  color: #8a5a16;
+  background: #fff0ce;
+}
+
+.error-mark {
+  background: #e8864a;
+}

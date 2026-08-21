@@ -1,0 +1,109 @@
+server {
+    listen 80;
+    listen [::]:80;
+    server_name ${PUBLIC_HOST};
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name ${PUBLIC_HOST};
+    server_tokens off;
+    gzip_static on;
+    gzip_vary on;
+
+    ssl_certificate ${TLS_CERTIFICATE};
+    ssl_certificate_key ${TLS_CERTIFICATE_KEY};
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_session_cache shared:YulinTLS:10m;
+    ssl_session_timeout 1d;
+
+    root ${YULIN_ROOT}/current/admin/dist;
+    index index.html;
+    client_max_body_size 160m;
+
+    add_header X-Content-Type-Options nosniff always;
+    add_header Referrer-Policy strict-origin-when-cross-origin always;
+
+    # SSE must bypass every buffering layer or the dispatch board stalls.
+    location = /api/admin/delivery/board/stream {
+        proxy_pass http://127.0.0.1:${SERVER_PORT};
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header Connection "";
+        proxy_buffering off;
+        proxy_request_buffering off;
+        proxy_cache off;
+        gzip off;
+        add_header X-Accel-Buffering no always;
+        proxy_read_timeout 1h;
+        proxy_send_timeout 1h;
+    }
+
+    location /api/ {
+        proxy_pass http://127.0.0.1:${SERVER_PORT};
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_connect_timeout 5s;
+        proxy_read_timeout 300s;
+        proxy_send_timeout 300s;
+        client_max_body_size 160m;
+    }
+
+    location /uploads/apk/ {
+        proxy_pass http://127.0.0.1:${SERVER_PORT};
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header Range $http_range;
+        proxy_set_header If-Range $http_if_range;
+        proxy_force_ranges on;
+        expires 30d;
+        add_header Cache-Control "public, immutable";
+        add_header Accept-Ranges bytes;
+    }
+
+    # 上传图片优先于下方的图片扩展名正则；否则 /uploads/*.jpg 会被当成
+    # 管理后台静态文件从 admin/dist 读取，造成商品图和退款凭证 404。
+    location ^~ /uploads/ {
+        proxy_pass http://127.0.0.1:${SERVER_PORT};
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header Range $http_range;
+        expires 1h;
+    }
+
+    # 小程序默认商品图由后端映射到 client-wechat/assets/products，不能落到
+    # 管理后台 dist 的静态目录。
+    location ^~ /assets/products/ {
+        proxy_pass http://127.0.0.1:${SERVER_PORT};
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        expires 7d;
+        add_header Cache-Control "public, immutable";
+    }
+
+    location ~* \.(?:js|css|svg|png|jpe?g|webp|woff2?)$ {
+        try_files $uri =404;
+        expires 7d;
+        add_header Cache-Control "public, immutable";
+    }
+
+    location / {
+        try_files $uri $uri/ /index.html;
+        add_header Cache-Control "no-cache";
+    }
+}

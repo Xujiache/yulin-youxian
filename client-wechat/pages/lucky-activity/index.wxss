@@ -1,0 +1,306 @@
+page {
+  background: #fff8e7;
+}
+
+.ticket-page {
+  min-height: 100vh;
+  box-sizing: border-box;
+  padding: 28rpx 24rpx calc(36rpx + env(safe-area-inset-bottom));
+  color: #122019;
+  background:
+    radial-gradient(circle at 92% 4%, rgba(96, 192, 65, 0.12), transparent 28%),
+    #fff8e7;
+}
+
+.ticket-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 70vh;
+  flex-direction: column;
+  gap: 22rpx;
+  color: #6d7a72;
+  font-size: 24rpx;
+}
+
+.loading-ring {
+  width: 56rpx;
+  height: 56rpx;
+  border: 6rpx solid #e4ecd8;
+  border-top-color: #006d42;
+  border-radius: 50%;
+  animation: ring-spin 800ms linear infinite;
+}
+
+@keyframes ring-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.ticket-card {
+  padding: 36rpx 28rpx 32rpx;
+  overflow: hidden;
+  background: #ffffff;
+  border: 2rpx solid rgba(244, 201, 93, 0.7);
+  border-radius: 36rpx;
+  box-shadow: 0 22rpx 56rpx rgba(0, 76, 45, 0.1);
+}
+
+.ticket-head {
+  padding: 0 8rpx 8rpx;
+}
+
+.ticket-eyebrow,
+.ticket-title,
+.ticket-desc {
+  display: block;
+}
+
+.ticket-eyebrow {
+  color: #008a52;
+  font-size: 20rpx;
+  font-weight: 800;
+  letter-spacing: 4rpx;
+}
+
+.ticket-title {
+  margin-top: 8rpx;
+  color: #122019;
+  font-family: "STKaiti", "KaiTi", "PingFang SC", sans-serif;
+  font-size: 40rpx;
+  font-weight: 900;
+  line-height: 52rpx;
+}
+
+.ticket-desc {
+  margin-top: 10rpx;
+  color: #5f6f67;
+  font-size: 23rpx;
+  line-height: 36rpx;
+}
+
+.ticket-perforation {
+  position: relative;
+  height: 36rpx;
+  margin: 18rpx 0 10rpx;
+}
+
+.ticket-dash {
+  position: absolute;
+  top: 50%;
+  right: 18rpx;
+  left: 18rpx;
+  border-top: 3rpx dashed rgba(0, 109, 66, 0.22);
+}
+
+.ticket-cut {
+  position: absolute;
+  top: 50%;
+  width: 28rpx;
+  height: 28rpx;
+  background: #fff8e7;
+  border: 2rpx solid rgba(244, 201, 93, 0.55);
+  border-radius: 50%;
+  transform: translateY(-50%);
+}
+
+.cut-left {
+  left: -42rpx;
+}
+
+.cut-right {
+  right: -42rpx;
+}
+
+.state-copy,
+.result-copy {
+  margin-top: 28rpx;
+  text-align: center;
+}
+
+.state-title,
+.state-desc,
+.result-kicker,
+.result-title,
+.result-discount,
+.result-plain {
+  display: block;
+}
+
+.state-title,
+.result-title {
+  color: #122019;
+  font-size: 28rpx;
+  font-weight: 900;
+  line-height: 40rpx;
+}
+
+.state-desc,
+.result-plain,
+.result-kicker {
+  margin-top: 8rpx;
+  color: #6d7a72;
+  font-size: 22rpx;
+  line-height: 32rpx;
+}
+
+.share-guide {
+  padding: 8rpx 12rpx 0;
+}
+
+.share-dots {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 84rpx;
+  height: 48rpx;
+  margin: 0 auto 12rpx;
+  color: #006d42;
+  font-size: 32rpx;
+  font-weight: 900;
+  line-height: 32rpx;
+  background: #edf7f1;
+  border-radius: 999rpx;
+}
+
+.result-kicker {
+  margin-top: 0;
+}
+
+.result-discount {
+  margin-top: 8rpx;
+  color: #006d42;
+  font-size: 24rpx;
+  font-weight: 800;
+}
+
+.result-payable {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 10rpx;
+  margin-top: 16rpx;
+  color: #5f6f67;
+  font-size: 22rpx;
+}
+
+.result-amount {
+  color: #006d42;
+  font-size: 34rpx;
+  font-weight: 900;
+}
+
+.ticket-alert,
+.ticket-status,
+.ticket-error {
+  margin-top: 20rpx;
+  padding: 22rpx 24rpx;
+  border-radius: 20rpx;
+}
+
+.ticket-alert {
+  color: #775d13;
+  font-size: 22rpx;
+  line-height: 33rpx;
+  background: #fff0bc;
+}
+
+.ticket-status {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  color: #006d42;
+  font-size: 22rpx;
+  line-height: 33rpx;
+  background: #e8f7ef;
+}
+
+.status-dot {
+  flex: 0 0 auto;
+  width: 12rpx;
+  height: 12rpx;
+  background: #f4c95d;
+  border-radius: 50%;
+}
+
+.ticket-status.is-success .status-dot {
+  background: #008a52;
+}
+
+.ticket-error {
+  background: #ffffff;
+  border: 2rpx solid rgba(0, 109, 66, 0.12);
+}
+
+.ticket-error-title,
+.ticket-error-desc {
+  display: block;
+}
+
+.ticket-error-title {
+  font-size: 26rpx;
+  font-weight: 900;
+}
+
+.ticket-error-desc {
+  margin-top: 8rpx;
+  color: #68766f;
+  font-size: 22rpx;
+  line-height: 33rpx;
+}
+
+.ticket-retry,
+.ticket-primary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 84rpx;
+  font-size: 28rpx;
+  font-weight: 900;
+  line-height: 84rpx;
+  border-radius: 999rpx;
+}
+
+.ticket-retry {
+  margin-top: 18rpx;
+  color: #006d42;
+  background: #edf7f1;
+}
+
+.ticket-actions {
+  margin-top: 28rpx;
+}
+
+.ticket-primary {
+  color: #fff8e7;
+  background: #006d42;
+}
+
+.ticket-primary.is-disabled,
+.ticket-retry.is-disabled {
+  color: rgba(255, 248, 231, 0.72);
+  background: #9db0a6;
+}
+
+.ticket-retry::after,
+.ticket-primary::after {
+  border: 0;
+}
+
+.ticket-skip {
+  display: block;
+  margin-top: 18rpx;
+  color: #859189;
+  font-size: 22rpx;
+  line-height: 32rpx;
+  text-align: center;
+}
+
+.ticket-skip.is-locked {
+  opacity: 0.45;
+}
