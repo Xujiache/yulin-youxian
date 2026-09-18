@@ -1,0 +1,155 @@
+{
+  "publishedAt": "2026-09-06T13:00:47.714Z",
+  "banners": [
+    {
+      "id": 16,
+      "title": "一篮清新",
+      "subtitle": "把青绿端上餐桌",
+      "imageUrl": "/uploads/banners/banner_1788699643724_b4caf375810c47afac912607939e3df0.webp",
+      "linkType": "category",
+      "linkTarget": "8",
+      "sortOrder": 10,
+      "enabled": true
+    },
+    {
+      "id": 17,
+      "title": "青提时光",
+      "subtitle": "一口清甜，慢享日常",
+      "imageUrl": "/uploads/banners/banner_1788699644209_a1788be768624cdbac82529e40148e0a.webp",
+      "linkType": "category",
+      "linkTarget": "5",
+      "sortOrder": 20,
+      "enabled": true
+    },
+    {
+      "id": 18,
+      "title": "橘色好心情",
+      "subtitle": "让果香点亮今天",
+      "imageUrl": "/uploads/banners/banner_1788699644540_8ff42c110a804e20b2f34b741a2a46ab.webp",
+      "linkType": "category",
+      "linkTarget": "5",
+      "sortOrder": 30,
+      "enabled": true
+    },
+    {
+      "id": 19,
+      "title": "蜜桃小确幸",
+      "subtitle": "留一点甜，给自己",
+      "imageUrl": "/uploads/banners/banner_1788699645003_9b0cf2f77fb04674a0dc07560f1ec535.webp",
+      "linkType": "category",
+      "linkTarget": "5",
+      "sortOrder": 40,
+      "enabled": true
+    },
+    {
+      "id": 20,
+      "title": "梨想的滋味",
+      "subtitle": "清甜入秋，恰到好处",
+      "imageUrl": "/uploads/banners/banner_1788699645235_b9327e1aa20d46e79887dad56bd08969.webp",
+      "linkType": "category",
+      "linkTarget": "5",
+      "sortOrder": 50,
+      "enabled": true
+    },
+    {
+      "id": 21,
+      "title": "苹果的日常",
+      "subtitle": "脆甜相伴，简单美好",
+      "imageUrl": "/uploads/banners/banner_1788699645508_19c5211a58c846039be11b52430b43a0.webp",
+      "linkType": "category",
+      "linkTarget": "5",
+      "sortOrder": 60,
+      "enabled": true
+    },
+    {
+      "id": 22,
+      "title": "山野鲜味",
+      "subtitle": "一锅鲜香，自有滋味",
+      "imageUrl": "/uploads/banners/banner_1788699645813_33e07a72ad17419191ba35c212004fab.webp",
+      "linkType": "category",
+      "linkTarget": "8",
+      "sortOrder": 70,
+      "enabled": true
+    },
+    {
+      "id": 23,
+      "title": "番茄的红",
+      "subtitle": "为家常添一抹鲜亮",
+      "imageUrl": "/uploads/banners/banner_1788699646112_470d611f5fa448328fa1e5e1152f9cbf.webp",
+      "linkType": "category",
+      "linkTarget": "8",
+      "sortOrder": 80,
+      "enabled": true
+    },
+    {
+      "id": 24,
+      "title": "金色好食光",
+      "subtitle": "把香甜装进一日三餐",
+      "imageUrl": "/uploads/banners/banner_1788699646419_d4acffdaca554100bcddbe6a81e2ba5a.webp",
+      "linkType": "category",
+      "linkTarget": "8",
+      "sortOrder": 90,
+      "enabled": true
+    },
+    {
+      "id": 25,
+      "title": "好好吃饭",
+      "subtitle": "一篮蔬鲜，一餐欢喜",
+      "imageUrl": "/uploads/banners/banner_1788699646719_62106274b90944a29c0cab067739711d.webp",
+      "linkType": "category",
+      "linkTarget": "8",
+      "sortOrder": 100,
+      "enabled": true
+    },
+    {
+      "id": 11,
+      "title": "炎炎夏日 · 新鲜送到家",
+      "subtitle": "高温天气不出门，鲜果蔬菜安心送达",
+      "imageUrl": "/uploads/banners/banner_1785159160277_b1b28dd34f37418fb5298e8336ab4d43.png",
+      "linkType": "none",
+      "linkTarget": "",
+      "sortOrder": 1000,
+      "enabled": false
+    },
+    {
+      "id": 12,
+      "title": "高温天也要吃新鲜",
+      "subtitle": "严选蔬果，足不出户送上门",
+      "imageUrl": "/uploads/banners/banner_1785159160335_669cfd88419a4924ba34766da90c29dc.png",
+      "linkType": "none",
+      "linkTarget": "",
+      "sortOrder": 1010,
+      "enabled": false
+    },
+    {
+      "id": 13,
+      "title": "宅家避暑 · 配送到门",
+      "subtitle": "热浪挡在门外，新鲜准时到家",
+      "imageUrl": "/uploads/banners/banner_1785159160375_33943f59b469472a800d4bf0bedd2e07.png",
+      "linkType": "none",
+      "linkTarget": "",
+      "sortOrder": 1020,
+      "enabled": false
+    },
+    {
+      "id": 14,
+      "title": "清凉果蔬 · 即刻送达",
+      "subtitle": "冰镇鲜果与当季蔬菜，轻松送到家",
+      "imageUrl": "/uploads/banners/banner_1785159160415_be29e5e4341f43d3bef1ef0484c48667.png",
+      "linkType": "none",
+      "linkTarget": "",
+      "sortOrder": 1030,
+      "enabled": false
+    },
+    {
+      "id": 15,
+      "title": "夏日补给 · 一键下单",
+      "subtitle": "门店精选食材，省心配送到家",
+      "imageUrl": "/uploads/banners/banner_1785159160466_b9cd93ed4d8c4b3cb01be1b3936c5014.png",
+      "linkType": "none",
+      "linkTarget": "",
+      "sortOrder": 1040,
+      "enabled": false
+    }
+  ]
+}

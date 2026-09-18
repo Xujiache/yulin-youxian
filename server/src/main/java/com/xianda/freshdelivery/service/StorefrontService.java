@@ -39,6 +39,9 @@ import com.xianda.freshdelivery.dto.ProductSkuDto;
 import com.xianda.freshdelivery.dto.ProductSpecGroupDto;
 import com.xianda.freshdelivery.dto.ProductSpecOptionDto;
 import com.xianda.freshdelivery.dto.RefundDto;
+import com.xianda.freshdelivery.dto.RefundItemDto;
+import com.xianda.freshdelivery.dto.RefundItemRequest;
+import com.xianda.freshdelivery.dto.RefundableItemsDto;
 import com.xianda.freshdelivery.dto.RefundNotifyRequest;
 import com.xianda.freshdelivery.dto.RefundRequest;
 import com.xianda.freshdelivery.dto.SettingsDto;
@@ -1364,6 +1367,22 @@ public class StorefrontService {
     }
 
     public synchronized RefundDto createAdminRefund(AdminRefundCreateRequest request) {
+        String requestKey = cleanText(request.requestKey());
+        if (!requestKey.isBlank()) {
+            RefundDto existing = refunds.values().stream().map(RefundState::refund)
+                    .filter(refund -> requestKey.equals(refund.requestKey())).findFirst().orElse(null);
+            if (existing != null) {
+                List<RefundItemRequest> originalItems = existing.items().stream()
+                        .map(item -> new RefundItemRequest(item.orderItemId(), item.refundAmount())).toList();
+                if (!Objects.equals(existing.userId(), request.userId()) || !Objects.equals(existing.orderId(), request.orderId())
+                        || !Objects.equals(existing.refundAmount(), request.refundAmount())
+                        || !Objects.equals(existing.reason(), cleanText(request.reason()))
+                        || !Objects.equals(originalItems, request.items())) {
+                    throw new BusinessException(409, "退款请求标识已被使用，请重新查找订单");
+                }
+                return existing;
+            }
+        }
         OrderState order = adminOrderState(request.orderId());
         if (!order.userId().equals(request.userId())) {
             throw new BusinessException(409, "订单不属于该账号");
@@ -1375,12 +1394,21 @@ public class StorefrontService {
         if (request.refundAmount() == null || request.refundAmount() <= 0 || request.refundAmount() > refundable) {
             throw new BusinessException(409, "退款金额超过订单剩余可退金额");
         }
+        String reason = cleanText(request.reason());
+        if (reason.isBlank() || (request.items() != null && reason.length() > 200)) {
+            throw new BusinessException(400, "请填写不超过200字的退款原因");
+        }
+        List<RefundItemDto> items = request.items() == null ? List.of() : validateRefundItems(order, request.items(), request.refundAmount());
         long id = refundId.incrementAndGet();
-        RefundDto refund = createRefundRecord(id, request.userId(), order, request.refundAmount(), request.reason(), "ADMIN", List.of());
+        RefundDto refund = createRefundRecord(id, request.userId(), order, request.refundAmount(), reason, "ADMIN", List.of(), items)
+                .withRequestKey(requestKey);
         refunds.put(id, new RefundState(request.userId(), refund));
         refundAttemptIds.put(refund.refundNo(), id);
-        refundOriginalStatuses.putIfAbsent(order.id(), order.status());
-        orders.put(order.id(), order.withStatus(REFUND_STATUS_PROCESSING));
+        // 商品级退款独立记录进度，不能阻断其余商品的接单、备货、配送。
+        if (items.isEmpty()) {
+            refundOriginalStatuses.putIfAbsent(order.id(), order.status());
+            orders.put(order.id(), order.withStatus(REFUND_STATUS_PROCESSING));
+        }
         persist();
         return refund;
     }
@@ -1390,6 +1418,9 @@ public class StorefrontService {
         RefundDto current = normalizeRefund(state);
         if (!"待审核".equals(current.status())) {
             throw new BusinessException(409, "只有待审核退款可以修改金额");
+        }
+        if (!current.items().isEmpty()) {
+            throw new BusinessException(409, "按商品退款的明细金额已确定，请勿仅修改退款总额");
         }
         OrderState order = adminOrderState(current.orderId());
         int refundable = availableRefundAmount(order, current.id());
@@ -1473,9 +1504,12 @@ public class StorefrontService {
         OrderState order = adminOrderState(current.orderId());
         boolean giftAlreadyDispatched = isDispatched(effectiveOrderStatus(order));
         int refundedAmount = order.refundedAmount() + current.refundAmount();
-        String orderStatus = refundedAmount >= order.paidAmount() ? "已退款" : "部分退款";
+        String orderStatus = refundedAmount >= order.paidAmount() ? "已退款"
+                : current.items().isEmpty() ? "部分退款" : order.status();
         orders.put(order.id(), order.withStatus(orderStatus).withRefundedAmount(refundedAmount));
-        refundOriginalStatuses.remove(order.id());
+        if (current.items().isEmpty() || refundedAmount >= order.paidAmount()) {
+            refundOriginalStatuses.remove(order.id());
+        }
         persist();
         if (refundedAmount >= order.paidAmount()) {
             notifyLotteryFullyRefunded(order.id(), giftAlreadyDispatched);
@@ -1511,7 +1545,7 @@ public class StorefrontService {
         refunds.put(id, new RefundState(state.userId(), nextRefund));
         refundAttemptIds.put(refundNo, id);
         OrderState order = adminOrderState(current.orderId());
-        orders.put(order.id(), order.withStatus(REFUND_STATUS_PROCESSING));
+        if (current.items().isEmpty()) orders.put(order.id(), order.withStatus(REFUND_STATUS_PROCESSING));
         persist();
         return nextRefund;
     }
@@ -1540,7 +1574,7 @@ public class StorefrontService {
         );
         refunds.put(id, new RefundState(state.userId(), nextRefund));
         OrderState order = adminOrderState(current.orderId());
-        orders.put(order.id(), order.withStatus(REFUND_STATUS_PROCESSING));
+        if (current.items().isEmpty()) orders.put(order.id(), order.withStatus(REFUND_STATUS_PROCESSING));
         persist();
         return nextRefund;
     }
@@ -1569,7 +1603,7 @@ public class StorefrontService {
         );
         refunds.put(id, new RefundState(state.userId(), nextRefund));
         OrderState order = adminOrderState(current.orderId());
-        orders.put(order.id(), order.withStatus(REFUND_STATUS_FAILED));
+        if (current.items().isEmpty()) orders.put(order.id(), order.withStatus(REFUND_STATUS_FAILED));
         persist();
         return nextRefund;
     }
@@ -1609,8 +1643,10 @@ public class StorefrontService {
         );
         refunds.put(id, new RefundState(state.userId(), nextRefund));
         OrderState order = adminOrderState(current.orderId());
-        String restoredStatus = refundOriginalStatuses.remove(order.id());
-        orders.put(order.id(), order.withStatus(restoredStatus == null || restoredStatus.isBlank() ? "已支付/待接单" : restoredStatus));
+        if (current.items().isEmpty()) {
+            String restoredStatus = refundOriginalStatuses.remove(order.id());
+            orders.put(order.id(), order.withStatus(restoredStatus == null || restoredStatus.isBlank() ? "已支付/待接单" : restoredStatus));
+        }
         persist();
         return nextRefund;
     }
@@ -3569,6 +3605,11 @@ public class StorefrontService {
             String source,
             List<String> evidenceImages
     ) {
+        return createRefundRecord(id, userId, order, refundAmount, reason, source, evidenceImages, List.of());
+    }
+
+    private RefundDto createRefundRecord(Long id, Long userId, OrderState order, Integer refundAmount,
+                                         String reason, String source, List<String> evidenceImages, List<RefundItemDto> items) {
         return new RefundDto(
                 id,
                 order.id(),
@@ -3585,7 +3626,8 @@ public class StorefrontService {
                 "",
                 0,
                 "",
-                paymentOrderNo(order)
+                paymentOrderNo(order),
+                items
         );
     }
 
@@ -3679,7 +3721,9 @@ public class StorefrontService {
                 failureMessage,
                 retryCount,
                 lastAttemptAt,
-                source.paymentOrderNo()
+                source.paymentOrderNo(),
+                source.items(),
+                source.requestKey()
         );
     }
 
@@ -3712,7 +3756,9 @@ public class StorefrontService {
                 source.failureMessage(),
                 source.retryCount(),
                 source.lastAttemptAt(),
-                source.paymentOrderNo()
+                source.paymentOrderNo(),
+                source.items(),
+                source.requestKey()
         );
     }
 
@@ -3764,6 +3810,71 @@ public class StorefrontService {
                 .mapToInt(OrderItemDto::amount)
                 .sum();
         return Math.min(refundable, selectedAmount - allocatedDiscount(order, selectedAmount));
+    }
+
+    public synchronized RefundableItemsDto refundableItems(Long orderId) {
+        return refundableItems(adminOrderState(orderId));
+    }
+
+    private RefundableItemsDto refundableItems(OrderState order) {
+        int available = availableRefundAmount(order, null);
+        List<RefundDto> occupied = refundsForOrder(order.id()).stream()
+                .filter(refund -> List.of(REFUND_STATUS_SUCCESS, REFUND_STATUS_PENDING,
+                        REFUND_STATUS_PROCESSING, REFUND_STATUS_FAILED).contains(refund.status()))
+                .toList();
+        Map<Long, Long> used = new LinkedHashMap<>();
+        for (RefundDto refund : occupied) {
+            for (RefundItemDto item : refund.items()) {
+                used.merge(item.orderItemId(), (long) item.refundAmount(), Long::sum);
+            }
+        }
+        // 累计比例分摊整单优惠，最后一行承接分币尾差，所有商品净额之和严格等于商品实付。
+        long gross = order.items().stream().mapToLong(OrderItemDto::amount).sum();
+        OrderPromotionProjection promotion = orderPromotions.get(order.id());
+        long discount = promotion == null || promotion.discountAmount() == null ? 0 : promotion.discountAmount();
+        long net = Math.max(gross - Math.max(discount, 0), 0);
+        long cumulative = 0;
+        long previous = 0;
+        List<RefundableItemsDto.Item> items = new ArrayList<>();
+        for (OrderItemDto item : order.items()) {
+            cumulative += item.amount();
+            long allocated = gross <= 0 ? 0 : BigDecimal.valueOf(net).multiply(BigDecimal.valueOf(cumulative))
+                    .divide(BigDecimal.valueOf(gross), 0, RoundingMode.DOWN).longValueExact();
+            int paid = Math.toIntExact(allocated - previous);
+            previous = allocated;
+            int remaining = (int) Math.min(available, Math.max((long) paid - used.getOrDefault(item.id(), 0L), 0));
+            items.add(new RefundableItemsDto.Item(item, paid, remaining));
+        }
+        boolean unallocated = occupied.stream().anyMatch(refund -> refund.items().isEmpty());
+        return new RefundableItemsDto(available, unallocated, items);
+    }
+
+    private List<RefundItemDto> validateRefundItems(OrderState order, List<RefundItemRequest> selections, int total) {
+        if (selections.isEmpty() || selections.size() > order.items().size()) {
+            throw new BusinessException(400, "请正确选择退款商品");
+        }
+        Map<Long, RefundableItemsDto.Item> available = new LinkedHashMap<>();
+        refundableItems(order).items().forEach(item -> available.put(item.item().id(), item));
+        Set<Long> seen = new HashSet<>();
+        List<RefundItemDto> snapshots = new ArrayList<>();
+        long sum = 0;
+        for (RefundItemRequest selection : selections) {
+            if (selection == null || selection.orderItemId() == null || !seen.add(selection.orderItemId())) {
+                throw new BusinessException(400, "退款商品不能重复或为空");
+            }
+            RefundableItemsDto.Item quoted = available.get(selection.orderItemId());
+            if (quoted == null) throw new BusinessException(400, "退款商品不属于当前订单");
+            if (selection.refundAmount() == null || selection.refundAmount() <= 0
+                    || selection.refundAmount() > quoted.availableAmount()) {
+                throw new BusinessException(409, quoted.item().productName() + "的退款金额超过剩余可退金额，请重新查找订单");
+            }
+            OrderItemDto item = quoted.item();
+            snapshots.add(new RefundItemDto(item.id(), item.productId(), item.productName(), item.imageUrl(),
+                    item.specificationText(), item.saleUnit(), item.quantity(), selection.refundAmount()));
+            sum += selection.refundAmount();
+        }
+        if (sum != total) throw new BusinessException(400, "退款总额必须等于所选商品退款金额之和");
+        return List.copyOf(snapshots);
     }
 
     /**

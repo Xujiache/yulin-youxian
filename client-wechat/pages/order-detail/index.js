@@ -1,4 +1,5 @@
 const { yuan } = require("../../utils/format");
+const { refundDisplay } = require("../../utils/refund-display");
 const { getHome } = require("../../api/catalog");
 const {
   getDeliverySlots,
@@ -482,12 +483,7 @@ Page({
       refundedText: yuan(order.refundedAmount),
       hasRefundedAmount: Number(order.refundedAmount || 0) > 0,
       refundNotice: buildRefundNotice(order),
-      refundRecords: (order.refunds || []).map((refund) => ({
-        ...refund,
-        amountText: yuan(refund.refundAmount),
-        sourceText: refund.source === "ADMIN" ? "管理员发起" : "用户申请",
-        createdAtText: refund.createdAt ? refund.createdAt.replace("T", " ").slice(0, 19) : ""
-      }))
+      refundRecords: (order.refunds || []).map(refundDisplay)
     });
     if (isPendingPayment) {
       this.refreshPaymentMethod();

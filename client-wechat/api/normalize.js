@@ -158,6 +158,7 @@ function normalizeRefund(refund) {
   }
   return {
     ...refund,
+    items: (refund.items || []).map((item) => ({ ...item, imageUrl: normalizeAssetUrl(item.imageUrl) })),
     evidenceImages: (refund.evidenceImages || []).map(normalizeAssetUrl)
   };
 }

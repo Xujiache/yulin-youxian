@@ -62,6 +62,16 @@
           </template>
         </ElTableColumn>
         <ElTableColumn prop="reason" label="退款原因" min-width="220" show-overflow-tooltip />
+        <ElTableColumn label="退款商品" min-width="230">
+          <template #default="{ row }">
+            <div v-if="row.items?.length" class="refund-item-summary">
+              <div v-for="item in row.items" :key="item.orderItemId">
+                {{ item.productName }} {{ item.specificationText }} · {{ money(item.refundAmount) }}
+              </div>
+            </div>
+            <span v-else class="muted">整单/历史退款（未指定商品）</span>
+          </template>
+        </ElTableColumn>
         <ElTableColumn label="凭证" min-width="170">
           <template #default="{ row }">
             <div v-if="row.evidenceImages?.length" class="evidence-list">
@@ -129,11 +139,24 @@
       </ElTable>
     </ElCard>
 
-    <ElDialog v-model="createVisible" title="管理员主动退款" width="620px" destroy-on-close>
-      <ElForm label-width="108px">
+    <ElDialog
+      v-model="createVisible"
+      title="按商品主动退款"
+      width="min(900px, 96vw)"
+      destroy-on-close
+      :close-on-click-modal="!submitting"
+      :close-on-press-escape="!submitting"
+      :show-close="!submitting"
+      @closed="clearVerifiedOrder"
+    >
+      <ElForm label-width="108px" :disabled="submitting">
         <ElFormItem label="账号 ID" required>
           <div class="inline-field">
-            <ElInput v-model.trim="createForm.accountId" placeholder="输入客户账号 ID" />
+            <ElInput
+              v-model.trim="createForm.accountId"
+              placeholder="输入客户账号 ID"
+              @input="clearVerifiedOrder"
+            />
             <ElButton :loading="searchingCustomer" @click="searchAccount">搜索账号</ElButton>
           </div>
         </ElFormItem>
@@ -146,10 +169,13 @@
         />
         <ElFormItem label="订单" required>
           <div class="inline-field">
-            <ElInput v-model.trim="createForm.orderKeyword" placeholder="输入订单 ID 或订单号" />
-            <ElButton :loading="verifyingOrder" @click="verifyOrder"
-              >查找订单</ElButton
-            >
+            <ElInput
+              v-model.trim="createForm.orderKeyword"
+              placeholder="输入订单 ID 或订单号"
+              @input="clearVerifiedOrder"
+              @keyup.enter="verifyOrder"
+            />
+            <ElButton :loading="verifyingOrder" @click="verifyOrder">查找订单</ElButton>
           </div>
         </ElFormItem>
         <ElAlert
@@ -159,29 +185,100 @@
           :closable="false"
           :title="`订单 ${verifiedOrder.orderNo}，实付 ${money(verifiedOrder.paidAmount)}，已退款 ${money(verifiedOrder.refundedAmount)}`"
         />
-        <ElFormItem label="退款金额（元）" required>
-          <ElInputNumber
-            v-model="createForm.refundAmountYuan"
-            :min="0.01"
-            :precision="2"
-            :step="1"
-            class="form-full"
-          />
+        <ElFormItem v-if="verifiedOrder" label="退款商品" required>
+          <div class="refund-products">
+            <p class="muted"
+              >勾选需要退款的商品，可单独调整退款金额；金额已扣除优惠及该商品已退/处理中金额，不含配送费和包装费。</p
+            >
+            <ElAlert
+              v-if="hasUnallocatedRefunds"
+              type="warning"
+              :closable="false"
+              title="此订单有未关联商品的整单或历史退款，请核对后操作；合计仍受订单剩余可退金额限制。"
+            />
+            <ElTable :data="refundableProducts" border empty-text="该订单没有可退款商品">
+              <ElTableColumn label="选择" width="58">
+                <template #default="{ row }"
+                  ><ElCheckbox
+                    v-model="row.selected"
+                    :disabled="row.availableAmount <= 0 || submitting"
+                    :aria-label="`退款 ${row.item.productName}`"
+                /></template>
+              </ElTableColumn>
+              <ElTableColumn label="商品 / 规格" min-width="190">
+                <template #default="{ row }">
+                  <div class="refund-product-info">
+                    <FreshImage :src="row.item.imageUrl" class="refund-product-image" fit="cover" />
+                    <div
+                      ><strong>{{ row.item.productName }}</strong
+                      ><div class="muted"
+                        >{{ row.item.specificationText || row.item.saleUnit }} · 购买数量
+                        {{ row.item.quantity }}</div
+                      ></div
+                    >
+                  </div>
+                </template>
+              </ElTableColumn>
+              <ElTableColumn label="剩余可退" width="105">
+                <template #default="{ row }">{{ money(row.availableAmount) }}</template>
+              </ElTableColumn>
+              <ElTableColumn label="本次退款（元）" width="185">
+                <template #default="{ row }">
+                  <ElInputNumber
+                    v-if="row.availableAmount > 0"
+                    :key="`${row.item.id}-${row.selected}-${submitting}`"
+                    v-model="row.amountYuan"
+                    :min="0.01"
+                    :max="centToYuan(row.availableAmount)"
+                    :precision="2"
+                    :step="0.01"
+                    :disabled="!row.selected || submitting"
+                    controls-position="right"
+                  />
+                  <span v-else class="muted">暂无可退金额</span>
+                </template>
+              </ElTableColumn>
+            </ElTable>
+          </div>
+        </ElFormItem>
+        <ElFormItem label="退款合计">
+          <strong class="money">{{ money(selectedRefundAmount) }}</strong>
+          <span class="refund-total-note"
+            >已选 {{ selectedProducts.length }} 项 · 订单剩余可退
+            {{ money(orderAvailableAmount) }}</span
+          >
+          <span v-if="selectedRefundAmount > orderAvailableAmount" class="refund-over-limit"
+            >合计超过剩余可退金额，请调低所选商品金额</span
+          >
         </ElFormItem>
         <ElFormItem label="退款原因" required>
+          <div class="reason-shortcuts">
+            <ElButton
+              v-for="reason in refundReasons"
+              :key="reason"
+              size="small"
+              :type="createForm.reason === reason ? 'primary' : 'default'"
+              @click="createForm.reason = reason"
+              >{{ reason }}</ElButton
+            >
+          </div>
           <ElInput
             v-model.trim="createForm.reason"
             type="textarea"
             :rows="4"
             maxlength="200"
             show-word-limit
-            placeholder="该原因会同步显示给用户"
+            placeholder="可选择快捷原因后补充，也可直接填写；完整原因会同步显示给用户"
           />
         </ElFormItem>
       </ElForm>
       <template #footer>
-        <ElButton @click="createVisible = false">取消</ElButton>
-        <ElButton type="primary" :loading="submitting" @click="submitAdminRefund"
+        <ElButton :disabled="submitting" @click="createVisible = false">取消</ElButton>
+        <ElButton
+          type="primary"
+          :loading="submitting"
+          :disabled="!verifiedOrder || verifyingOrder || !selectedProducts.length"
+          @click="submitAdminRefund"
           >确认并发起退款</ElButton
         >
       </template>
@@ -239,6 +336,7 @@
     approveRefund,
     createAdminRefund,
     findOrder,
+    getRefundableItems,
     getRefunds,
     reconcileRefund,
     rejectRefund,
@@ -247,6 +345,7 @@
     updateRefundAmount,
     type AdminCustomer,
     type OrderDetail,
+    type RefundableItems,
     type Refund
   } from '@/api/admin'
   import { resolveFreshAssetUrl } from '@/utils/fresh-assets'
@@ -267,7 +366,40 @@
   const matchedCustomer = ref<AdminCustomer | null>(null)
   const verifiedOrder = ref<OrderDetail | null>(null)
   const filters = reactive({ accountId: '', keyword: '' })
-  const createForm = reactive({ accountId: '', orderKeyword: '', refundAmountYuan: 0, reason: '' })
+  const createForm = reactive({ accountId: '', orderKeyword: '', reason: '' })
+  type RefundProduct = RefundableItems['items'][number] & { selected: boolean; amountYuan: number }
+  const refundableProducts = ref<RefundProduct[]>([])
+  const orderAvailableAmount = ref(0)
+  const hasUnallocatedRefunds = ref(false)
+  const refundReasons = [
+    '商品损坏',
+    '没货',
+    '商品不新鲜',
+    '漏送商品',
+    '错送商品',
+    '商品质量问题',
+    '协商退款'
+  ]
+  const selectedProducts = computed(() => refundableProducts.value.filter((item) => item.selected))
+  const selectedRefundAmount = computed(() =>
+    selectedProducts.value.reduce(
+      (sum, item) => sum + Math.round(Number(item.amountYuan || 0) * 100),
+      0
+    )
+  )
+  let orderLookupSequence = 0
+  let lastRefundSignature = ''
+  let refundRequestKey = ''
+  const clearVerifiedOrder = () => {
+    orderLookupSequence++
+    verifiedOrder.value = null
+    refundableProducts.value = []
+    orderAvailableAmount.value = 0
+    hasUnallocatedRefunds.value = false
+    verifyingOrder.value = false
+    lastRefundSignature = ''
+    refundRequestKey = ''
+  }
 
   const positiveId = (value: string) => {
     const result = Number(String(value || '').trim())
@@ -277,7 +409,7 @@
   const yuanToCent = (value: number) => Math.max(1, Math.round(Number(value || 0) * 100))
   const money = (value: number) => `￥${centToYuan(value).toFixed(2)}`
   const canReview = (row: Refund) => row.status === '待审核'
-  const canEditAmount = (row: Refund) => row.status === '待审核'
+  const canEditAmount = (row: Refund) => row.status === '待审核' && !row.items?.length
   const sourceText = (value: string) => (value === 'ADMIN' ? '管理员发起' : '用户申请')
   const dateTime = (value: string) => (value ? value.replace('T', ' ').slice(0, 19) : '--')
   const evidenceUrls = (row: Refund) => (row.evidenceImages || []).map(resolveFreshAssetUrl)
@@ -376,7 +508,9 @@
     try {
       const result = await reconcileRefund(row.id)
       await loadRefunds()
-      ElMessage.success(result.status === '退款成功' ? '微信已确认退款成功' : `微信当前状态：${result.status}`)
+      ElMessage.success(
+        result.status === '退款成功' ? '微信已确认退款成功' : `微信当前状态：${result.status}`
+      )
     } catch (error) {
       ElMessage.error(error instanceof Error ? error.message : '微信退款状态查询失败')
     }
@@ -448,9 +582,9 @@
   }
 
   const openCreateRefund = () => {
-    Object.assign(createForm, { accountId: '', orderKeyword: '', refundAmountYuan: 0, reason: '' })
+    Object.assign(createForm, { accountId: '', orderKeyword: '', reason: '' })
     matchedCustomer.value = null
-    verifiedOrder.value = null
+    clearVerifiedOrder()
     createVisible.value = true
   }
 
@@ -462,7 +596,7 @@
     }
     searchingCustomer.value = true
     matchedCustomer.value = null
-    verifiedOrder.value = null
+    clearVerifiedOrder()
     try {
       const result = await searchCustomers(accountId)
       matchedCustomer.value = result.items?.[0] || null
@@ -480,10 +614,12 @@
       ElMessage.warning('请输入订单 ID 或订单号')
       return
     }
+    clearVerifiedOrder()
+    const sequence = orderLookupSequence
     verifyingOrder.value = true
-    verifiedOrder.value = null
     try {
       const order = await findOrder(keyword)
+      if (sequence !== orderLookupSequence || !createVisible.value) return
       const enteredUserId = positiveId(createForm.accountId)
       if (enteredUserId && order.userId !== enteredUserId) {
         ElMessage.error('该订单不属于当前账号')
@@ -495,6 +631,7 @@
       }
       if (!matchedCustomer.value || matchedCustomer.value.userId !== order.userId) {
         const customers = await searchCustomers(order.userId)
+        if (sequence !== orderLookupSequence || !createVisible.value) return
         matchedCustomer.value = customers.items?.[0] || {
           userId: order.userId,
           nickName: '该订单客户',
@@ -502,49 +639,91 @@
           orderCount: 0
         }
       }
+      const quote = await getRefundableItems(order.id)
+      if (sequence !== orderLookupSequence || !createVisible.value) return
       createForm.accountId = String(order.userId)
       verifiedOrder.value = order
-      const remaining = Math.max(
-        Number(order.paidAmount || 0) - Number(order.refundedAmount || 0),
-        0
-      )
-      createForm.refundAmountYuan = centToYuan(remaining)
+      orderAvailableAmount.value = quote.availableAmount
+      hasUnallocatedRefunds.value = quote.hasUnallocatedRefunds
+      refundableProducts.value = quote.items.map((item) => ({
+        ...item,
+        selected: false,
+        amountYuan: centToYuan(item.availableAmount)
+      }))
     } catch (error) {
-      ElMessage.error(error instanceof Error ? error.message : '订单验证失败')
+      if (sequence === orderLookupSequence)
+        ElMessage.error(error instanceof Error ? error.message : '订单验证失败')
     } finally {
-      verifyingOrder.value = false
+      if (sequence === orderLookupSequence) verifyingOrder.value = false
     }
   }
 
   const submitAdminRefund = async () => {
+    if (submitting.value) return
     if (!verifiedOrder.value || !matchedCustomer.value) {
       ElMessage.warning('请先查找并确认订单')
       return
     }
-    if (createForm.refundAmountYuan <= 0 || !createForm.reason) {
-      ElMessage.warning('请填写退款金额和原因')
+    if (!selectedProducts.value.length || !createForm.reason.trim()) {
+      ElMessage.warning('请选择退款商品并填写退款原因')
       return
     }
-    try {
-      await ElMessageBox.confirm('确认后将立即提交微信退款，是否继续？', '确认主动退款', {
-        type: 'warning',
-        confirmButtonText: '确认退款',
-        cancelButtonText: '取消'
-      })
-    } catch {
+    if (
+      selectedRefundAmount.value > orderAvailableAmount.value ||
+      selectedProducts.value.some(
+        (item) =>
+          !Number.isFinite(item.amountYuan) ||
+          yuanToCent(item.amountYuan) > item.availableAmount ||
+          item.amountYuan <= 0
+      )
+    ) {
+      ElMessage.warning('请填写有效金额，且不能超过商品或订单剩余可退金额')
       return
+    }
+    const payload = {
+      userId: verifiedOrder.value.userId,
+      orderId: verifiedOrder.value.id,
+      refundAmount: selectedRefundAmount.value,
+      reason: createForm.reason.trim(),
+      items: selectedProducts.value.map((item) => ({
+        orderItemId: item.item.id,
+        refundAmount: yuanToCent(item.amountYuan)
+      }))
+    }
+    const summary = selectedProducts.value
+      .map(
+        (item) =>
+          `${item.item.productName} ${item.item.specificationText || ''}（${money(yuanToCent(item.amountYuan))}）`
+      )
+      .join('、')
+    const signature = JSON.stringify(payload)
+    if (signature !== lastRefundSignature) {
+      lastRefundSignature = signature
+      refundRequestKey = crypto.randomUUID()
     }
     submitting.value = true
     try {
-      await createAdminRefund({
-        userId: verifiedOrder.value.userId,
-        orderId: verifiedOrder.value.id,
-        refundAmount: yuanToCent(createForm.refundAmountYuan),
-        reason: createForm.reason
-      })
+      await ElMessageBox.confirm(
+        `将为订单 ${verifiedOrder.value.orderNo} 退还：${summary}。合计 ${money(payload.refundAmount)}，原因：${payload.reason}。确认后立即提交微信退款。`,
+        '确认主动退款',
+        {
+          type: 'warning',
+          confirmButtonText: '确认退款',
+          cancelButtonText: '取消'
+        }
+      )
+    } catch {
+      submitting.value = false
+      return
+    }
+    try {
+      const result = await createAdminRefund({ ...payload, requestKey: refundRequestKey })
       createVisible.value = false
       await loadRefunds()
-      ElMessage.success('管理员退款已发起')
+      if (result.status === '退款成功') ElMessage.success('微信已确认退款成功')
+      else if (result.status === '退款失败')
+        ElMessage.warning(result.failureMessage || '退款未成功，请在列表查看原因')
+      else ElMessage.success('退款已提交，到账状态请查看退款记录')
     } catch (error) {
       ElMessage.error(error instanceof Error ? error.message : '主动退款失败')
     } finally {
@@ -557,6 +736,47 @@
 
 <style scoped lang="scss">
   @use '../style.scss';
+
+  .refund-products {
+    width: 100%;
+  }
+  .refund-product-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .refund-product-image {
+    width: 44px;
+    height: 44px;
+    flex: 0 0 44px;
+    border-radius: 6px;
+  }
+  .refund-products .el-alert {
+    margin-bottom: 12px;
+  }
+  .refund-products .el-input-number {
+    width: 150px;
+  }
+  .reason-shortcuts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+  .reason-shortcuts .el-button {
+    margin-left: 0;
+  }
+  .refund-total-note {
+    margin-left: 12px;
+    color: var(--art-text-gray-600);
+  }
+  .refund-over-limit {
+    width: 100%;
+    color: var(--el-color-danger);
+  }
+  .refund-item-summary {
+    line-height: 1.7;
+  }
 
   .head-actions,
   .inline-field,

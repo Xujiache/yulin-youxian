@@ -206,6 +206,8 @@ public class WechatPaymentService {
 
     public RefundDto createAdminRefund(AdminRefundCreateRequest request) {
         RefundDto refund = storefrontService.createAdminRefund(request);
+        // 重复提交只返回已有记录；失败退款由显式重试/对账入口处理。
+        if (!"待审核".equals(refund.status())) return refund;
         return submitRefund(refund.id());
     }
 

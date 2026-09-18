@@ -195,6 +195,28 @@ export interface Refund {
   failureMessage?: string
   retryCount?: number
   lastAttemptAt?: string
+  items?: RefundItem[]
+}
+
+export interface RefundItem {
+  orderItemId: number
+  productId: number
+  productName: string
+  imageUrl: string
+  specificationText: string
+  saleUnit: string
+  quantity: number
+  refundAmount: number
+}
+
+export interface RefundableItems {
+  availableAmount: number
+  hasUnallocatedRefunds: boolean
+  items: Array<{ item: OrderItem; paidAmount: number; availableAmount: number }>
+}
+
+export function getRefundableItems(orderId: number) {
+  return request.get<RefundableItems>({ url: `/api/admin/refunds/orders/${orderId}/items` })
 }
 
 export interface AdminCustomer {
@@ -489,7 +511,13 @@ export function uploadProductImage(file: File) {
   })
 }
 
-export function getOrders(status?: string, deliveryDate?: string, printStatus?: string, page = 1, pageSize = 100) {
+export function getOrders(
+  status?: string,
+  deliveryDate?: string,
+  printStatus?: string,
+  page = 1,
+  pageSize = 100
+) {
   const params: Record<string, string | number> = { page, pageSize }
   if (status && status !== '全部') params.status = status
   if (deliveryDate) params.deliveryDate = deliveryDate
@@ -563,7 +591,13 @@ export function batchDeliverOrders(orderIds: number[]) {
   })
 }
 
-export function getRefunds(params?: { userId?: number; orderId?: number; keyword?: string; page?: number; pageSize?: number }) {
+export function getRefunds(params?: {
+  userId?: number
+  orderId?: number
+  keyword?: string
+  page?: number
+  pageSize?: number
+}) {
   return request.get<PageResult<Refund>>({
     url: '/api/admin/refunds',
     params
@@ -582,6 +616,8 @@ export function createAdminRefund(data: {
   orderId: number
   refundAmount: number
   reason: string
+  items: Array<{ orderItemId: number; refundAmount: number }>
+  requestKey: string
 }) {
   return request.post<Refund>({
     url: '/api/admin/refunds',

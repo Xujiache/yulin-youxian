@@ -212,7 +212,19 @@
           <text class="refund-status">{{item.status}}</text>
         </view>
       </view>
-      <text class="refund-reason">{{item.reason}}</text>
+      <view wx:if="{{item.items.length}}" class="refund-items">
+        <view wx:for="{{item.items}}" wx:for-item="refundItem" wx:key="orderItemId" class="refund-item">
+          <image class="refund-item-image" src="{{refundItem.imageUrl}}" mode="aspectFill" lazy-load />
+          <view class="refund-item-info">
+            <text class="refund-item-name">{{refundItem.productName}}</text>
+            <text class="refund-item-spec">{{refundItem.description}}</text>
+          </view>
+          <text class="refund-item-amount">退￥{{refundItem.amountText}}</text>
+        </view>
+      </view>
+      <text wx:else class="refund-item-spec">整单或历史退款，未指定商品</text>
+      <text class="refund-reason">退款原因：{{item.reason}}</text>
+      <text wx:if="{{item.statusHint}}" class="refund-hint">{{item.statusHint}}</text>
       <text wx:if="{{item.createdAtText}}" class="refund-time">{{item.createdAtText}}</text>
     </view>
   </view>

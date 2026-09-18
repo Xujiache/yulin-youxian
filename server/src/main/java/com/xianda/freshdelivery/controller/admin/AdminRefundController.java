@@ -1,6 +1,8 @@
 package com.xianda.freshdelivery.controller.admin;
 
 import com.xianda.freshdelivery.common.ApiResponse;
+import com.xianda.freshdelivery.common.BusinessException;
+import com.xianda.freshdelivery.dto.RefundableItemsDto;
 import com.xianda.freshdelivery.common.PageResult;
 import com.xianda.freshdelivery.dto.AdminRefundCreateRequest;
 import com.xianda.freshdelivery.dto.RefundDto;
@@ -56,7 +58,15 @@ public class AdminRefundController {
 
     @PostMapping
     public ApiResponse<RefundDto> create(@Valid @RequestBody AdminRefundCreateRequest request) {
+        if (request.items() == null || request.items().isEmpty()) {
+            throw new BusinessException(400, "请至少选择一个退款商品");
+        }
         return ApiResponse.ok(withSignedEvidenceUrls(wechatPaymentService.createAdminRefund(request)));
+    }
+
+    @GetMapping("/orders/{orderId}/items")
+    public ApiResponse<RefundableItemsDto> refundableItems(@PathVariable Long orderId) {
+        return ApiResponse.ok(storefrontService.refundableItems(orderId));
     }
 
     @GetMapping("/{id}")
@@ -123,7 +133,8 @@ public class AdminRefundController {
                 refund.failureMessage(),
                 refund.retryCount(),
                 refund.lastAttemptAt(),
-                refund.paymentOrderNo()
+                refund.paymentOrderNo(),
+                refund.items()
         );
     }
 }

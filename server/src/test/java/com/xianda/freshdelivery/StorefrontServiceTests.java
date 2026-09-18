@@ -147,7 +147,8 @@ class StorefrontServiceTests {
         ));
         LocalDateTime createdAt = LocalDateTime.parse(order.createdAt().replace(" ", "T"));
 
-        assertEquals(0, service.closeExpiredOrders(createdAt.plusHours(6).minusSeconds(1)));
+        // 演示数据中可能有其他过期订单；只检查本测试订单的六小时边界。
+        service.closeExpiredOrders(createdAt.plusHours(6).minusSeconds(1));
         assertEquals("待支付", service.order(order.id()).status());
         assertTrue(service.closeExpiredOrders(createdAt.plusHours(6).plusSeconds(1)) >= 1);
 

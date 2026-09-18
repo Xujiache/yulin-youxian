@@ -178,7 +178,7 @@ public class WechatPayClient {
         );
         body.put("out_refund_no", refund.refundNo());
         if (hasText(refund.reason())) {
-            body.put("reason", refund.reason());
+            body.put("reason", refundReasonSummary(refund.reason()));
         }
         body.put("notify_url", properties.getRefundNotifyUrl());
         body.put("amount", Map.of(
@@ -196,6 +196,22 @@ public class WechatPayClient {
         ensureRefundConfigured();
         JsonNode response = getJson("/v3/refund/domestic/refunds/" + refund.refundNo());
         return refundResult(response, refund.refundNo());
+    }
+
+    // 微信退款原因最多80字节；后台和用户端仍保存并展示完整自定义原因。
+    static String refundReasonSummary(String reason) {
+        StringBuilder result = new StringBuilder();
+        int bytes = 0;
+        for (int offset = 0; offset < reason.length();) {
+            int codePoint = reason.codePointAt(offset);
+            String character = new String(Character.toChars(codePoint));
+            int length = character.getBytes(java.nio.charset.StandardCharsets.UTF_8).length;
+            if (bytes + length > 80) break;
+            result.append(character);
+            bytes += length;
+            offset += Character.charCount(codePoint);
+        }
+        return result.toString();
     }
 
     private String paymentOrderNo(OrderDetailDto order) {

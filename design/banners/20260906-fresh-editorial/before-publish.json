@@ -1,0 +1,52 @@
+[
+  {
+    "id": 11,
+    "title": "炎炎夏日 · 新鲜送到家",
+    "subtitle": "高温天气不出门，鲜果蔬菜安心送达",
+    "imageUrl": "/uploads/banners/banner_1785159160277_b1b28dd34f37418fb5298e8336ab4d43.png",
+    "linkType": "none",
+    "linkTarget": "",
+    "sortOrder": 10,
+    "enabled": true
+  },
+  {
+    "id": 12,
+    "title": "高温天也要吃新鲜",
+    "subtitle": "严选蔬果，足不出户送上门",
+    "imageUrl": "/uploads/banners/banner_1785159160335_669cfd88419a4924ba34766da90c29dc.png",
+    "linkType": "none",
+    "linkTarget": "",
+    "sortOrder": 20,
+    "enabled": true
+  },
+  {
+    "id": 13,
+    "title": "宅家避暑 · 配送到门",
+    "subtitle": "热浪挡在门外，新鲜准时到家",
+    "imageUrl": "/uploads/banners/banner_1785159160375_33943f59b469472a800d4bf0bedd2e07.png",
+    "linkType": "none",
+    "linkTarget": "",
+    "sortOrder": 30,
+    "enabled": true
+  },
+  {
+    "id": 14,
+    "title": "清凉果蔬 · 即刻送达",
+    "subtitle": "冰镇鲜果与当季蔬菜，轻松送到家",
+    "imageUrl": "/uploads/banners/banner_1785159160415_be29e5e4341f43d3bef1ef0484c48667.png",
+    "linkType": "none",
+    "linkTarget": "",
+    "sortOrder": 40,
+    "enabled": true
+  },
+  {
+    "id": 15,
+    "title": "夏日补给 · 一键下单",
+    "subtitle": "门店精选食材，省心配送到家",
+    "imageUrl": "/uploads/banners/banner_1785159160466_b9cd93ed4d8c4b3cb01be1b3936c5014.png",
+    "linkType": "none",
+    "linkTarget": "",
+    "sortOrder": 50,
+    "enabled": true
+  }
+]
