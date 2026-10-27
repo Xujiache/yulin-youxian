@@ -17,18 +17,19 @@
         <ElTable :data="banners" border empty-text="暂无轮播图">
           <ElTableColumn label="排序" width="100">
             <template #default="{ row }">
-              <ElInputNumber v-model="row.sortOrder" :min="0" :controls="false" class="sort-input" />
+              <ElInputNumber
+                v-model="row.sortOrder"
+                :min="0"
+                :controls="false"
+                class="sort-input"
+              />
             </template>
           </ElTableColumn>
 
           <ElTableColumn label="图片" width="220">
             <template #default="{ row }">
               <div class="banner-image-cell">
-                <ElImage class="banner-thumb" :src="assetUrl(row.imageUrl)" fit="cover">
-                  <template #error>
-                    <div class="banner-thumb__fallback">预览</div>
-                  </template>
-                </ElImage>
+                <FreshImage class="banner-thumb" :src="row.imageUrl" fit="cover" />
                 <ElUpload
                   :show-file-list="false"
                   accept=".jpg,.jpeg,.png,.webp"
@@ -87,13 +88,9 @@
 
 <script setup lang="ts">
   import { ElMessage } from 'element-plus'
-  import {
-    getBanners,
-    updateBanners,
-    uploadBannerImage,
-    type Banner
-  } from '@/api/admin'
+  import { getBanners, updateBanners, uploadBannerImage, type Banner } from '@/api/admin'
   import { resolveFreshAssetUrl } from '@/utils/fresh-assets'
+  import FreshImage from '@/components/business/fresh-image/index.vue'
 
   defineOptions({ name: 'FreshBanners' })
 

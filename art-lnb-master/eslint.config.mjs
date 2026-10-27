@@ -57,7 +57,15 @@ export default [
       '@typescript-eslint/no-explicit-any': 'off', // 禁用 any 检查
       'vue/multi-word-component-names': 'off', // 禁用对 Vue 组件名称的多词要求检查
       'no-multiple-empty-lines': ['warn', { max: 1 }], // 不允许多个空行
-      'no-unexpected-multiline': 'error' // 禁止空余的多行
+      'no-unexpected-multiline': 'error', // 禁止空余的多行
+      // 下划线前缀是"有意不用"的通用惯例：error-handle.ts 的 onerror 签名、
+      // system-manage.ts 的占位参数都靠它表达意图，规则要认这个前缀
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        { argsIgnorePattern: '^_', varsIgnorePattern: '^_', caughtErrorsIgnorePattern: '^_' }
+      ],
+      // ElMessageBox.confirm 被取消时以 reject 结束，catch {} 吞掉取消是既定用法
+      'no-empty': ['error', { allowEmptyCatch: true }]
     }
   },
   // vue 规则

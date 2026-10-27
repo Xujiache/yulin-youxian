@@ -444,7 +444,18 @@ export const useSettingStore = defineStore(
   {
     persist: {
       key: 'setting',
-      storage: localStorage
+      storage: localStorage,
+      afterHydrate: (ctx) => {
+        const PRESET_KEY = 'yulin.navPreset'
+        const PRESET = 'left-v1'
+        if (typeof localStorage === 'undefined') return
+        if (localStorage.getItem(PRESET_KEY) === PRESET) return
+        ctx.store.switchMenuLayouts(MenuTypeEnum.LEFT)
+        ctx.store.setWorkTab(false)
+        if (ctx.store.showLanguage) ctx.store.setLanguage()
+        ctx.store.hideSettingGuide()
+        localStorage.setItem(PRESET_KEY, PRESET)
+      }
     }
   }
 )

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  派单通知小图标。通知栏只取 alpha 通道,必须是单色矢量,
+  形状与桌面图标一致(购物袋 + 叶片镂空),骑手一眼能认出是本 App 的通知。
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108"
+    android:tint="#FFFFFF">
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="6"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"
+        android:pathData="M42,44 A12,12 0 0 1 66,44" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:fillType="evenOdd"
+        android:pathData="M33,44 h42 a8,8 0 0 1 8,8 v28 a8,8 0 0 1 -8,8 h-42 a8,8 0 0 1 -8,-8 v-28 a8,8 0 0 1 8,-8 z M43,76 C43,65 51,58 63,58 C63,69 55,76 43,76 z" />
+</vector>

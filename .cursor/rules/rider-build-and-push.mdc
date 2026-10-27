@@ -1,0 +1,46 @@
+---
+description: 骑手端改动后的固定收尾：验证、本机签名发布、推 GitHub、给出产物路径
+globs: rider-android/**
+alwaysApply: false
+---
+
+# 改完骑手端必须做的三件事
+
+顺序固定：**先验证 → 再本机签名发布 → 再推送 → 最后给路径**。任何一步失败就停下来说清楚，不要跳过。
+
+正式签名包在**这台生产 Linux 机**上打。私钥只在仓库外 `/root/.yulin/`，不进 Git、不进 `ecosystem.config.cjs`、不进普通 CI。不要打 `rider-v*` 标签，也不要走 GitHub Actions 签名。
+
+自动发布默认是**可选更新**；只有明确传 `--policy FORCE` 时才阻断旧版本。FORCE 会让所有更旧客户端无法继续使用，不要随手开。
+
+## 1. 验证并本机发布
+
+这台机器已安装 `/opt/android-sdk`。日常发布：
+
+```bash
+# 预检 SDK、签名、版本号
+bash scripts/rider-publish.sh --dry-run
+
+# 正式发布（需要已提交的干净 HEAD，以及 ~/.yulin/rider-publish.env 里的 AMAP_KEY）
+bash scripts/rider-publish.sh --title "更新标题" --notes "更新日志正文"
+```
+
+- 脚本会跑 Android 单测、`verifyReleaseSignature`，再用 `aapt2` / `apksigner` / SHA-256 核对包名、版本、ABI 和新证书。
+- 通过 `http://127.0.0.1:8090/api/internal/rider-app/releases` 上传，operator 记为 `server-local`。
+- `versionCode=YYMMDDNN`、`versionName=YYYY.MM.DD.N`，日期按 `Asia/Shanghai`，必须比后端当前版本大。
+- 只检查已跟踪文件是否脏；未跟踪的本地测试脚本不阻断发布。
+- **不要为了快牺牲准度**：不跳测试、不跳验签、不用 `--abi arm64` 减体积，除非用户明确要小包。
+- 高德 Android Key 用 `scripts/rider-configure-amap-key.sh <Key>` 写入仓库外环境。没有 Key 时可以 `--build-only`，不要把空白地图的包发成正式 OTA。
+
+Windows 应急出包仍可用 `pwsh scripts/rider-ship.ps1`，版本规则与本机脚本对齐，但**不会登记 OTA**。
+
+## 2. 推送 GitHub
+
+按模块分提交，不要把不相干的改动堆成一个。推之前 `git fetch`，远程有新提交就先
+`git rebase origin/<branch>` 保持线性历史。禁止强推。
+
+**不要**再打 `rider-v*` 注解标签。源码 SHA 由本机发布脚本写入版本记录。
+
+## 3. 给出可核对的产物信息
+
+回复末尾给出 APK **绝对路径**、versionName、versionCode、大小、SHA-256，以及
+`GET /api/public/rider/app/latest` 的 versionCode。仓库外回执在 `~/.yulin/releases/`。

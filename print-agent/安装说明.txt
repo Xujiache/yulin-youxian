@@ -1,0 +1,14 @@
+安装前必须先校验 SHA256：
+
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\verify-checksums.ps1
+
+校验通过后：
+
+1. 双击 setup-agent.cmd，生产地址必须使用 HTTPS。
+2. 完成测试打印和后端连通测试。
+3. 双击 install-autostart.cmd。
+
+密钥已使用当前 Windows 用户的 DPAPI 加密。不要复制 agent.config.json 到其他
+电脑或其他 Windows 用户；需要迁移时请重新运行配置。
+
+查看详细说明：使用说明.md

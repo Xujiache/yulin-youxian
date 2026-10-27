@@ -1,0 +1,13 @@
+{
+  "name": "fresh-delivery-client-wechat",
+  "version": "1.0.0",
+  "private": true,
+  "description": "WeChat mini program client for fresh delivery",
+  "dependencies": {
+    "tdesign-miniprogram": "1.16.0"
+  },
+  "scripts": {
+    "build:tdesign": "node scripts/build-tdesign-vendor.js",
+    "test": "node --test tests/*.test.js"
+  }
+}

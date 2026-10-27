@@ -1,0 +1,133 @@
+package com.yulin.rider.feature.task.ui
+
+import android.app.Application
+import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
+import com.yulin.rider.core.common.RiderResult
+import com.yulin.rider.feature.task.data.SyncFailure
+import com.yulin.rider.feature.task.data.SyncFailureLog
+import com.yulin.rider.feature.task.data.TaskBoard
+import com.yulin.rider.feature.task.data.TaskRepository
+import com.yulin.rider.feature.task.data.TaskSection
+import com.yulin.rider.feature.task.data.TransitionResult
+import com.yulin.rider.feature.task.data.riderMessage
+import com.yulin.rider.feature.task.data.runTransition
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+
+data class TaskHomeUiState(
+    val board: TaskBoard = TaskBoard(),
+    val section: TaskSection = TaskSection.IN_PROGRESS,
+    val loading: Boolean = false,
+    val refreshing: Boolean = false,
+    /** 离线/未装配时的横幅文案,不阻断操作。 */
+    val notice: String? = null,
+    val pendingSyncCount: Int = 0,
+    val hasSyncFailure: Boolean = false,
+    /** 被服务端最终拒绝、已经回滚掉的动作。必须让骑手看见，否则单子会悄悄退回去。 */
+    val syncFailures: List<SyncFailure> = emptyList(),
+    /** 卡片上直接点的动作没排进队列时的原因。静默失败的话骑手会以为已经做完了。 */
+    val actionError: String? = null,
+)
+
+class TaskHomeViewModel(app: Application) : AndroidViewModel(app) {
+
+    private val repository = TaskRepository.get(app)
+    private val failureLog = SyncFailureLog.get(app)
+    private val _state = MutableStateFlow(TaskHomeUiState(loading = true))
+    val state: StateFlow<TaskHomeUiState> = _state.asStateFlow()
+
+    /** 骑手手动切过分区之后就不再自动跳,否则他刚点到「今日已完成」就会被弹回去。 */
+    private var sectionPickedByRider = false
+
+    init {
+        viewModelScope.launch {
+            repository.observeBoard().collect { board ->
+                _state.value = _state.value.copy(
+                    board = board,
+                    loading = false,
+                    // 打开就落在有活干的分区,单人场景不需要骑手自己找
+                    section = if (sectionPickedByRider) {
+                        _state.value.section
+                    } else {
+                        _state.value.section.takeIf { board.count(it) > 0 } ?: firstNonEmpty(board)
+                    },
+                )
+            }
+        }
+        viewModelScope.launch {
+            repository.pendingActions.collect { pending ->
+                _state.value = _state.value.copy(
+                    pendingSyncCount = pending.size,
+                    hasSyncFailure = pending.any { it.stuck },
+                )
+            }
+        }
+        viewModelScope.launch {
+            failureLog.failures.collect { failures ->
+                _state.value = _state.value.copy(syncFailures = failures)
+            }
+        }
+        refresh()
+    }
+
+    fun dismissFailure(clientEventId: String) = failureLog.dismiss(clientEventId)
+
+    fun selectSection(section: TaskSection) {
+        sectionPickedByRider = true
+        _state.value = _state.value.copy(section = section)
+    }
+
+    fun refresh() {
+        if (_state.value.refreshing) return
+        _state.value = _state.value.copy(refreshing = true)
+        viewModelScope.launch {
+            val outcome = repository.refresh()
+            runCatching { repository.syncNow() }
+            _state.value = _state.value.copy(
+                refreshing = false,
+                loading = false,
+                // 刷新失败不清空列表:缓存里的单照样能送,只是提示一下数据可能不是最新的
+                notice = (outcome as? RiderResult.Failure)?.let { "离线中 · ${it.message}" },
+            )
+        }
+    }
+
+    /** 手动重试后要给个交代：还剩几条没上去，不然骑手只会反复点这条横幅。 */
+    fun retrySync() = viewModelScope.launch {
+        val outcome = try {
+            repository.retryStuck()
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            null
+        }
+        val remaining = outcome?.let { it.stuck + it.failed } ?: 0
+        _state.value = _state.value.copy(
+            actionError = if (remaining > 0) "还有 $remaining 条操作没能上报，联网后会自动再试" else null,
+        )
+    }
+
+    fun dismissActionError() {
+        _state.value = _state.value.copy(actionError = null)
+    }
+
+    fun accept(taskId: Long) = advance { repository.accept(taskId) }
+
+    fun depart(taskId: Long) = advance { repository.depart(taskId) }
+
+    fun arrive(taskId: Long) = advance { repository.arrive(taskId) }
+
+    fun pickupTask(taskId: Long) = advance { repository.pickupTask(taskId) }
+
+    private fun advance(block: suspend () -> TransitionResult) = viewModelScope.launch {
+        val result = runTransition(block)
+        _state.value = _state.value.copy(actionError = result.riderMessage)
+    }
+
+    private fun firstNonEmpty(board: TaskBoard): TaskSection =
+        TaskSection.entries.firstOrNull { board.count(it) > 0 } ?: TaskSection.IN_PROGRESS
+}

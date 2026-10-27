@@ -1,1 +1,5 @@
-{}
+{
+  "usingComponents": {
+    "t-cascader": "/components/tdesign-cascade/cascader/cascader"
+  }
+}

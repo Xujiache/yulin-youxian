@@ -28,6 +28,11 @@ public class AdminBackupController {
         return ApiResponse.ok(backupService.createManualBackup());
     }
 
+    @GetMapping("/recovery")
+    public ApiResponse<BackupService.RecoveryStatus> recovery() {
+        return ApiResponse.ok(backupService.recoveryStatus());
+    }
+
     @PostMapping("/{fileName}/restore")
     public ApiResponse<BackupService.RestoreResult> restore(@PathVariable String fileName) {
         return ApiResponse.ok(backupService.restoreBackup(fileName));

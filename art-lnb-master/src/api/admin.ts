@@ -102,6 +102,8 @@ export interface OrderSummary {
   sameAddressOrderCount: number
   printStatus?: 'NONE' | 'PENDING' | 'SUCCESS' | 'FAILED'
   printJobId?: number | null
+  discountAmount?: number
+  gifts?: OrderGift[]
 }
 
 export interface Address {
@@ -129,6 +131,18 @@ export interface OrderItem {
   specificationText?: string
 }
 
+export interface OrderGift {
+  drawId: number
+  prizeId: number
+  productId: number
+  skuId?: number | null
+  productName: string
+  skuName?: string
+  imageUrl?: string
+  quantity: number
+  status: 'RESERVED' | 'RELEASED' | 'FULFILLED' | string
+}
+
 export interface OrderDetail {
   id: number
   orderNo: string
@@ -149,6 +163,8 @@ export interface OrderDetail {
   userId: number
   refunds: Refund[]
   transactionId: string
+  discountAmount?: number
+  gifts?: OrderGift[]
 }
 
 export interface BatchOrderActionResult {
@@ -175,6 +191,10 @@ export interface Refund {
   orderNo: string
   source: 'USER' | 'ADMIN'
   createdAt: string
+  failureCode?: string
+  failureMessage?: string
+  retryCount?: number
+  lastAttemptAt?: string
 }
 
 export interface AdminCustomer {
@@ -212,6 +232,15 @@ export interface FreeDeliveryCampaign {
   enabled: boolean
 }
 
+export interface StockOverviewSpecItem {
+  skuId?: number | null
+  specificationText: string
+  quantity: number
+  saleUnit: string
+  orderCount: number
+  amount: number
+}
+
 export interface StockOverviewItem {
   productId: number
   productName: string
@@ -221,6 +250,15 @@ export interface StockOverviewItem {
   orderCount: number
   amount: number
   orderNos: string[]
+  specDetails?: StockOverviewSpecItem[]
+}
+
+export interface StockOverviewExport {
+  date: string
+  filename: string
+  productSheet: string[][]
+  specSheet: string[][]
+  orderSheet: string[][]
 }
 
 export interface Banner {
@@ -377,7 +415,18 @@ export function uploadCategoryImage(file: File) {
   })
 }
 
-export function getProducts(params?: { categoryId?: number | null }) {
+export function getProducts(params?: {
+  categoryId?: number | null
+  keyword?: string
+  status?: 'on-sale' | 'off-sale'
+  recommended?: 'recommended' | 'normal'
+  stock?: 'in-stock' | 'sold-out' | 'low-stock'
+  minPrice?: number
+  maxPrice?: number
+  sort?: 'default' | 'price-asc' | 'price-desc' | 'stock-asc' | 'stock-desc' | 'name-asc'
+  page?: number
+  pageSize?: number
+}) {
   return request.get<PageResult<Product>>({
     url: '/api/admin/products',
     params
@@ -440,8 +489,8 @@ export function uploadProductImage(file: File) {
   })
 }
 
-export function getOrders(status?: string, deliveryDate?: string, printStatus?: string) {
-  const params: Record<string, string> = {}
+export function getOrders(status?: string, deliveryDate?: string, printStatus?: string, page = 1, pageSize = 100) {
+  const params: Record<string, string | number> = { page, pageSize }
   if (status && status !== '全部') params.status = status
   if (deliveryDate) params.deliveryDate = deliveryDate
   if (printStatus && printStatus !== '全部') params.printStatus = printStatus
@@ -454,6 +503,13 @@ export function getOrders(status?: string, deliveryDate?: string, printStatus?: 
 export function getOrderDetail(id: number) {
   return request.get<OrderDetail>({
     url: `/api/admin/orders/${id}`
+  })
+}
+
+export function findOrder(keyword: string) {
+  return request.get<OrderDetail>({
+    url: '/api/admin/orders/lookup',
+    params: { keyword }
   })
 }
 
@@ -507,7 +563,7 @@ export function batchDeliverOrders(orderIds: number[]) {
   })
 }
 
-export function getRefunds(params?: { userId?: number; orderId?: number }) {
+export function getRefunds(params?: { userId?: number; orderId?: number; keyword?: string; page?: number; pageSize?: number }) {
   return request.get<PageResult<Refund>>({
     url: '/api/admin/refunds',
     params
@@ -549,6 +605,18 @@ export function getRefundDetail(id: number) {
 export function approveRefund(id: number) {
   return request.post<Refund>({
     url: `/api/admin/refunds/${id}/approve`
+  })
+}
+
+export function retryRefund(id: number) {
+  return request.post<Refund>({
+    url: `/api/admin/refunds/${id}/retry`
+  })
+}
+
+export function reconcileRefund(id: number) {
+  return request.post<Refund>({
+    url: `/api/admin/refunds/${id}/reconcile`
   })
 }
 
@@ -608,6 +676,13 @@ export function updateSettings(data: StoreSettings) {
 export function getStockOverview(date?: string) {
   return request.get<StockOverviewItem[]>({
     url: '/api/admin/stock/overview',
+    params: date ? { date } : undefined
+  })
+}
+
+export function exportStockOverview(date?: string) {
+  return request.get<StockOverviewExport>({
+    url: '/api/admin/stock/export',
     params: date ? { date } : undefined
   })
 }

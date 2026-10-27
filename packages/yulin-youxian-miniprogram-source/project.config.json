@@ -35,8 +35,8 @@
   "packOptions": {
     "ignore": [
       {
-        "type": "folder",
-        "value": "assets/products"
+        "value": "assets/products",
+        "type": "folder"
       }
     ],
     "include": []

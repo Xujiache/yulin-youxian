@@ -5,6 +5,7 @@ import com.xianda.freshdelivery.dto.AdminLoginRequest;
 import com.xianda.freshdelivery.dto.AdminLoginResponse;
 import com.xianda.freshdelivery.dto.AdminProfileDto;
 import com.xianda.freshdelivery.service.AuthService;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -23,8 +24,11 @@ public class AdminAuthController {
     }
 
     @PostMapping("/login")
-    public ApiResponse<AdminLoginResponse> login(@Valid @RequestBody AdminLoginRequest request) {
-        return ApiResponse.ok(authService.adminLogin(request));
+    public ApiResponse<AdminLoginResponse> login(
+            @Valid @RequestBody AdminLoginRequest request,
+            HttpServletRequest servletRequest
+    ) {
+        return ApiResponse.ok(authService.adminLogin(request, servletRequest.getRemoteAddr()));
     }
 
     @GetMapping("/profile")

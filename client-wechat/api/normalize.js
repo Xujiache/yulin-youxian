@@ -6,6 +6,13 @@ function numberOr(value, fallback) {
   return Number.isFinite(number) ? number : fallback;
 }
 
+// 带查询串的资源地址是服务端签发的限时票据（送达凭证照片就走这条路）。
+// 本地缓存按完整 URL 做键，签名每次都不一样，缓存必然全部落空还会把私密照片留在本地，
+// 所以这类地址只拼域名、不进缓存。
+function isSignedAssetUrl(url) {
+  return url.includes("?");
+}
+
 function normalizeAssetUrl(url) {
   if (!url) {
     return url;
@@ -17,9 +24,9 @@ function normalizeAssetUrl(url) {
     const app = getApp();
     const baseUrl = (app.globalData && app.globalData.apiBaseUrl) || API_BASE_URL;
     const normalized = baseUrl ? `${baseUrl}${url}` : url;
-    return getCachedImageUrl(normalized);
+    return isSignedAssetUrl(normalized) ? normalized : getCachedImageUrl(normalized);
   }
-  return getCachedImageUrl(url);
+  return isSignedAssetUrl(url) ? url : getCachedImageUrl(url);
 }
 
 function normalizeProduct(product) {
@@ -119,6 +126,32 @@ function normalizeOrder(order) {
   };
 }
 
+// 赠品图和奖项图都来自 /assets/products，未拼接域名时真机必破图（该目录被 packOptions.ignore 排除出包）
+function normalizeGift(gift) {
+  if (!gift) {
+    return gift;
+  }
+  return {
+    ...gift,
+    imageUrl: normalizeAssetUrl(gift.imageUrl || "")
+  };
+}
+
+function normalizeGifts(gifts) {
+  return (Array.isArray(gifts) ? gifts : []).map(normalizeGift);
+}
+
+function normalizePrizeResult(result) {
+  if (!result) {
+    return result;
+  }
+  return {
+    ...result,
+    imageUrl: normalizeAssetUrl(result.imageUrl || ""),
+    gifts: normalizeGifts(result.gifts)
+  };
+}
+
 function normalizeRefund(refund) {
   if (!refund) {
     return refund;
@@ -133,7 +166,10 @@ module.exports = {
   normalizeAssetUrl,
   normalizeProduct,
   normalizeCartItem,
+  normalizeGift,
+  normalizeGifts,
   normalizeOrderItem,
   normalizeOrder,
+  normalizePrizeResult,
   normalizeRefund
 };

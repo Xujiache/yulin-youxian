@@ -1,0 +1,36 @@
+---
+description: 每次改完必须审查、测试、推送当前分支，并在本机部署后端与管理台
+alwaysApply: true
+---
+
+# 改完必须审查、推送、部署
+
+顺序固定：**差异审查 → 相关测试 → 提交并推送当前分支 → 本机部署后端和管理台**。任何一步失败立即停止，不要跳过，禁止强推。
+
+## 1. 审查与提交
+
+- 只纳入已确认的业务改动。本地测试数据脚本（`scripts/gen-testdata*`、`generate-test-data.py`、`relocate-testdata*` 等）不要提交。
+- 按功能拆分提交，信息写「为什么」。推之前 `git fetch`；远程有新提交先 `git rebase origin/<当前分支>` 保持线性历史。
+- 禁止 `git push --force` / `--force-with-lease`（用户明确要求除外）。门禁或 hook 失败先修，再新建提交。
+
+## 2. GitHub 推送后必须报告
+
+固定包含：远端、分支、提交 SHA、变更摘要、测试结果。
+
+## 3. 本机部署（不要走 /opt 不可变发布）
+
+这台机器的真实路径是原地部署。**不要**执行 `go-live.sh`、`rollback.sh`、`render-nginx.sh`，**不要** `pm2 save`。
+
+1. 备份到 `/root/yulin-deploy-backups/`（目录名带时间戳）。
+2. 后端：`cd /root/yulin-youxian/server && ./mvnw -B -ntp package`，产物 `target/fresh-delivery-server-0.0.1-SNAPSHOT.jar`，然后 `pm2 restart yulin-youxian-server`（cwd 必须是 `/root/yulin-youxian/server`，端口 **8090**）。
+3. 管理台：`art-lnb-master` 锁定依赖构建后 `rsync -a --delete dist/ /var/www/yulin-youxian/admin/`。
+4. Nginx 只改现有站点 `/etc/nginx/sites-available/xujiacheng.top` 的必要指令（如 APK 体积/超时/Range），不替换整份 vhost。改完 `nginx -t && nginx -s reload`。
+5. 校验 `http://127.0.0.1:8090/actuator/health`，并报告备份路径、线上 jar/管理台时间。
+
+**小程序只报告改动，由用户手动发布，不要自动部署。**
+
+唯一允许的 `pm2 save`：把 `RIDER_APP_PUBLISH_TOKEN` / `RIDER_EXPECTED_CERT_SHA256` 注入当前进程后，用 `scripts/rider-publish.sh --sync-pm2-env` 持久化 dump。不要把这两项写进 `deploy/pm2/ecosystem.config.cjs`。
+
+## 4. 骑手 Android 额外收尾
+
+Android 改动还要遵守 `rider-build-and-push.mdc`：在本机用 `scripts/rider-publish.sh` 签名并发布。不要打 `rider-v*` 标签，不要让普通 CI 接触正式私钥。

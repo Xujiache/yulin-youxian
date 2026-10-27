@@ -1,9 +1,10 @@
 const { yuan, lineAmount } = require("../../utils/format");
-const { getProduct } = require("../../api/catalog");
+const { getHome, getProduct } = require("../../api/catalog");
 const { addCartItem, getCart } = require("../../api/cart");
 const { requireCompleteProfile } = require("../../utils/auth-guard");
 const { syncTheme } = require("../../utils/theme");
 const { getProductAvailability } = require("../../utils/product-availability");
+const { buildMinOrderState } = require("../../utils/min-order");
 
 Page({
   data: {
@@ -28,6 +29,7 @@ Page({
     availabilityLabel: "",
     availabilityMessage: "",
     maxPriceText: "0.00",
+    minOrderTip: "",
     sheetVisible: false,
     sheetActionMode: "cart"
   },
@@ -35,8 +37,15 @@ Page({
   async onLoad(options) {
     syncTheme(this);
     let product;
+    let minOrderTip = "";
     try {
-      product = await getProduct(Number(options.id));
+      const [loadedProduct, home] = await Promise.all([
+        getProduct(Number(options.id)),
+        getHome().catch(() => null)
+      ]);
+      product = loadedProduct;
+      const minOrder = buildMinOrderState(0, home && home.minOrderAmount);
+      minOrderTip = minOrder.minOrderAmount ? `门店起送¥${minOrder.minOrderText}` : "";
     } catch {
       wx.showToast({ title: "商品加载失败", icon: "none" });
       this.setData({ loading: false });
@@ -54,6 +63,7 @@ Page({
       unavailable: Boolean(availability.label),
       availabilityLabel: availability.label,
       availabilityMessage: availability.message,
+      minOrderTip,
       loading: false
     });
   },

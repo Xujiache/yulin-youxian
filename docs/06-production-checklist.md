@@ -32,10 +32,13 @@
 
 ## 管理后台发布
 
-- 执行 `npm run build`。
-- 将 `admin-web/dist` 部署到静态站点或 Nginx。
+- 在 `art-lnb-master` 执行 `npm run test:admin-origin`、`npm run test:admin-renewal` 和 `npm run build`。
+- 生产配置 `VITE_API_URL=`（空字符串，不是 `/`），由当前站点的 `/api/` 代理后端。不要硬编码主域名，否则从 `admin.hqhjxt.vip` 或 `www.hqhjxt.vip` 登录时，带鉴权头的身份请求会触发跨域预检并进入 500 页面；也不要填 `/`，避免原生 fetch 的调度流和编辑器上传地址拼出 `//api/...`。构建环境也不能覆盖为绝对域名。
+- 将 `art-lnb-master/dist` 部署到静态站点或 Nginx；修改前端配置后必须重新构建，不能仅修改服务器上的源码文件。
 - 反向代理 `/api/**` 到后端服务。
 - 反向代理 `/uploads/**` 到后端上传目录映射。
+- 分别从 `hqhjxt.vip`、`admin.hqhjxt.vip`、`www.hqhjxt.vip` 的 `/#/auth/login` 真实登录，确认身份、首页和商品接口均走当前域名，切页、刷新、退出正常，未认证身份请求仍返回 401。
+- 本次同源修复不修改服务端鉴权或数据库，也不关闭续费提醒。仅发布前端时保留现有后端、Nginx 路由和 `runtime/admin-renewal.json`；发布前保存当前版本链接，异常时原子切回该版本。已打开的旧页面需刷新获取新配置。
 
 ## 数据与文件
 

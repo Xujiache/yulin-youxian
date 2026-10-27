@@ -49,11 +49,13 @@ export class RoutePermissionValidator {
    * 构建菜单路径集合（扁平化处理）
    * @param menuList 菜单列表
    * @param pathSet 路径集合
+   * @param parentPath 父级菜单的完整路径
    * @returns 路径集合
    */
   static buildMenuPathSet(
     menuList: AppRouteRecord[],
-    pathSet: Set<string> = new Set()
+    pathSet: Set<string> = new Set(),
+    parentPath = ''
   ): Set<string> {
     if (!Array.isArray(menuList) || menuList.length === 0) {
       return pathSet
@@ -65,17 +67,32 @@ export class RoutePermissionValidator {
         continue
       }
 
-      // 标准化路径并添加到集合
-      const menuPath = menuItem.path.startsWith('/') ? menuItem.path : `/${menuItem.path}`
+      // 拼接父级路径后添加到集合，保证与 vue-router 实际注册的路径一致
+      const menuPath = this.resolveFullPath(parentPath, menuItem.path)
       pathSet.add(menuPath)
 
       // 递归处理子菜单
       if (menuItem.children?.length) {
-        this.buildMenuPathSet(menuItem.children, pathSet)
+        this.buildMenuPathSet(menuItem.children, pathSet, menuPath)
       }
     }
 
     return pathSet
+  }
+
+  /**
+   * 将子菜单的相对路径解析为完整路径
+   * @param parentPath 父级菜单的完整路径
+   * @param path 当前菜单配置的路径
+   * @returns 完整路径
+   */
+  static resolveFullPath(parentPath: string, path: string): string {
+    if (path.startsWith('/')) {
+      return path
+    }
+
+    const normalizedParent = parentPath.endsWith('/') ? parentPath.slice(0, -1) : parentPath
+    return `${normalizedParent}/${path}`
   }
 
   /**

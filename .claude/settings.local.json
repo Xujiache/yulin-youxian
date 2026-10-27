@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(unzip -l print-agent.zip)",
+      "Bash(unzip -l YulinPrintAgent.zip)",
+      "Bash(xxd YulinPrintAgent.exe)",
+      "Bash(python -c ' *)",
+      "Bash(xxd)",
+      "Bash(grep -v \"new \\\\|return \\\\|//\")"
+    ]
+  }
+}

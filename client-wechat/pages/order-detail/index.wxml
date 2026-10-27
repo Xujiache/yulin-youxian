@@ -8,21 +8,195 @@
     <view class="placeholder"></view>
   </view>
 
-  <view class="status-card card">
-    <text class="status">{{statusText}}</text>
-    <text class="status-desc">订单 ID：{{orderId}}</text>
-    <text class="status-desc">订单编号：{{orderNo}}</text>
+  <view class="status-banner {{statusConfig.themeClass}}">
+    <view class="status-banner-main">
+      <view class="status-banner-text">
+        <text class="status-title">{{statusConfig.title || statusText}}</text>
+        <text class="status-subtitle">{{statusConfig.desc}}</text>
+      </view>
+      <image class="status-banner-icon" src="{{statusConfig.iconPath}}" mode="aspectFit" />
+    </view>
+    <view class="order-no-bar">
+      <text class="order-no-label">订单编号：{{orderNo}}</text>
+      <view class="copy-btn" bindtap="copyOrderNo">
+        <text>复制</text>
+      </view>
+    </view>
   </view>
 
   <view wx:if="{{refundNotice}}" class="refund-notice card">
-    <text>{{refundNotice}}</text>
+    <view class="notice-icon-dot">!</view>
+    <text class="notice-text">{{refundNotice}}</text>
   </view>
 
-  <view class="card">
-    <text class="module-title">收货信息</text>
-    <text class="line">{{address.name}} {{address.phone}}</text>
-    <text class="line muted">{{address.detail}}</text>
-    <text class="line muted">期望送达时间：{{deliverySlotText}}</text>
+  <!-- 配送可视化：只有后端返回 hasDelivery 时才渲染，否则完全回退到上方状态条的静态文案 -->
+  <view wx:if="{{delivery.available}}" class="card delivery-card">
+    <view class="delivery-head">
+      <view class="delivery-head-text">
+        <text class="delivery-status">{{delivery.statusText || statusConfig.title}}</text>
+        <text wx:if="{{delivery.etaText}}" class="delivery-eta">{{delivery.etaText}}</text>
+        <text wx:if="{{delivery.remainingText}}" class="delivery-remaining">{{delivery.remainingText}}</text>
+        <text wx:if="{{delivery.locationUpdatedText}}" class="delivery-located">{{delivery.locationUpdatedText}}</text>
+      </view>
+      <view wx:if="{{delivery.showMap}}" class="delivery-fold" catchtap="toggleDeliveryMap">
+        {{mapExpanded ? '收起地图' : '展开地图'}}
+      </view>
+    </view>
+
+    <view wx:if="{{delivery.noticeText}}" class="delivery-notice">
+      <text>{{delivery.noticeText}}</text>
+    </view>
+
+    <view wx:if="{{delivery.phoneWarningText}}" class="delivery-phone-warning">
+      <text class="phone-warning-mark">!</text>
+      <text>{{delivery.phoneWarningText}}</text>
+    </view>
+
+    <view wx:if="{{delivery.waitingText}}" class="delivery-waiting">
+      <view class="waiting-dot"></view>
+      <text>{{delivery.waitingText}}</text>
+    </view>
+
+    <!-- 定位陈旧且没有地图可挂提示时，退回卡片内展示 -->
+    <view wx:if="{{delivery.staleText && !delivery.showMap}}" class="delivery-waiting is-stale">
+      <view class="waiting-dot"></view>
+      <text>{{delivery.staleText}}</text>
+    </view>
+
+    <!-- map 是原生组件，层级最高：与固定栏重叠或弹窗打开时直接卸载，保证真机操作可点击 -->
+    <view
+      wx:if="{{delivery.showMap && mapExpanded}}"
+      class="delivery-map-wrap"
+    >
+      <map
+        wx:if="{{mapViewportSafe && !showPaymentMethodModal && !showCancelModal && !showRatingSheet}}"
+        id="deliveryMap"
+        class="delivery-map"
+        latitude="{{delivery.destination.lat}}"
+        longitude="{{delivery.destination.lng}}"
+        scale="{{mapScale}}"
+        markers="{{markers}}"
+        polyline="{{polyline}}"
+        show-location="{{false}}"
+        enable-rotate="{{false}}"
+        enable-3D="{{false}}"
+        enable-traffic="{{false}}"
+        enable-overlooking="{{false}}"
+        enable-building="{{false}}"
+      >
+        <cover-view wx:if="{{delivery.staleText}}" class="map-stale">{{delivery.staleText}}</cover-view>
+        <cover-view class="map-recenter" bindtap="handleRecenterMap">定位到骑手</cover-view>
+      </map>
+      <view wx:else class="map-safety-placeholder">
+        <text class="map-safety-title">地图已暂时收起</text>
+        <text class="map-safety-desc">离开固定操作栏后会自动恢复，底部按钮仍可正常点击</text>
+      </view>
+    </view>
+
+    <view wx:if="{{delivery.stopsAheadText || delivery.distanceText || delivery.locationUpdatedText}}" class="delivery-progress-row">
+      <text class="progress-stops">{{delivery.stopsAheadText}}</text>
+      <text class="progress-distance">{{delivery.distanceText}}</text>
+    </view>
+
+    <!-- 送达凭证：放门口的单，顾客最关心「到底放哪了」。服务端只在真正送达后才返回 -->
+    <view wx:if="{{delivery.deliveryPhotos.length}}" class="delivery-photos">
+      <text class="delivery-photos-title">送达凭证</text>
+      <view class="delivery-photos-grid">
+        <image
+          wx:for="{{delivery.deliveryPhotos}}"
+          wx:key="*this"
+          class="delivery-photo"
+          src="{{item}}"
+          mode="aspectFill"
+          data-url="{{item}}"
+          catchtap="handlePreviewDeliveryPhoto"
+        />
+      </view>
+    </view>
+
+    <view wx:if="{{delivery.hasRider}}" class="rider-card">
+      <image class="rider-avatar" src="{{delivery.rider.avatarUrl}}" mode="aspectFill" />
+      <view class="rider-info">
+        <view class="rider-name-row">
+          <text class="rider-name">{{delivery.rider.name}}</text>
+          <view wx:if="{{delivery.rider.ratingText}}" class="star-bar">
+            <text class="star-bar-base">★★★★★</text>
+            <text class="star-bar-fill" style="width: {{delivery.rider.starPercent}}%">★★★★★</text>
+          </view>
+          <text wx:if="{{delivery.rider.ratingText}}" class="rider-score">{{delivery.rider.ratingText}}</text>
+        </view>
+        <text class="rider-vehicle">{{delivery.rider.vehicleText}}</text>
+      </view>
+      <view wx:if="{{delivery.rider.callNumber}}" class="rider-call" catchtap="handleCallRider">联系骑手</view>
+    </view>
+
+    <view class="delivery-timeline">
+      <view
+        wx:for="{{delivery.timeline}}"
+        wx:key="code"
+        class="timeline-node {{item.done ? 'is-done' : ''}}"
+      >
+        <view class="node-rail">
+          <view class="node-dot"></view>
+          <view wx:if="{{delivery.timeline.length - 1 > index}}" class="node-line"></view>
+        </view>
+        <view class="node-body">
+          <text class="node-label">{{item.label}}</text>
+          <text wx:if="{{item.timeText}}" class="node-time">{{item.timeText}}</text>
+        </view>
+      </view>
+    </view>
+
+    <view
+      wx:if="{{canSubscribe}}"
+      class="delivery-subscribe {{delivery.subscribed ? 'is-on' : ''}}"
+      catchtap="handleSubscribeDelivery"
+    >
+      {{delivery.subscribed ? '已开启送达提醒' : (subscribing ? '正在开启提醒…' : '送达时提醒我')}}
+    </view>
+  </view>
+
+  <view wx:if="{{delivery.available && (canRate || delivery.rating.rated)}}" class="card rating-card">
+    <view class="card-head">
+      <image class="card-icon" src="/assets/icons/status-completed.svg" mode="aspectFit" />
+      <text class="card-title">配送评价</text>
+    </view>
+    <block wx:if="{{delivery.rating.rated}}">
+      <view class="rating-result-row">
+        <view class="star-bar">
+          <text class="star-bar-base">★★★★★</text>
+          <text class="star-bar-fill" style="width: {{delivery.rating.star * 20}}%">★★★★★</text>
+        </view>
+        <text class="rating-score">{{delivery.rating.star}} 星</text>
+      </view>
+      <view wx:if="{{delivery.rating.tags.length}}" class="rating-result-tags">
+        <text wx:for="{{delivery.rating.tags}}" wx:key="*this" class="rating-result-tag">{{item}}</text>
+      </view>
+      <text wx:if="{{delivery.rating.comment}}" class="rating-result-comment">{{delivery.rating.comment}}</text>
+      <text class="rating-done-tip">本单已评价，感谢你的反馈</text>
+    </block>
+    <block wx:else>
+      <text class="rating-entry-desc">本单已送达，给骑手的服务打个分吧</text>
+      <view class="rating-entry-btn" catchtap="openRatingSheet">去评价</view>
+    </block>
+  </view>
+
+  <view class="card address-card">
+    <view class="card-head">
+      <image class="card-icon" src="/assets/icons/location-green.svg" mode="aspectFit" />
+      <text class="card-title">配送地址</text>
+    </view>
+    <view class="address-main">
+      <text class="address-detail">{{address.detail}}</text>
+      <view class="address-contact-row">
+        <text class="address-name">{{address.name}}</text>
+        <text class="address-phone">{{address.phone}}</text>
+      </view>
+      <view wx:if="{{deliverySlotText}}" class="delivery-slot-pill">
+        <text class="slot-label">期望送达时间</text>
+        <text class="slot-value">{{deliverySlotText}}</text>
+      </view>
+    </view>
   </view>
 
   <view wx:if="{{refundRecords.length}}" class="card refund-history">
@@ -43,39 +217,66 @@
     </view>
   </view>
 
-  <view class="card">
-    <text class="module-title">商品明细</text>
+  <view class="card goods-card">
+    <view class="store-bar">
+      <view class="store-info">
+        <text class="store-name">禹邻优鲜门店</text>
+        <text class="store-tag">自营直送</text>
+      </view>
+    </view>
     <view wx:for="{{items}}" wx:key="id" class="goods-item">
       <image class="goods-image" src="{{item.image}}" mode="aspectFill" lazy-load="{{true}}" />
       <view class="goods-info">
         <text class="goods-name">{{item.name || item.productName}}</text>
         <text wx:if="{{item.specificationText}}" class="goods-spec">{{item.specificationText}}</text>
-        <text class="goods-spec">数量：{{item.quantity}}{{item.saleUnit}}</text>
+        <text class="goods-count">数量 x{{item.quantity}}</text>
       </view>
       <text class="goods-price">￥{{item.amountText}}</text>
     </view>
+    <view wx:for="{{gifts}}" wx:key="drawId" class="goods-item gift-item">
+      <image wx:if="{{item.imageUrl}}" class="goods-image" src="{{item.imageUrl}}" mode="aspectFill" lazy-load="{{true}}" />
+      <view wx:else class="goods-image gift-image-fallback">鲜</view>
+      <view class="goods-info">
+        <view class="gift-title-row">
+          <text class="gift-badge">鲜礼赠品</text>
+          <text class="gift-status">{{item.statusText}}</text>
+        </view>
+        <text class="goods-name">{{item.productName}}</text>
+        <text wx:if="{{item.skuName}}" class="goods-spec">{{item.skuName}}</text>
+        <text class="goods-count">数量 x{{item.quantityText}}</text>
+      </view>
+      <text class="gift-price">￥0.00</text>
+    </view>
   </view>
 
-  <view class="card">
+  <view class="card price-card">
     <view class="amount-row">
-      <text>商品总额</text>
-      <text>￥{{productAmountText}}</text>
+      <text class="amount-label">商品总额</text>
+      <text class="amount-value">￥{{productAmountText}}</text>
     </view>
     <view class="amount-row">
-      <text>配送费</text>
-      <text>￥{{deliveryFeeText}}</text>
+      <text class="amount-label">配送费</text>
+      <text class="amount-value">￥{{deliveryFeeText}}</text>
     </view>
     <view class="amount-row">
-      <text>包装费</text>
-      <text>￥{{packageFeeText}}</text>
+      <text class="amount-label">包装费</text>
+      <text class="amount-value">￥{{packageFeeText}}</text>
+    </view>
+    <view wx:if="{{hasLotteryDiscount}}" class="amount-row">
+      <text class="amount-label">分享抽奖减免</text>
+      <text class="amount-value lottery-discount-color">-￥{{lotteryDiscountText}}</text>
     </view>
     <view wx:if="{{hasRefundedAmount}}" class="amount-row">
-      <text>已退款</text>
-      <text>-￥{{refundedText}}</text>
+      <text class="amount-label">已退款</text>
+      <text class="amount-value refund-color">-￥{{refundedText}}</text>
     </view>
-    <view class="amount-row strong">
-      <text>实付款</text>
-      <text>￥{{payableText}}</text>
+    <view class="amount-divider"></view>
+    <view class="amount-row strong-row">
+      <text class="total-pay-label">实付款</text>
+      <view class="total-pay-val">
+        <text class="pay-symbol">￥</text>
+        <text class="pay-num">{{payableText}}</text>
+      </view>
     </view>
   </view>
 
@@ -83,9 +284,146 @@
     <text>{{paymentNotice}}</text>
   </view>
 
-  <view class="detail-actions">
-    <button wx:if="{{isPendingPayment}}" class="primary-button detail-action-button" disabled="{{paying}}" bindtap="handlePay">{{paying ? '支付处理中' : '继续支付'}}</button>
-    <button class="ghost-button detail-action-button" bindtap="handleService">联系客服</button>
-    <button wx:if="{{!isPendingPayment}}" class="primary-button detail-action-button" bindtap="handleRefund">申请退款</button>
+  <view wx:if="{{isPendingPayment}}" class="payment-route-card card" bindtap="handlePay">
+    <image
+      class="payment-route-icon"
+      src="{{paymentMethod === 'FRIEND' ? '/assets/payment/friend-pay.png' : '/assets/payment/wechat-pay.png'}}"
+      mode="aspectFit"
+    />
+    <view class="payment-route-copy">
+      <text class="payment-route-eyebrow">当前付款方式</text>
+      <text class="payment-route-title">{{paymentMethod === 'FRIEND' ? '好友代付' : '微信支付'}}</text>
+      <text class="payment-route-desc">仅此入口可付款，切换后原入口立即失效</text>
+    </view>
+    <view class="payment-route-change">更改</view>
   </view>
+
+  <!-- 鲜礼入口：转盘只在用户主动点击后打开，避免每次进详情都被弹层拦住 -->
+  <view
+    wx:if="{{isPendingPayment && lotteryEntry}}"
+    class="lottery-entry-card card {{lotteryEntryBusy ? 'is-busy' : ''}}"
+    bindtap="handleLotteryEntry"
+  >
+    <view class="lottery-entry-badge">签</view>
+    <view class="lottery-entry-copy">
+      <text class="lottery-entry-title">{{lotteryEntry.title}}</text>
+      <text class="lottery-entry-desc">{{lotteryEntry.desc}}</text>
+    </view>
+    <view class="lottery-entry-action">{{lotteryEntryBusy ? '读取中…' : lotteryEntry.actionText}}</view>
+  </view>
+
+  <view class="detail-actions">
+    <view wx:if="{{canCancel}}" class="action-btn btn-cancel {{cancelling || paying ? 'is-disabled' : ''}}" catchtap="handleCancelOrder">
+      <text>{{cancelling ? '取消中' : '取消订单'}}</text>
+    </view>
+    <button class="action-btn btn-service" bindtap="handleService">联系客服</button>
+    <button wx:if="{{canRefund}}" class="action-btn btn-ghost" bindtap="handleRefund">申请退款</button>
+    <button wx:if="{{canRestartPayment}}" class="action-btn btn-primary" disabled="{{restarting || paying}}" bindtap="handleRestartPayment">{{restarting ? '重启中' : '重启支付'}}</button>
+    <button wx:if="{{isPendingPayment}}" class="action-btn btn-primary" disabled="{{paying}}" bindtap="handlePay">{{paying ? '支付处理中' : '继续支付'}}</button>
+  </view>
+
+  <view wx:if="{{showPaymentMethodModal}}" class="payment-method-mask" catchtap="closePaymentMethodModal">
+    <view class="payment-method-sheet" catchtap="stopPaymentMethodModalTap">
+      <view class="sheet-handle"></view>
+      <view class="payment-sheet-head">
+        <view>
+          <text class="payment-sheet-title">选择支付方式</text>
+          <text class="payment-sheet-subtitle">随时更改，但同一时间只能保留一种付款方式</text>
+        </view>
+        <view class="sheet-close" catchtap="closePaymentMethodModal">×</view>
+      </view>
+
+      <view class="payment-lock-tip">
+        <view class="lock-dot"></view>
+        <text>切换后，原付款入口会立即失效，避免重复付款</text>
+      </view>
+
+      <view wx:if="{{paymentMethodLoading}}" class="payment-method-loading">正在读取当前支付方式…</view>
+      <view wx:else class="payment-method-list">
+        <view
+          wx:for="{{paymentMethods}}"
+          wx:key="code"
+          class="payment-method-option {{selectedPaymentMethod === item.code ? 'is-selected' : ''}}"
+          data-method="{{item.code}}"
+          catchtap="handleSelectPaymentMethod"
+        >
+          <image class="payment-method-icon" src="{{item.icon}}" mode="aspectFit" />
+          <view class="payment-method-copy">
+            <view class="payment-method-title-row">
+              <text class="payment-method-title">{{item.title}}</text>
+              <text wx:if="{{item.code === 'WECHAT' && paymentMethod !== 'WECHAT'}}" class="default-badge">默认</text>
+              <text wx:if="{{paymentMethod === item.code}}" class="current-badge">当前</text>
+            </view>
+            <text class="payment-method-desc">{{item.desc}}</text>
+          </view>
+          <view class="payment-method-radio {{selectedPaymentMethod === item.code ? 'is-checked' : ''}}">
+            <view wx:if="{{selectedPaymentMethod === item.code}}" class="radio-core"></view>
+          </view>
+        </view>
+      </view>
+
+      <button
+        class="payment-method-confirm {{paymentMethodLoading || paymentMethodSubmitting ? 'is-disabled' : ''}}"
+        disabled="{{paymentMethodLoading || paymentMethodSubmitting}}"
+        catchtap="confirmPaymentMethod"
+      >{{paymentMethodSubmitting ? '正在切换…' : (selectedPaymentMethod === 'FRIEND' ? '生成链接并邀请好友' : '使用微信支付')}}</button>
+      <text class="payment-method-footnote">支付结果以微信支付回调为准，成功后所有其他入口自动关闭</text>
+    </view>
+  </view>
+
+  <view wx:if="{{showRatingSheet}}" class="rating-mask" catchtap="closeRatingSheet">
+    <view class="rating-sheet" catchtap="stopRatingSheetTap">
+      <view class="sheet-handle"></view>
+      <text class="rating-sheet-title">评价本次配送</text>
+      <text class="rating-sheet-subtitle">评价只用于骑手服务分，不会展示给其他顾客</text>
+
+      <view class="rating-star-row">
+        <text
+          wx:for="{{ratingStars}}"
+          wx:key="*this"
+          class="rating-star {{ratingStar >= item ? 'is-on' : ''}}"
+          data-star="{{item}}"
+          catchtap="handleRatingStar"
+        >★</text>
+      </view>
+
+      <view class="rating-tag-list">
+        <view
+          wx:for="{{ratingTagList}}"
+          wx:key="tag"
+          class="rating-tag {{item.selected ? 'is-selected' : ''}}"
+          data-tag="{{item.tag}}"
+          catchtap="handleRatingTag"
+        >{{item.tag}}</view>
+      </view>
+
+      <textarea
+        class="rating-comment"
+        value="{{ratingComment}}"
+        placeholder="说说本次配送体验（选填）"
+        placeholder-class="rating-comment-placeholder"
+        maxlength="60"
+        fixed="{{true}}"
+        bindinput="handleRatingComment"
+      ></textarea>
+
+      <button
+        class="rating-submit {{ratingSubmitting ? 'is-disabled' : ''}}"
+        disabled="{{ratingSubmitting}}"
+        catchtap="confirmRating"
+      >{{ratingSubmitting ? '提交中…' : '提交评价'}}</button>
+    </view>
+  </view>
+
+  <view wx:if="{{showCancelModal}}" class="cancel-modal-mask" catchtap="closeCancelModal">
+    <view class="cancel-modal" catchtap="stopCancelModalTap">
+      <text class="cancel-modal-title">取消订单</text>
+      <text class="cancel-modal-desc">取消后，是否将本单商品放回购物车？</text>
+      <view class="cancel-modal-actions">
+        <view class="cancel-choice cancel-discard" data-return-to-cart="false" catchtap="handleCancelChoice">不要了</view>
+        <view class="cancel-choice cancel-return" data-return-to-cart="true" catchtap="handleCancelChoice">放回购物车</view>
+      </view>
+    </view>
+  </view>
+
 </view>

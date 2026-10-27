@@ -1,0 +1,26 @@
+plugins {
+    alias(libs.plugins.android.library)
+    alias(libs.plugins.kotlin.android)
+}
+
+android {
+    namespace = "com.yulin.rider.core.common"
+    compileSdk = 36
+    defaultConfig { minSdk = 26 }
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    // 只为携带 kotlinx-coroutines-android:core/common 的调度器与轮询扩展需要它
+    api(libs.androidx.lifecycle.runtime.ktx)
+    implementation(libs.androidx.core.ktx)
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+    }
+}

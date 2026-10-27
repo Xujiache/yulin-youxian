@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 13+ 主题图标层:只取形状,系统自己着色,所以整块画成不透明单色即可 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="5"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"
+        android:pathData="M43,47 A11,11 0 0 1 65,47" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:fillType="evenOdd"
+        android:pathData="M36,47 h36 a7,7 0 0 1 7,7 v24 a7,7 0 0 1 -7,7 h-36 a7,7 0 0 1 -7,-7 v-24 a7,7 0 0 1 7,-7 z M45,74 C45,64 52,58 63,58 C63,68 56,74 45,74 z" />
+</vector>

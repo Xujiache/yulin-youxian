@@ -28,6 +28,7 @@
 	</scm>
 	<properties>
 		<java.version>17</java.version>
+		<build.dir>${project.basedir}/target</build.dir>
 	</properties>
 	<dependencies>
 		<dependency>
@@ -51,6 +52,12 @@
 			<artifactId>mysql-connector-j</artifactId>
 			<scope>runtime</scope>
 		</dependency>
+		<!-- Spring Boot 4 拆分了 autoconfigure：Flyway 的自动配置已移出 spring-boot-autoconfigure，
+		     必须显式引入本 starter，否则 spring.flyway.* 全部失效且迁移静默不执行 -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-flyway</artifactId>
+		</dependency>
 		<dependency>
 			<groupId>org.flywaydb</groupId>
 			<artifactId>flyway-core</artifactId>
@@ -63,6 +70,21 @@
 		<dependency>
 			<groupId>com.fasterxml.jackson.core</groupId>
 			<artifactId>jackson-databind</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.security</groupId>
+			<artifactId>spring-security-crypto</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>net.dongliu</groupId>
+			<artifactId>apk-parser</artifactId>
+			<version>2.6.10</version>
+		</dependency>
+		<!-- 生成后台列表使用的 WebP 缩略图；jar 内含 Linux x86_64 JNI 库。 -->
+		<dependency>
+			<groupId>com.github.usefulness</groupId>
+			<artifactId>webp-imageio</artifactId>
+			<version>0.11.0</version>
 		</dependency>
 
 		<dependency>
@@ -93,6 +115,7 @@
 	</dependencies>
 
 	<build>
+		<directory>${build.dir}</directory>
 		<plugins>
 			<plugin>
 				<groupId>org.springframework.boot</groupId>

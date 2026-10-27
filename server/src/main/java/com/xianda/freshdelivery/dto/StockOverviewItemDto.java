@@ -11,6 +11,7 @@ public record StockOverviewItemDto(
         BigDecimal quantity,
         Integer orderCount,
         Integer amount,
-        List<String> orderNos
+        List<String> orderNos,
+        List<StockOverviewSpecItemDto> specDetails
 ) {
 }

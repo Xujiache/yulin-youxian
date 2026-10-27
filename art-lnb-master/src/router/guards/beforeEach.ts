@@ -41,7 +41,7 @@ import NProgress from 'nprogress'
 import { useSettingStore } from '@/store/modules/setting'
 import { useUserStore } from '@/store/modules/user'
 import { useMenuStore } from '@/store/modules/menu'
-import { setWorktab } from '@/utils/navigation'
+import { setWorktab, unwrapLayoutMenu } from '@/utils/navigation'
 import { setPageTitle } from '@/utils/router'
 import { RoutesAlias } from '../routesAlias'
 import { staticRoutes } from '../routes/staticRoutes'
@@ -265,6 +265,7 @@ async function handleDynamicRoutes(
 
     // 2. 获取菜单数据
     const menuList = await menuProcessor.getMenuList()
+    const displayMenu = unwrapLayoutMenu(menuList)
 
     // 3. 验证菜单数据
     if (!menuProcessor.validateMenuList(menuList)) {
@@ -276,7 +277,7 @@ async function handleDynamicRoutes(
 
     // 5. 保存菜单数据到 store
     const menuStore = useMenuStore()
-    menuStore.setMenuList(menuList)
+    menuStore.setMenuList(displayMenu)
     menuStore.addRemoveRouteFns(routeRegistry?.getRemoveRouteFns() || [])
 
     // 6. 保存 iframe 路由

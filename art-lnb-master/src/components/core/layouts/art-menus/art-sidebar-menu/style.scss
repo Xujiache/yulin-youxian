@@ -9,15 +9,19 @@
     border-right: none !important;
   }
 
-  // 自定义滚动条宽度
+  // 自定义滚动条宽度和样式
   :deep(.el-scrollbar__bar.is-vertical) {
-    width: 4px;
+    width: 6px;
   }
 
   :deep(.el-scrollbar__thumb) {
-    right: -2px;
-    background-color: #ccc;
-    border-radius: 2px;
+    background-color: rgb(0 0 0 / 20%);
+    border-radius: 3px;
+    transition: background-color 0.2s;
+
+    &:hover {
+      background-color: rgb(0 0 0 / 35%);
+    }
   }
 
   .dual-menu-left {
@@ -170,17 +174,9 @@
 
   .el-menu {
     box-sizing: border-box;
-    height: calc(100vh - 60px);
-    overflow-y: auto;
-    // 防止菜单内的滚动影响整个页面滚动
+    // 不设固定高度和 overflow，让外层 ElScrollbar 统一管理滚动
     overscroll-behavior: contain;
     border-right: 0;
-    scrollbar-width: none;
-    -ms-scroll-chaining: contain;
-
-    &::-webkit-scrollbar {
-      width: 0 !important;
-    }
   }
 
   .menu-model {
@@ -243,7 +239,11 @@
     border-right: 1px solid rgb(255 255 255 / 13%);
 
     :deep(.el-scrollbar__thumb) {
-      background-color: #777;
+      background-color: rgb(255 255 255 / 25%);
+
+      &:hover {
+        background-color: rgb(255 255 255 / 40%);
+      }
     }
 
     .dual-menu-left {

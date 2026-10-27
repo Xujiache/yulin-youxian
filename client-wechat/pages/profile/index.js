@@ -4,6 +4,7 @@ const { getHome } = require("../../api/catalog");
 const { requireCompleteProfile, requireLogin } = require("../../utils/auth-guard");
 const { cachedAssetUrl, cacheImage } = require("../../utils/image-cache");
 const { syncTheme } = require("../../utils/theme");
+const { enableShareMenus, storeShare, timelineShare } = require("../../utils/share");
 
 const DEFAULT_AVATAR_PATH = "/assets/products/avatar.png";
 const PROFILE_HERO_BG_PATH = "/assets/products/profile-hero-bg.jpg";
@@ -24,6 +25,11 @@ function buildOrderActions(stats) {
     ...item,
     count: Number((source[index] && source[index].count) || 0)
   }));
+}
+
+function isAuthenticationFailure(error) {
+  const code = Number(error && (error.statusCode || error.code));
+  return Boolean(error && error.loginRequired) || code === 401;
 }
 
 Page({
@@ -55,7 +61,20 @@ Page({
     ]
   },
 
+  onLoad() {
+    enableShareMenus();
+  },
+
+  onShareAppMessage() {
+    return storeShare(this.data.storeName);
+  },
+
+  onShareTimeline() {
+    return timelineShare(storeShare(this.data.storeName));
+  },
+
   onShow() {
+    enableShareMenus();
     syncTheme(this);
     this.refreshStaticAssets();
     this.loadStoreInfo();
@@ -126,18 +145,35 @@ Page({
         isLoggedIn: true,
         orderActions: buildOrderActions(profile.orderStats)
       });
-    } catch {
-      if (app.clearLogin) {
-        app.clearLogin();
+    } catch (error) {
+      if (isAuthenticationFailure(error)) {
+        if (app.clearLogin) {
+          app.clearLogin();
+        }
+        this.setData({
+          loading: false,
+          avatarUrl: DEFAULT_AVATAR,
+          displayName: "未登录用户",
+          accountId: "",
+          profileTip: "登录后可同步订单、地址和售后进度",
+          isLoggedIn: false,
+          orderActions: buildOrderActions()
+        });
+        return;
       }
+      const fallbackProfile = cachedProfile.nickName || cachedProfile.avatarUrl
+        ? cachedProfile
+        : (app.globalData.user || {});
       this.setData({
         loading: false,
-        avatarUrl: DEFAULT_AVATAR,
-        displayName: "未登录用户",
-        accountId: "",
-        profileTip: "登录后可同步订单、地址和售后进度",
-        isLoggedIn: false,
-        orderActions: buildOrderActions()
+        avatarUrl: fallbackProfile.avatarUrl || this.data.avatarUrl || DEFAULT_AVATAR,
+        displayName: fallbackProfile.nickName || this.data.displayName || "微信用户",
+        accountId: fallbackProfile.userId || this.data.accountId || "",
+        profileTip: "网络暂不可用，当前显示上次保存的资料",
+        isLoggedIn: true,
+        orderActions: fallbackProfile.orderStats
+          ? buildOrderActions(fallbackProfile.orderStats)
+          : this.data.orderActions
       });
     }
   },

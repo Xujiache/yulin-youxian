@@ -1,0 +1,24 @@
+<view class="wheel-stage">
+  <view class="wheel-pointer {{spinning ? 'is-wobbling' : ''}}"></view>
+  <view
+    class="wheel-disc {{spinning ? 'is-spinning' : ''}} {{winnerIndex >= 0 && !spinning ? 'has-winner winner-' + winnerIndex : ''}}"
+    style="transform: rotate({{wheelRotation}}deg); transition: {{wheelTransition}};"
+    bindtransitionend="handleTransitionEnd"
+  >
+    <view class="wheel-rim"></view>
+    <view class="wheel-sectors"></view>
+    <view
+      wx:for="{{displayPrizes}}"
+      wx:key="slot"
+      class="wheel-label tone-{{item.tone}} {{winnerIndex === index && !spinning ? 'is-winner' : ''}}"
+      style="{{item.labelStyle}}"
+    >
+      <text class="prize-name">{{item.label}}</text>
+    </view>
+    <view class="wheel-hub">
+      <text class="hub-mark">鲜</text>
+      <text class="hub-caption">开签</text>
+    </view>
+  </view>
+  <view class="wheel-shadow"></view>
+</view>

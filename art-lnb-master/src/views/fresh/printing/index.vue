@@ -3,11 +3,15 @@
     <div class="fresh-page__head">
       <div>
         <h1 class="fresh-page__title">小票打印</h1>
-        <p class="fresh-page__desc">支付成功后由门店 Windows 打印代理自动输出芯烨 XP-58 系列小票。</p>
+        <p class="fresh-page__desc"
+          >支付成功后由门店 Windows 打印代理自动输出芯烨 XP-58 系列小票。</p
+        >
       </div>
       <div class="page-actions">
         <ElButton :loading="loading" @click="loadAll">刷新状态</ElButton>
-        <ElButton type="primary" :disabled="!form.enabled" :loading="testing" @click="createTest">测试打印</ElButton>
+        <ElButton type="primary" :disabled="!form.enabled" :loading="testing" @click="createTest"
+          >测试打印</ElButton
+        >
       </div>
     </div>
 
@@ -26,7 +30,11 @@
           <strong :class="config.agentOnline ? 'is-success' : 'is-warning'">
             {{ config.agentOnline ? '在线' : '离线' }}
           </strong>
-          <small>{{ config.agentOnline ? `${config.agentName || 'Windows 代理'} · ${config.agentConnection}` : '请在门店电脑启动打印代理' }}</small>
+          <small>{{
+            config.agentOnline
+              ? `${config.agentName || 'Windows 代理'} · ${config.agentConnection}`
+              : '请在门店电脑启动打印代理'
+          }}</small>
         </ElCard>
         <ElCard shadow="never" class="status-card">
           <span>待处理任务</span>
@@ -51,7 +59,12 @@
             <span class="form-tip">关闭后不再创建新订单小票，打印代理也会暂停领取任务。</span>
           </ElFormItem>
           <ElFormItem label="支付成功自动打印">
-            <ElSwitch v-model="form.autoPrintOnPaid" :disabled="!form.enabled" active-text="开启" inactive-text="关闭" />
+            <ElSwitch
+              v-model="form.autoPrintOnPaid"
+              :disabled="!form.enabled"
+              active-text="开启"
+              inactive-text="关闭"
+            />
           </ElFormItem>
           <ElFormItem label="失败重试次数">
             <ElInputNumber v-model="form.retryLimit" :min="1" :max="10" :disabled="!form.enabled" />
@@ -68,9 +81,14 @@
           <div class="agent-setup__head">
             <div>
               <strong>门店 Windows 打印代理</strong>
-              <p>代理使用已导入的芯烨 Windows SDK，在门店内网直接连接打印机；任务通过 HTTPS 传输，服务器仅保存代理密钥哈希。</p>
+              <p
+                >代理使用已导入的芯烨 Windows SDK，在门店内网直接连接打印机；任务通过 HTTPS
+                传输，服务器仅保存代理密钥哈希。</p
+              >
             </div>
-            <ElButton type="primary" plain :loading="generatingKey" @click="generateKey">生成代理密钥</ElButton>
+            <ElButton type="primary" plain :loading="generatingKey" @click="generateKey"
+              >生成代理密钥</ElButton
+            >
           </div>
           <ElAlert
             v-if="accessKey"
@@ -85,9 +103,26 @@
             </div>
           </ElAlert>
           <div class="agent-guide">
-            <div><b>1</b><span>下载或复制 <code>print-agent/release</code> 整个目录到门店 Windows 电脑。</span></div>
-            <div><b>2</b><span>双击 <code>setup-agent.cmd</code>，填写 API 地址、代理密钥以及 Wi-Fi IP 或 USB 设备路径。</span></div>
-            <div><b>3</b><span>执行 <code>YulinPrintAgent.exe self-test</code> 确认硬件后，双击 <code>install-autostart.cmd</code> 设置门店电脑登录后自动启动。</span></div>
+            <div
+              ><b>1</b
+              ><span
+                >下载或复制 <code>print-agent/release</code> 整个目录到门店 Windows 电脑。</span
+              ></div
+            >
+            <div
+              ><b>2</b
+              ><span
+                >双击 <code>setup-agent.cmd</code>，填写 API 地址、代理密钥以及 Wi-Fi IP 或 USB
+                设备路径。</span
+              ></div
+            >
+            <div
+              ><b>3</b
+              ><span
+                >执行 <code>YulinPrintAgent.exe self-test</code> 确认硬件后，双击
+                <code>install-autostart.cmd</code> 设置门店电脑登录后自动启动。</span
+              ></div
+            >
           </div>
         </div>
       </ElCard>
@@ -99,7 +134,9 @@
               <strong>打印任务</strong>
               <span>保留最近 200 条记录；失败任务可重新排队并由代理再次输出。</span>
             </div>
-            <ElTag :type="config.agentOnline ? 'success' : 'warning'">{{ config.agentOnline ? '代理在线' : '代理离线' }}</ElTag>
+            <ElTag :type="config.agentOnline ? 'success' : 'warning'">{{
+              config.agentOnline ? '代理在线' : '代理离线'
+            }}</ElTag>
           </div>
         </template>
         <ElTable :data="jobs" v-loading="loading" empty-text="暂无打印任务">
@@ -127,7 +164,14 @@
           </ElTableColumn>
           <ElTableColumn label="操作" width="120" fixed="right">
             <template #default="{ row }">
-              <ElButton size="small" plain :disabled="row.status === 'PRINTING'" :loading="retryingId === row.id" @click="retryJob(row)">补打</ElButton>
+              <ElButton
+                size="small"
+                plain
+                :disabled="row.status === 'PRINTING'"
+                :loading="retryingId === row.id"
+                @click="retryJob(row)"
+                >补打</ElButton
+              >
             </template>
           </ElTableColumn>
         </ElTable>
@@ -218,7 +262,9 @@
 
   const generateKey = async () => {
     try {
-      await ElMessageBox.confirm('重新生成后，旧代理将无法继续连接。是否继续？', '生成代理密钥', { type: 'warning' })
+      await ElMessageBox.confirm('重新生成后，旧代理将无法继续连接。是否继续？', '生成代理密钥', {
+        type: 'warning'
+      })
       generatingKey.value = true
       const result = await regeneratePrinterAccessKey()
       accessKey.value = result.accessKey
@@ -268,21 +314,23 @@
     }
   }
 
-  const statusLabel = (status: string) => ({
-    PENDING: '待打印',
-    PRINTING: '打印中',
-    RETRYING: '重试中',
-    SUCCESS: '已完成',
-    FAILED: '已失败'
-  })[status] || status
+  const statusLabel = (status: string) =>
+    ({
+      PENDING: '待打印',
+      PRINTING: '打印中',
+      RETRYING: '重试中',
+      SUCCESS: '已完成',
+      FAILED: '已失败'
+    })[status] || status
 
-  const statusType = (status: string) => ({
-    PENDING: 'info',
-    PRINTING: 'warning',
-    RETRYING: 'warning',
-    SUCCESS: 'success',
-    FAILED: 'danger'
-  })[status] as 'success' | 'warning' | 'info' | 'danger' | undefined
+  const statusType = (status: string) =>
+    ({
+      PENDING: 'info',
+      PRINTING: 'warning',
+      RETRYING: 'warning',
+      SUCCESS: 'success',
+      FAILED: 'danger'
+    })[status] as 'success' | 'warning' | 'info' | 'danger' | undefined
 
   let timer: number | undefined
   onMounted(() => {

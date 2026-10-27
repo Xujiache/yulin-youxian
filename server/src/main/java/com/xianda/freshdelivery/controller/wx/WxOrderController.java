@@ -3,13 +3,17 @@ package com.xianda.freshdelivery.controller.wx;
 import com.xianda.freshdelivery.common.ApiResponse;
 import com.xianda.freshdelivery.common.BusinessException;
 import com.xianda.freshdelivery.dto.CreateOrderRequest;
+import com.xianda.freshdelivery.dto.CancelOrderRequest;
 import com.xianda.freshdelivery.dto.OrderDetailDto;
 import com.xianda.freshdelivery.dto.OrderDto;
 import com.xianda.freshdelivery.dto.OrderPreviewDto;
 import com.xianda.freshdelivery.dto.OrderPreviewRequest;
 import com.xianda.freshdelivery.dto.PaymentDto;
+import com.xianda.freshdelivery.dto.PaymentMethodDto;
+import com.xianda.freshdelivery.dto.PaymentShareDto;
 import com.xianda.freshdelivery.dto.RefundDto;
 import com.xianda.freshdelivery.dto.RefundRequest;
+import com.xianda.freshdelivery.dto.RestartOrderRequest;
 import com.xianda.freshdelivery.service.StorefrontService;
 import com.xianda.freshdelivery.service.WechatPaymentService;
 import jakarta.validation.Valid;
@@ -22,10 +26,12 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -61,18 +67,65 @@ public class WxOrderController {
     }
 
     @PostMapping("/orders")
-    public ApiResponse<OrderDetailDto> create(@Valid @RequestBody CreateOrderRequest request) {
-        return ApiResponse.ok(storefrontService.createOrder(request));
+    public ResponseEntity<ApiResponse<OrderDetailDto>> create(
+            @Valid @RequestBody CreateOrderRequest request,
+            @RequestHeader(value = "Idempotency-Key", required = false) String headerIdempotencyKey
+    ) {
+        String bodyIdempotencyKey = request.idempotencyKey();
+        if (hasText(headerIdempotencyKey)
+                && hasText(bodyIdempotencyKey)
+                && !headerIdempotencyKey.trim().equals(bodyIdempotencyKey.trim())) {
+            throw new BusinessException(400, "请求头与请求体中的订单幂等键不一致");
+        }
+        String requestedKey = hasText(headerIdempotencyKey) ? headerIdempotencyKey : bodyIdempotencyKey;
+        StorefrontService.OrderCreationResult result = storefrontService.createOrderIdempotently(
+                request.withIdempotencyKey(requestedKey)
+        );
+        return ResponseEntity.ok()
+                .header("Idempotency-Key", result.idempotencyKey())
+                .body(ApiResponse.ok(result.order()));
     }
 
     @PostMapping("/orders/{id}/cancel")
-    public ApiResponse<OrderDetailDto> cancel(@PathVariable Long id) {
-        return ApiResponse.ok(storefrontService.cancelOrder(id));
+    public ApiResponse<OrderDetailDto> cancel(
+            @PathVariable Long id,
+            @RequestBody(required = false) CancelOrderRequest request
+    ) {
+        return ApiResponse.ok(wechatPaymentService.cancelOrder(
+                id,
+                request != null && request.shouldReturnToCart()
+        ));
+    }
+
+    @PostMapping("/orders/{id}/restart")
+    public ApiResponse<OrderDetailDto> restart(
+            @PathVariable Long id,
+            @RequestBody(required = false) RestartOrderRequest request
+    ) {
+        return ApiResponse.ok(storefrontService.restartOrder(
+                id,
+                request == null ? null : request.deliverySlotId()
+        ));
     }
 
     @PostMapping("/orders/{id}/pay")
     public ApiResponse<PaymentDto> pay(@PathVariable Long id) {
         return ApiResponse.ok(wechatPaymentService.createPayment(id));
+    }
+
+    @GetMapping("/orders/{id}/payment-method")
+    public ApiResponse<PaymentMethodDto> paymentMethod(@PathVariable Long id) {
+        return ApiResponse.ok(storefrontService.paymentMethod(id));
+    }
+
+    @PostMapping("/orders/{id}/payment-method/wechat")
+    public ApiResponse<PaymentDto> changeToWechatPayment(@PathVariable Long id) {
+        return ApiResponse.ok(wechatPaymentService.changeToSelfPayment(id));
+    }
+
+    @PostMapping("/orders/{id}/payment-share")
+    public ApiResponse<PaymentShareDto> createPaymentShare(@PathVariable Long id) {
+        return ApiResponse.ok(wechatPaymentService.createPaymentShare(id));
     }
 
     @PostMapping("/orders/{id}/payment-status")
@@ -125,5 +178,9 @@ public class WxOrderController {
             return "";
         }
         return filename.substring(dotIndex).toLowerCase(Locale.ROOT);
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
     }
 }

@@ -2,6 +2,7 @@ package com.xianda.freshdelivery;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -43,7 +44,7 @@ class MysqlStateStoreTests {
                     updated_at TIMESTAMP(6) NOT NULL
                 )
                 """);
-        this.stateStore = new MysqlStateStore(jdbcTemplate, true, true);
+        this.stateStore = new MysqlStateStore(jdbcTemplate, true);
     }
 
     @Test
@@ -114,15 +115,37 @@ class MysqlStateStoreTests {
 
         assertThrows(IllegalStateException.class, () -> stateStore.load("storefront", legacyPath));
         assertEquals(0, jdbcTemplate.queryForObject("SELECT COUNT(*) FROM application_state", Integer.class));
+        assertFalse(Files.exists(tempDir.resolve("storefront-state.json.pre-mysql.bak")));
     }
 
     @Test
-    void rejectsSuspiciousQuestionMarksBeforeImport() throws Exception {
+    void rejectsEscapedReplacementCharacterBeforeImport() throws Exception {
         Path legacyPath = tempDir.resolve("storefront-state.json");
-        Files.writeString(legacyPath, "{\"title\":\"??????\"}", StandardCharsets.UTF_8);
+        Files.writeString(legacyPath, "{\"name\":\"\\uFFFD\"}", StandardCharsets.UTF_8);
 
         assertThrows(IllegalStateException.class, () -> stateStore.load("storefront", legacyPath));
         assertEquals(0, jdbcTemplate.queryForObject("SELECT COUNT(*) FROM application_state", Integer.class));
+        assertFalse(Files.exists(tempDir.resolve("storefront-state.json.pre-mysql.bak")));
+    }
+
+    @Test
+    void allowsQuestionMarksDuringImportSaveAndRestart() throws Exception {
+        Path legacyPath = tempDir.resolve("storefront-state.json");
+        byte[] importedPayload = "{\"title\":\"???\",\"note\":\"配送???待确认\"}".getBytes(StandardCharsets.UTF_8);
+        byte[] updatedPayload = "{\"title\":\"商品???\",\"note\":\"正常业务文本\"}".getBytes(StandardCharsets.UTF_8);
+        Files.write(legacyPath, importedPayload);
+
+        assertArrayEquals(importedPayload, stateStore.load("storefront", legacyPath).orElseThrow());
+        stateStore.save("storefront", legacyPath, updatedPayload);
+
+        MysqlStateStore restarted = new MysqlStateStore(jdbcTemplate, true);
+        assertArrayEquals(updatedPayload, restarted.load("storefront", legacyPath).orElseThrow());
+        assertArrayEquals(updatedPayload, Files.readAllBytes(legacyPath));
+        assertEquals(2L, jdbcTemplate.queryForObject(
+                "SELECT version FROM application_state WHERE state_key = ?",
+                Long.class,
+                "storefront"
+        ));
     }
 
     private String sha256(byte[] payload) throws Exception {

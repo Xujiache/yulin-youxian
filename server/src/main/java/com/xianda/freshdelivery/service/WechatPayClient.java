@@ -16,6 +16,7 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.net.http.HttpTimeoutException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -28,7 +29,10 @@ import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
 import java.security.spec.PKCS8EncodedKeySpec;
 import java.security.spec.X509EncodedKeySpec;
+import java.time.Duration;
 import java.time.Instant;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.Base64;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
@@ -44,10 +48,15 @@ public class WechatPayClient {
     private static final String SIGN_TYPE = "RSA";
     private static final String AUTH_SCHEMA = "WECHATPAY2-SHA256-RSA2048";
     private static final long CALLBACK_MAX_AGE_SECONDS = 300;
+    private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(5);
+    private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(15);
+    private static final DateTimeFormatter RFC3339_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ssXXX");
 
     private final WechatPayProperties properties;
     private final ObjectMapper objectMapper = new ObjectMapper();
-    private final HttpClient httpClient = HttpClient.newHttpClient();
+    private final HttpClient httpClient = HttpClient.newBuilder()
+            .connectTimeout(CONNECT_TIMEOUT)
+            .build();
     private final SecureRandom secureRandom = new SecureRandom();
 
     public WechatPayClient(WechatPayProperties properties) {
@@ -78,21 +87,41 @@ public class WechatPayClient {
         return hasText(properties.getApiV3Key()) && hasVerificationMaterial();
     }
 
+    public boolean isRefundConfigured() {
+        return isPaymentConfigured() && hasText(properties.getRefundNotifyUrl());
+    }
+
     public PaymentDto createJsapiPayment(OrderDetailDto order, String openId) {
         ensurePaymentConfigured();
         if (!hasText(openId)) {
             throw new BusinessException(500, "真实微信支付需要微信 openId");
         }
 
-        JsonNode response = postJson("/v3/pay/transactions/jsapi", Map.of(
-                "appid", properties.getAppId(),
-                "mchid", properties.getMchId(),
-                "description", "禹邻优鲜订单",
-                "out_trade_no", order.orderNo(),
-                "notify_url", properties.getNotifyUrl(),
-                "amount", Map.of("total", order.payableAmount(), "currency", "CNY"),
-                "payer", Map.of("openid", openId)
-        ));
+        Map<String, Object> requestBody = new LinkedHashMap<>();
+        requestBody.put("appid", properties.getAppId());
+        requestBody.put("mchid", properties.getMchId());
+        requestBody.put("description", "禹邻优鲜订单");
+        requestBody.put("out_trade_no", paymentOrderNo(order));
+        requestBody.put("notify_url", properties.getNotifyUrl());
+        requestBody.put("amount", Map.of("total", order.payableAmount(), "currency", "CNY"));
+        requestBody.put("payer", Map.of("openid", openId));
+        if (hasText(order.paymentExpireAt())) {
+            String expireAt = order.paymentExpireAt();
+            try {
+                // Parse potentially nanosecond-precision string like 2026-08-10T20:00:00.123456789+08:00
+                ZonedDateTime zonedDateTime = ZonedDateTime.parse(expireAt);
+                requestBody.put("time_expire", zonedDateTime.format(RFC3339_FORMATTER));
+            } catch (Exception parseException) {
+                // Fallback: try to strip nanoseconds manually (e.g., trim ".xxx" before "+")
+                int dotIndex = expireAt.indexOf('.');
+                int plusIndex = expireAt.indexOf('+', dotIndex > 0 ? dotIndex : 0);
+                if (dotIndex > 0 && plusIndex > dotIndex) {
+                    expireAt = expireAt.substring(0, dotIndex) + expireAt.substring(plusIndex);
+                }
+                requestBody.put("time_expire", expireAt);
+            }
+        }
+        JsonNode response = postJson("/v3/pay/transactions/jsapi", requestBody);
         String prepayId = response.path("prepay_id").asText();
         if (!hasText(prepayId)) {
             throw new BusinessException(502, "微信支付下单未返回 prepay_id");
@@ -106,7 +135,7 @@ public class WechatPayClient {
 
     public PaymentNotifyRequest queryPayment(OrderDetailDto order) {
         ensurePaymentConfigured();
-        String path = "/v3/pay/transactions/out-trade-no/" + order.orderNo() + "?mchid=" + properties.getMchId();
+        String path = "/v3/pay/transactions/out-trade-no/" + paymentOrderNo(order) + "?mchid=" + properties.getMchId();
         JsonNode response = getJson(path);
         String tradeState = text(response, "trade_state");
         String transactionId = response.path("transaction_id").asText("");
@@ -114,7 +143,7 @@ public class WechatPayClient {
                 ? response.path("amount").path("total").asInt()
                 : null;
         return new PaymentNotifyRequest(
-                order.orderNo(),
+                paymentOrderNo(order),
                 transactionId,
                 tradeState,
                 response.path("appid").asText(properties.getAppId()),
@@ -123,10 +152,30 @@ public class WechatPayClient {
         );
     }
 
-    public void requestRefund(RefundDto refund, OrderDetailDto order) {
+    public void closePayment(OrderDetailDto order) {
+        ensurePaymentConfigured();
+        try {
+            postJson(
+                    "/v3/pay/transactions/out-trade-no/" + paymentOrderNo(order) + "/close",
+                    Map.of("mchid", properties.getMchId())
+            );
+        } catch (BusinessException exception) {
+            if (exception.getMessage() != null
+                    && (exception.getMessage().contains("ORDER_NOT_EXIST")
+                    || exception.getMessage().contains("ORDER_CLOSED"))) {
+                return;
+            }
+            throw exception;
+        }
+    }
+
+    public RefundNotifyRequest requestRefund(RefundDto refund, OrderDetailDto order) {
         ensureRefundConfigured();
         Map<String, Object> body = new LinkedHashMap<>();
-        body.put("out_trade_no", order.orderNo());
+        body.put(
+                "out_trade_no",
+                hasText(refund.paymentOrderNo()) ? refund.paymentOrderNo() : paymentOrderNo(order)
+        );
         body.put("out_refund_no", refund.refundNo());
         if (hasText(refund.reason())) {
             body.put("reason", refund.reason());
@@ -134,10 +183,23 @@ public class WechatPayClient {
         body.put("notify_url", properties.getRefundNotifyUrl());
         body.put("amount", Map.of(
                 "refund", refund.refundAmount(),
-                "total", order.payableAmount(),
+                "total", order.paidAmount() == null || order.paidAmount() <= 0
+                        ? order.payableAmount()
+                        : order.paidAmount(),
                 "currency", "CNY"
         ));
-        postJson("/v3/refund/domestic/refunds", body);
+        JsonNode response = postJson("/v3/refund/domestic/refunds", body);
+        return refundResult(response, refund.refundNo());
+    }
+
+    public RefundNotifyRequest queryRefund(RefundDto refund) {
+        ensureRefundConfigured();
+        JsonNode response = getJson("/v3/refund/domestic/refunds/" + refund.refundNo());
+        return refundResult(response, refund.refundNo());
+    }
+
+    private String paymentOrderNo(OrderDetailDto order) {
+        return hasText(order.paymentOrderNo()) ? order.paymentOrderNo() : order.orderNo();
     }
 
     public PaymentNotifyRequest parsePaymentNotify(String body, String timestamp, String nonce, String serial, String signature) {
@@ -158,9 +220,15 @@ public class WechatPayClient {
     public RefundNotifyRequest parseRefundNotify(String body, String timestamp, String nonce, String serial, String signature) {
         JsonNode payload = callbackPayload(body, timestamp, nonce, serial, signature);
         JsonNode decrypted = decryptResource(payload.path("resource"));
+        JsonNode amount = decrypted.path("amount");
         return new RefundNotifyRequest(
                 text(decrypted, "out_refund_no"),
-                text(decrypted, "refund_status")
+                text(decrypted, "refund_status"),
+                decrypted.path("out_trade_no").asText(""),
+                decrypted.path("transaction_id").asText(""),
+                integerOrNull(amount, "refund"),
+                integerOrNull(amount, "total"),
+                decrypted.path("refund_id").asText("")
         );
     }
 
@@ -253,6 +321,7 @@ public class WechatPayClient {
     private JsonNode requestJson(String method, String path, String body) {
         try {
             HttpRequest.Builder builder = HttpRequest.newBuilder(URI.create(normalizedBaseUrl() + path))
+                    .timeout(REQUEST_TIMEOUT)
                     .header("Authorization", authorization(method, path, body))
                     .header("Accept", "application/json")
                     .header("Content-Type", "application/json");
@@ -270,6 +339,8 @@ public class WechatPayClient {
             return response.body().isBlank() ? objectMapper.createObjectNode() : objectMapper.readTree(response.body());
         } catch (BusinessException exception) {
             throw exception;
+        } catch (HttpTimeoutException exception) {
+            throw new BusinessException(504, "微信支付接口请求超时");
         } catch (IOException exception) {
             throw new BusinessException(502, "微信支付接口响应解析失败");
         } catch (InterruptedException exception) {
@@ -438,6 +509,29 @@ public class WechatPayClient {
             throw new BusinessException(400, "微信支付回调缺少字段: " + field);
         }
         return value;
+    }
+
+    private RefundNotifyRequest refundResult(JsonNode response, String fallbackRefundNo) {
+        String refundNo = response.path("out_refund_no").asText(fallbackRefundNo);
+        String status = response.path("status").asText("");
+        if (!hasText(status)) {
+            throw new BusinessException(502, "微信退款接口未返回退款状态");
+        }
+        JsonNode amount = response.path("amount");
+        return new RefundNotifyRequest(
+                refundNo,
+                status,
+                response.path("out_trade_no").asText(""),
+                response.path("transaction_id").asText(""),
+                integerOrNull(amount, "refund"),
+                integerOrNull(amount, "total"),
+                response.path("refund_id").asText("")
+        );
+    }
+
+    private Integer integerOrNull(JsonNode node, String field) {
+        JsonNode value = node.path(field);
+        return value.isIntegralNumber() && value.canConvertToInt() ? value.asInt() : null;
     }
 
     private boolean hasText(String value) {

@@ -10,6 +10,7 @@ public record OrderPreviewDto(
         Integer deliveryFee,
         Integer packageFee,
         Integer payableAmount,
+        Integer minOrderAmount,
         Boolean deliveryFeeWaived,
         String deliveryFeeNotice
 ) {

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!--
+      定位采集与设备遥测所需的权限。app 的清单里已经声明过，
+      但库模块单独跑 lint 时看不到，会报 MissingPermission；这里同样声明一次，
+      合并后仍是同一组权限，不会额外向用户索权。
+    -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+</manifest>

@@ -478,7 +478,19 @@ public class PrintJobService {
                 yuan(order.deliveryFee()),
                 yuan(order.packageFee()),
                 yuan(order.payableAmount()),
-                clean(order.remark(), "无")
+                clean(order.remark(), "无"),
+                yuan(order.discountAmount()),
+                order.gifts().stream()
+                        .map(gift -> new PrintReceiptItemDto(
+                                clean(gift.productName(), "赠品")
+                                        + (gift.skuName() == null || gift.skuName().isBlank()
+                                        ? ""
+                                        : " [" + gift.skuName().trim() + "]"),
+                                clean(formatQuantity(gift.quantity(), "份"), "1份"),
+                                "¥ 0.00",
+                                "¥ 0.00"
+                        ))
+                        .toList()
         );
     }
 

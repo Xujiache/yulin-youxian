@@ -1,6 +1,8 @@
 package com.xianda.freshdelivery;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -15,17 +17,22 @@ import com.xianda.freshdelivery.dto.CreateOrderRequest;
 import com.xianda.freshdelivery.dto.DeliverySlotDto;
 import com.xianda.freshdelivery.dto.OrderDetailDto;
 import com.xianda.freshdelivery.dto.PaymentNotifyRequest;
+import com.xianda.freshdelivery.dto.PaymentShareDto;
 import com.xianda.freshdelivery.dto.ProductDto;
 import com.xianda.freshdelivery.dto.ProductSaveRequest;
 import com.xianda.freshdelivery.dto.ProductSkuDto;
 import com.xianda.freshdelivery.dto.ProductSpecGroupDto;
 import com.xianda.freshdelivery.dto.ProductSpecOptionDto;
 import com.xianda.freshdelivery.dto.RefundDto;
+import com.xianda.freshdelivery.dto.RefundNotifyRequest;
 import com.xianda.freshdelivery.dto.SettingsDto;
+import com.xianda.freshdelivery.dto.StockOverviewExportDto;
+import com.xianda.freshdelivery.dto.StockOverviewItemDto;
 import com.xianda.freshdelivery.service.StorefrontService;
 import java.math.BigDecimal;
 import java.nio.file.Path;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Set;
 import org.junit.jupiter.api.AfterEach;
@@ -80,6 +87,39 @@ class StorefrontServiceTests {
     }
 
     @Test
+    void adminCanFindAnOrderByIdOrOrderNoAndRefundKeepsItsPaymentOrderNo() {
+        StorefrontService service = newService();
+        CurrentUserContext.setUserId(1000L);
+        Long addressId = service.createAddress(addressRequest()).id();
+        service.addCartItem(106L, BigDecimal.ONE);
+        OrderDetailDto created = service.createOrder(new CreateOrderRequest(
+                addressId,
+                1L,
+                "",
+                service.cart().items().stream().map(item -> item.id()).toList()
+        ));
+
+        assertEquals(created.id(), service.findAdminOrder(String.valueOf(created.id())).id());
+        assertEquals(created.id(), service.findAdminOrder(created.orderNo()).id());
+
+        service.confirmPayment(new PaymentNotifyRequest(
+                created.paymentOrderNo(),
+                "TX-REFUND-PAYMENT-NO",
+                "SUCCESS",
+                "wx-test-app",
+                "test-mch",
+                created.payableAmount()
+        ));
+        RefundDto refund = service.createAdminRefund(new AdminRefundCreateRequest(
+                1000L,
+                created.id(),
+                100,
+                "退款测试"
+        ));
+        assertEquals(created.paymentOrderNo(), refund.paymentOrderNo());
+    }
+
+    @Test
     void productSortOrderControlsStorefrontAndRecommendedProductOrder() {
         StorefrontService service = newService();
 
@@ -90,6 +130,175 @@ class StorefrontServiceTests {
         assertEquals(104L, products.get(0).id());
         assertTrue(products.indexOf(service.product(101L)) > products.indexOf(service.product(104L)));
         assertEquals(104L, service.home().recommendedProducts().get(0).id());
+    }
+
+    @Test
+    void unpaidOrderClosesAfterSixHoursAndRestoresStock() {
+        StorefrontService service = newService();
+        CurrentUserContext.setUserId(1000L);
+        Long addressId = service.createAddress(addressRequest()).id();
+        BigDecimal beforeStock = service.product(106L).stockQty();
+        service.addCartItem(106L, BigDecimal.ONE);
+        OrderDetailDto order = service.createOrder(new CreateOrderRequest(
+                addressId,
+                3L,
+                "",
+                service.cart().items().stream().map(item -> item.id()).toList()
+        ));
+        LocalDateTime createdAt = LocalDateTime.parse(order.createdAt().replace(" ", "T"));
+
+        assertEquals(0, service.closeExpiredOrders(createdAt.plusHours(6).minusSeconds(1)));
+        assertEquals("待支付", service.order(order.id()).status());
+        assertTrue(service.closeExpiredOrders(createdAt.plusHours(6).plusSeconds(1)) >= 1);
+
+        OrderDetailDto closed = service.order(order.id());
+        assertEquals("已关闭", closed.status());
+        assertTrue(closed.canRestartPayment());
+        assertEquals(beforeStock, service.product(106L).stockQty());
+    }
+
+    @Test
+    void paymentShareExposesProductSummaryAndIsInvalidatedAfterPayment() {
+        StorefrontService service = newService();
+        CurrentUserContext.setUserId(1000L);
+        Long addressId = service.createAddress(addressRequest()).id();
+        OrderDetailDto order = createOrder(service, addressId, 1L);
+
+        PaymentShareDto created = service.createPaymentShare(order.id());
+        OrderDetailDto sharedOrder = service.order(order.id());
+        assertEquals(32, created.token().length());
+        assertEquals(order.payableAmount(), created.payableAmount());
+        assertFalse(created.items().isEmpty());
+        assertEquals(order.items().get(0).productName(), created.items().get(0).productName());
+        assertEquals(order.items().get(0).quantity(), created.items().get(0).quantity());
+        assertFalse(created.toString().contains(order.orderNo()));
+
+        service.reloadFromPersistence();
+        CurrentUserContext.clear();
+        PaymentShareDto publicSummary = service.paymentShare(created.token());
+        assertEquals(created, publicSummary);
+        assertFalse(publicSummary.toString().contains(order.orderNo()));
+
+        service.confirmPayment(new PaymentNotifyRequest(
+                sharedOrder.paymentOrderNo(),
+                "TX-PAYMENT-SHARE",
+                "SUCCESS",
+                "wx-test-app",
+                "test-mch",
+                order.payableAmount()
+        ));
+
+        assertThrows(BusinessException.class, () -> service.paymentShare(created.token()));
+    }
+
+    @Test
+    void changingPaymentMethodInvalidatesTheOtherPaymentSide() {
+        StorefrontService service = newService();
+        CurrentUserContext.setUserId(1000L);
+        Long addressId = service.createAddress(addressRequest()).id();
+        OrderDetailDto order = createOrder(service, addressId, 1L);
+
+        assertEquals("WECHAT", service.paymentMethod(order.id()).code());
+        PaymentShareDto share = service.createPaymentShare(order.id());
+        OrderDetailDto friendAttempt = service.order(order.id());
+
+        assertEquals("FRIEND", service.paymentMethod(order.id()).code());
+        assertThrows(BusinessException.class, () -> service.preparePayment(order.id()));
+
+        OrderDetailDto selfAttempt = service.activateSelfPayment(order.id());
+        assertEquals("WECHAT", service.paymentMethod(order.id()).code());
+        assertNotEquals(friendAttempt.paymentOrderNo(), selfAttempt.paymentOrderNo());
+        assertThrows(BusinessException.class, () -> service.paymentShare(share.token()));
+        assertThrows(BusinessException.class, () -> service.confirmPayment(new PaymentNotifyRequest(
+                friendAttempt.paymentOrderNo(),
+                "TX-STALE-FRIEND-PAYMENT",
+                "SUCCESS",
+                "wx-test-app",
+                "test-mch",
+                order.payableAmount()
+        )));
+        assertEquals("待支付", service.order(order.id()).status());
+
+        OrderDetailDto paid = service.confirmPayment(new PaymentNotifyRequest(
+                selfAttempt.paymentOrderNo(),
+                "TX-ACTIVE-SELF-PAYMENT",
+                "SUCCESS",
+                "wx-test-app",
+                "test-mch",
+                order.payableAmount()
+        )).order();
+        assertTrue(paid.paidAmount() > 0);
+    }
+
+    @Test
+    void cancelledOrderCanReturnItsItemsToCart() {
+        StorefrontService service = newService();
+        CurrentUserContext.setUserId(1000L);
+        Long addressId = service.createAddress(addressRequest()).id();
+        BigDecimal beforeStock = service.product(106L).stockQty();
+        service.addCartItem(106L, BigDecimal.ONE);
+        OrderDetailDto order = service.createOrder(new CreateOrderRequest(
+                addressId,
+                3L,
+                "",
+                service.cart().items().stream().map(item -> item.id()).toList()
+        ));
+
+        OrderDetailDto cancelled = service.cancelOrder(order.id(), true);
+
+        assertEquals("已取消", cancelled.status());
+        assertEquals(beforeStock, service.product(106L).stockQty());
+        assertEquals(1, service.cart().items().size());
+        assertEquals(106L, service.cart().items().get(0).productId());
+        assertTrue(service.cart().items().get(0).selected());
+    }
+
+    @Test
+    void restartingClosedOrderNextDayRequiresNewDeliverySlot() {
+        StorefrontService service = newService();
+        CurrentUserContext.setUserId(1000L);
+        Long addressId = service.createAddress(addressRequest()).id();
+        service.addCartItem(106L, BigDecimal.ONE);
+        OrderDetailDto order = service.createOrder(new CreateOrderRequest(
+                addressId,
+                3L,
+                "",
+                service.cart().items().stream().map(item -> item.id()).toList()
+        ));
+        LocalDateTime createdAt = LocalDateTime.parse(order.createdAt().replace(" ", "T"));
+        service.closeExpiredOrders(createdAt.plusHours(6).plusSeconds(1));
+        LocalDateTime nextDay = createdAt.plusDays(1);
+
+        BusinessException missingSlot = assertThrows(
+                BusinessException.class,
+                () -> service.restartOrder(order.id(), null, nextDay)
+        );
+        assertTrue(missingSlot.getMessage().contains("重新选择配送时间"));
+
+        OrderDetailDto restarted = service.restartOrder(order.id(), 3L, nextDay);
+        assertEquals("待支付", restarted.status());
+        assertNotEquals(order.paymentOrderNo(), restarted.paymentOrderNo());
+        assertTrue(restarted.deliverySlot().contains("09:00-11:00"));
+        assertTrue(!restarted.paymentExpireAt().isBlank());
+    }
+
+    @Test
+    void storefrontHidesOffShelfProductWhileCartKeepsUnavailableItem() {
+        StorefrontService service = newService();
+        CurrentUserContext.setUserId(1000L);
+        service.addCartItem(101L, BigDecimal.ONE);
+
+        service.updateProductStatus(101L, 0);
+
+        assertTrue(service.products(null, null).stream().anyMatch(product -> product.id().equals(101L)));
+        assertTrue(service.storefrontProducts(null, null).stream().noneMatch(product -> product.id().equals(101L)));
+        assertTrue(service.home().recommendedProducts().stream().noneMatch(product -> product.id().equals(101L)));
+        assertThrows(BusinessException.class, () -> service.storefrontProduct(101L));
+
+        CartDto cart = service.cart();
+        assertEquals(1, cart.items().size());
+        assertEquals("PRODUCT_OFF_SHELF", cart.items().get(0).availabilityCode());
+        assertEquals(0, cart.selectedCount());
     }
 
     @Test
@@ -222,6 +431,7 @@ class StorefrontServiceTests {
         assertEquals(0, product.availableSkuCount());
         assertTrue(product.skus().stream().allMatch(sku -> sku.status() == 0));
         assertEquals(1, product.skus().stream().filter(ProductSkuDto::defaultSku).count());
+        assertTrue(service.storefrontProducts(null, null).stream().noneMatch(item -> item.id().equals(product.id())));
     }
 
     @Test
@@ -370,8 +580,31 @@ class StorefrontServiceTests {
         assertEquals(120, updated.refundAmount());
         assertTrue(service.adminOrder(1004L).refunds().stream().anyMatch(item -> item.id().equals(created.id())));
 
-        service.approveRefund(created.id());
+        OrderDetailDto order = service.adminOrder(created.orderId());
+        service.confirmRefund(new RefundNotifyRequest(
+                updated.refundNo(),
+                "SUCCESS",
+                updated.paymentOrderNo(),
+                "",
+                updated.refundAmount(),
+                order.paidAmount(),
+                "WX-REFUND-TEST"
+        ));
         assertEquals(120, service.adminOrder(1004L).refundedAmount());
+    }
+
+    @Test
+    void rejectedRefundRestoresThePreviousOrderStatusAndRemainsInAfterSaleList() {
+        StorefrontService service = newService();
+        CurrentUserContext.setUserId(10001L);
+
+        RefundDto created = service.createAdminRefund(new AdminRefundCreateRequest(10001L, 1004L, 100, "测试拒绝退款"));
+        assertEquals("退款中", service.adminOrder(1004L).status());
+
+        service.rejectRefund(created.id(), "商品已完成配送");
+
+        assertEquals("已完成", service.adminOrder(1004L).status());
+        assertTrue(service.orders("售后").stream().anyMatch(order -> order.id().equals(1004L)));
     }
 
     @Test
@@ -422,6 +655,89 @@ class StorefrontServiceTests {
         assertEquals(4, service.adminOrders(null, deliveryDate).stream()
                 .filter(order -> createdOrderIds.contains(order.id()))
                 .count());
+    }
+
+    @Test
+    void stockOverviewSplitsSpecsAndExportMatchesPaidOrdersOnly() {
+        StorefrontService service = newService();
+        ProductDto product = service.createProduct(multiSkuProductRequest("备货蓝莓"));
+        ProductSkuDto firstSku = product.skus().get(0);
+        ProductSkuDto secondSku = product.skus().get(1);
+        CurrentUserContext.setUserId(1000L);
+        Long addressId = service.createAddress(addressRequest()).id();
+
+        service.addCartItem(product.id(), firstSku.id(), new BigDecimal("2"));
+        service.addCartItem(product.id(), secondSku.id(), BigDecimal.ONE);
+        OrderDetailDto created = service.createOrder(new CreateOrderRequest(
+                addressId,
+                1L,
+                "门口放菜篮",
+                service.cart().items().stream().map(item -> item.id()).toList()
+        ));
+        OrderDetailDto paid = service.confirmPayment(new PaymentNotifyRequest(
+                created.orderNo(), "TX-STOCK", "SUCCESS", "wx-test-app", "test-mch", created.payableAmount()
+        )).order();
+
+        service.addCartItem(product.id(), firstSku.id(), BigDecimal.ONE);
+        OrderDetailDto unpaid = service.createOrder(new CreateOrderRequest(
+                addressId,
+                1L,
+                "",
+                service.cart().items().stream().map(item -> item.id()).toList()
+        ));
+        assertEquals("待支付", unpaid.status());
+
+        LocalDate deliveryDate = LocalDate.parse(service.adminOrders(null).stream()
+                .filter(order -> paid.orderNo().equals(order.orderNo()))
+                .findFirst()
+                .orElseThrow()
+                .deliveryDate());
+        List<StockOverviewItemDto> overview = service.stockOverview(deliveryDate);
+        assertEquals(1, overview.size());
+        StockOverviewItemDto row = overview.get(0);
+        assertEquals(product.id(), row.productId());
+        assertEquals(0, new BigDecimal("3").compareTo(row.quantity()));
+        assertEquals(1, row.orderCount());
+        assertEquals(List.of(paid.orderNo()), row.orderNos());
+        assertEquals(2, row.specDetails().size());
+        assertEquals(
+                0,
+                row.specDetails().stream()
+                        .map(spec -> spec.quantity())
+                        .reduce(BigDecimal.ZERO, BigDecimal::add)
+                        .compareTo(row.quantity())
+        );
+        assertEquals(
+                row.amount(),
+                row.specDetails().stream().mapToInt(spec -> spec.amount()).sum()
+        );
+        assertTrue(row.specDetails().stream().anyMatch(spec ->
+                firstSku.specificationText().equals(spec.specificationText())
+                        && spec.quantity().compareTo(new BigDecimal("2")) == 0));
+        assertTrue(row.specDetails().stream().anyMatch(spec ->
+                secondSku.specificationText().equals(spec.specificationText())
+                        && spec.quantity().compareTo(BigDecimal.ONE) == 0));
+
+        StockOverviewExportDto exported = service.stockOverviewExport(deliveryDate);
+        assertEquals(deliveryDate.toString(), exported.date());
+        assertEquals("备货总览_" + deliveryDate + ".xlsx", exported.filename());
+        assertEquals(List.of(
+                "配送日期", "商品ID", "商品名称", "需备数量", "单位", "规格明细", "订单数", "预计金额(元)", "关联订单号"
+        ), exported.productSheet().get(0));
+        assertEquals(2, exported.productSheet().size());
+        assertEquals("3", exported.productSheet().get(1).get(3));
+        assertEquals(paid.orderNo(), exported.productSheet().get(1).get(8));
+        assertEquals(3, exported.specSheet().size());
+        assertTrue(exported.orderSheet().stream().skip(1).allMatch(line ->
+                paid.orderNo().equals(line.get(1)) && "商品".equals(line.get(15))));
+        assertTrue(exported.orderSheet().stream().noneMatch(line -> unpaid.orderNo().equals(line.get(1))));
+        assertEquals("门口放菜篮", exported.orderSheet().get(1).get(16));
+        assertEquals(paid.createdAt(), exported.orderSheet().get(1).get(17));
+        assertEquals(2, exported.orderSheet().size() - 1);
+        StockOverviewExportDto emptyDay = service.stockOverviewExport(deliveryDate.plusYears(1));
+        assertEquals(1, emptyDay.productSheet().size());
+        assertEquals(1, emptyDay.specSheet().size());
+        assertEquals(1, emptyDay.orderSheet().size());
     }
 
     private StorefrontService newService() {

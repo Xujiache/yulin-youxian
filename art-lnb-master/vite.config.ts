@@ -67,6 +67,15 @@ export default ({ mode }: { mode: string }) => {
           drop_debugger: true
         }
       },
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            vue: ['vue', 'vue-router', 'pinia'],
+            elementPlus: ['element-plus'],
+            charts: ['echarts/core', 'echarts/charts', 'echarts/components', 'echarts/renderers']
+          }
+        }
+      },
       dynamicImportVarsOptions: {
         warnOnError: true,
         exclude: [],
@@ -105,7 +114,7 @@ export default ({ mode }: { mode: string }) => {
         threshold: 10240, // 只有大小大于该值的资源会被处理 10240B = 10KB
         deleteOriginFile: false // 压缩后是否删除原文件
       }),
-      vueDevTools()
+      ...(mode === 'development' ? [vueDevTools()] : [])
       // 打包分析
       // visualizer({
       //   open: true,

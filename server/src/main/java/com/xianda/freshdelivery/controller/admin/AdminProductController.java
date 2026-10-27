@@ -7,6 +7,7 @@ import com.xianda.freshdelivery.dto.CategoryDto;
 import com.xianda.freshdelivery.dto.ProductDto;
 import com.xianda.freshdelivery.dto.ProductSaveRequest;
 import com.xianda.freshdelivery.service.StorefrontService;
+import com.xianda.freshdelivery.service.ImageVariantService;
 import jakarta.validation.Valid;
 import java.io.IOException;
 import java.io.InputStream;
@@ -37,9 +38,11 @@ public class AdminProductController {
     private static final List<String> ALLOWED_IMAGE_EXTENSIONS = List.of(".jpg", ".jpeg", ".png", ".webp");
 
     private final StorefrontService storefrontService;
+    private final ImageVariantService imageVariantService;
 
-    public AdminProductController(StorefrontService storefrontService) {
+    public AdminProductController(StorefrontService storefrontService, ImageVariantService imageVariantService) {
         this.storefrontService = storefrontService;
+        this.imageVariantService = imageVariantService;
     }
 
     @GetMapping("/categories")
@@ -54,7 +57,7 @@ public class AdminProductController {
 
     @PostMapping("/categories/images")
     public ApiResponse<Map<String, String>> uploadCategoryImage(@RequestParam("file") MultipartFile file) throws IOException {
-        return ApiResponse.ok(Map.of("url", saveImage(file, CATEGORY_IMAGE_DIR, "category", "/uploads/categories/")));
+        return ApiResponse.ok(saveImage(file, CATEGORY_IMAGE_DIR, "category", "/uploads/categories/"));
     }
 
     @PutMapping("/categories/{id}")
@@ -69,8 +72,30 @@ public class AdminProductController {
     }
 
     @GetMapping("/products")
-    public ApiResponse<PageResult<ProductDto>> products(@RequestParam(required = false) Long categoryId) {
-        return ApiResponse.ok(PageResult.of(storefrontService.products(categoryId, null)));
+    public ApiResponse<PageResult<ProductDto>> products(@RequestParam(required = false) String categoryId,
+                                                        @RequestParam(required = false) String keyword,
+                                                        @RequestParam(required = false) String status,
+                                                        @RequestParam(required = false) String recommended,
+                                                        @RequestParam(required = false) String stock,
+                                                        @RequestParam(required = false) Integer minPrice,
+                                                        @RequestParam(required = false) Integer maxPrice,
+                                                        @RequestParam(required = false) String sort,
+                                                        @RequestParam(defaultValue = "1") Integer page,
+                                                        @RequestParam(defaultValue = "30") Integer pageSize) {
+        Long parsedCategoryId = parseLongOrNull(categoryId);
+        return ApiResponse.ok(storefrontService.adminProducts(
+                parsedCategoryId, keyword, status, recommended, stock, minPrice, maxPrice, sort, page, pageSize));
+    }
+
+    private Long parseLongOrNull(String value) {
+        if (value == null || value.isBlank() || "null".equalsIgnoreCase(value) || "undefined".equalsIgnoreCase(value)) {
+            return null;
+        }
+        try {
+            return Long.parseLong(value.trim());
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 
     @GetMapping("/products/{id}")
@@ -85,10 +110,10 @@ public class AdminProductController {
 
     @PostMapping("/products/images")
     public ApiResponse<Map<String, String>> uploadProductImage(@RequestParam("file") MultipartFile file) throws IOException {
-        return ApiResponse.ok(Map.of("url", saveImage(file, PRODUCT_IMAGE_DIR, "product", "/uploads/products/")));
+        return ApiResponse.ok(saveImage(file, PRODUCT_IMAGE_DIR, "product", "/uploads/products/"));
     }
 
-    private String saveImage(MultipartFile file, Path directory, String prefix, String publicPath) throws IOException {
+    private Map<String, String> saveImage(MultipartFile file, Path directory, String prefix, String publicPath) throws IOException {
         if (file == null || file.isEmpty()) {
             throw new BusinessException(400, "图片不能为空");
         }
@@ -105,7 +130,9 @@ public class AdminProductController {
         try (InputStream inputStream = file.getInputStream()) {
             Files.copy(inputStream, target, StandardCopyOption.REPLACE_EXISTING);
         }
-        return publicPath + filename;
+        imageVariantService.generate(target);
+        String url = publicPath + filename;
+        return Map.of("url", url, "thumbnailUrl", publicPath + "thumbnails/" + filename + ".webp");
     }
 
     @PutMapping("/products/{id}")

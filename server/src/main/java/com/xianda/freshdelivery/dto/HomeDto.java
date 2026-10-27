@@ -8,6 +8,7 @@ public record HomeDto(
         String bannerTitle,
         String bannerSubtitle,
         String contactPhone,
+        Integer minOrderAmount,
         List<BannerDto> banners,
         List<CategoryDto> categories,
         List<ProductDto> recommendedProducts

@@ -1,0 +1,17 @@
+/out/
+/*.env
+# versions.env 只有工具链版本号，没有机密，而且 build-release.sh 一开始就要 source 它。
+# 被上面的 /*.env 一并忽略掉的话，全新 clone 出来的仓库根本打不了发布包。
+!/versions.env
+/env/*.env
+!/env/*.example
+*.pid
+*.dmp
+*.dump
+*.dumpstream
+*.token
+token.*
+*.keystore
+*.jks
+*.p12
+*.pfx

@@ -34,27 +34,23 @@ public class MysqlStateStore implements StateStore {
 
     private final JdbcTemplate jdbcTemplate;
     private final boolean shadowWriteLegacyJson;
-    private final boolean rejectSuspiciousQuestionMarks;
     private final ApplicationEventPublisher eventPublisher;
 
     public MysqlStateStore(
             JdbcTemplate jdbcTemplate,
-            @Value("${persistence.mysql.shadow-write-legacy-json:true}") boolean shadowWriteLegacyJson,
-            @Value("${persistence.mysql.reject-suspicious-question-marks:true}") boolean rejectSuspiciousQuestionMarks
+            boolean shadowWriteLegacyJson
     ) {
-        this(jdbcTemplate, shadowWriteLegacyJson, rejectSuspiciousQuestionMarks, null);
+        this(jdbcTemplate, shadowWriteLegacyJson, null);
     }
 
     @Autowired
     public MysqlStateStore(
             JdbcTemplate jdbcTemplate,
             @Value("${persistence.mysql.shadow-write-legacy-json:true}") boolean shadowWriteLegacyJson,
-            @Value("${persistence.mysql.reject-suspicious-question-marks:true}") boolean rejectSuspiciousQuestionMarks,
             ApplicationEventPublisher eventPublisher
     ) {
         this.jdbcTemplate = jdbcTemplate;
         this.shadowWriteLegacyJson = shadowWriteLegacyJson;
-        this.rejectSuspiciousQuestionMarks = rejectSuspiciousQuestionMarks;
         this.eventPublisher = eventPublisher;
     }
 
@@ -68,7 +64,7 @@ public class MysqlStateStore implements StateStore {
             return Optional.empty();
         }
         byte[] legacyPayload = StatePayloadCodec.readValidated(legacyPath);
-        rejectSuspiciousText(stateKey, legacyPayload);
+        StatePayloadCodec.validateLegacyImport(legacyPayload);
         Path backupPath = StatePayloadCodec.backupOnce(legacyPath);
         upsert(stateKey, legacyPayload, legacyPath.toAbsolutePath().toString(), true);
         byte[] imported = loadVerified(stateKey)
@@ -113,7 +109,6 @@ public class MysqlStateStore implements StateStore {
         StateRow row = rows.get(0);
         byte[] payload = StatePayloadCodec.utf8(row.payload());
         StatePayloadCodec.decodeAndValidate(payload);
-        rejectSuspiciousText(stateKey, payload);
         String actualChecksum = StatePayloadCodec.sha256(payload);
         if (!actualChecksum.equals(row.payloadSha256())) {
             throw new IllegalStateException("MySQL 状态数据校验值不一致: " + stateKey + ", version=" + row.version());
@@ -141,12 +136,6 @@ public class MysqlStateStore implements StateStore {
             );
         } catch (DuplicateKeyException exception) {
             jdbcTemplate.update(UPDATE_SQL, json, checksum, now, stateKey);
-        }
-    }
-
-    private void rejectSuspiciousText(String stateKey, byte[] payload) {
-        if (rejectSuspiciousQuestionMarks && StatePayloadCodec.hasSuspiciousQuestionMarks(payload)) {
-            throw new IllegalStateException("状态数据包含连续问号，疑似历史乱码，已拒绝导入或读取: " + stateKey);
         }
     }
 

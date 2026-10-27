@@ -23,6 +23,34 @@ server/.env
 server/.env.*
 !server/.env.example
 
+# Android rider app
+rider-android/local.properties
+# 机器本地的 Gradle 覆盖参数与签名材料都不进版本库。
+# rider-android/gradle.properties 本身是入库的：里面只有 useAndroidX 这类编译开关，
+# 缺了它全新 clone 和 CI 都跑不起来；口令与 Key 走 local.properties 或 -P 参数。
+local.properties
+*.keystore
+*.jks
+rider-android/build/
+rider-android/**/build/
+rider-android/.gradle/
+.gradle/
+
+# Rider APK blobs live outside data/ so 5-minute backups do not ingest 70–100MB files.
+apk-releases/
+
+# Local scratch work: 联调令牌、截图、一次性脚本
+tmp/
+
+# Runtime pid files
+*.pid
+*.dmp
+*.dump
+*.dumpstream
+*.token
+token.*
+**/runtime/
+
 print-agent/agent.config.json
 print-agent/*.log
 *.zip
@@ -32,3 +60,4 @@ tmp/xprinter-esc-sdk-manual.txt
 tmp/xprinter-xp58-manual.txt
 tmp/xprinter_snippets.py
 tmp/芯烨58系列中文编程手册.clean.txt
+scripts/auto-review.stop

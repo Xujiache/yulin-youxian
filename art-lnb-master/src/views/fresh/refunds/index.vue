@@ -3,7 +3,9 @@
     <div class="fresh-page__head">
       <div>
         <h1 class="fresh-page__title">售后退款</h1>
-        <p class="fresh-page__desc">审核用户申请、调整待审核金额，或按账号 ID 和订单 ID 主动发起退款。</p>
+        <p class="fresh-page__desc"
+          >审核用户申请、调整待审核金额，或按账号 ID 和订单 ID 主动发起退款。</p
+        >
       </div>
       <div class="head-actions">
         <ElButton type="primary" plain @click="openCreateRefund">主动退款</ElButton>
@@ -14,8 +16,18 @@
     <ElCard class="fresh-card" shadow="never">
       <div class="fresh-toolbar">
         <div class="fresh-toolbar__left">
-          <ElInput v-model.trim="filters.accountId" clearable placeholder="账号 ID" style="width: 180px" />
-          <ElInput v-model.trim="filters.orderId" clearable placeholder="订单 ID" style="width: 180px" />
+          <ElInput
+            v-model.trim="filters.accountId"
+            clearable
+            placeholder="账号 ID"
+            style="width: 180px"
+          />
+          <ElInput
+            v-model.trim="filters.keyword"
+            clearable
+            placeholder="订单 ID、订单号或退款单号"
+            style="width: 240px"
+          />
           <ElButton type="primary" plain @click="loadRefunds">查询</ElButton>
           <ElButton @click="resetFilters">重置</ElButton>
         </div>
@@ -43,7 +55,9 @@
           <template #default="{ row }">
             <div class="amount-cell">
               <span class="money">{{ money(row.refundAmount) }}</span>
-              <ElButton v-if="canEditAmount(row)" link type="primary" @click="openAmount(row)">修改</ElButton>
+              <ElButton v-if="canEditAmount(row)" link type="primary" @click="openAmount(row)"
+                >修改</ElButton
+              >
             </div>
           </template>
         </ElTableColumn>
@@ -51,14 +65,12 @@
         <ElTableColumn label="凭证" min-width="170">
           <template #default="{ row }">
             <div v-if="row.evidenceImages?.length" class="evidence-list">
-              <ElImage
+              <FreshImage
                 v-for="image in evidenceUrls(row)"
                 :key="image"
                 class="evidence-thumb"
                 :src="image"
-                :preview-src-list="evidenceUrls(row)"
                 fit="cover"
-                preview-teleported
               />
             </div>
             <span v-else class="muted">未上传</span>
@@ -66,16 +78,52 @@
         </ElTableColumn>
         <ElTableColumn label="状态" width="110">
           <template #default="{ row }">
-            <ElTag :type="refundStatusTag(row.status)">{{ row.status }}</ElTag>
+            <ElTooltip v-if="row.failureMessage" :content="row.failureMessage" placement="top">
+              <ElTag :type="refundStatusTag(row.status)">{{ row.status }}</ElTag>
+            </ElTooltip>
+            <ElTag v-else :type="refundStatusTag(row.status)">{{ row.status }}</ElTag>
           </template>
         </ElTableColumn>
         <ElTableColumn label="创建时间" width="170">
           <template #default="{ row }">{{ dateTime(row.createdAt) }}</template>
         </ElTableColumn>
-        <ElTableColumn label="操作" width="170" fixed="right">
+        <ElTableColumn label="操作" width="300" fixed="right">
           <template #default="{ row }">
-            <ElButton size="small" type="success" :disabled="!canReview(row)" @click="approve(row)">通过</ElButton>
-            <ElButton size="small" type="danger" plain :disabled="!canReview(row)" @click="openReject(row)">拒绝</ElButton>
+            <ElButton size="small" type="success" :disabled="!canReview(row)" @click="approve(row)"
+              >通过</ElButton
+            >
+            <ElButton
+              size="small"
+              type="danger"
+              plain
+              :disabled="!canReview(row)"
+              @click="openReject(row)"
+              >拒绝</ElButton
+            >
+            <ElButton
+              v-if="needsStatusSync(row)"
+              size="small"
+              type="primary"
+              plain
+              @click="syncRefundStatus(row)"
+              >同步微信状态</ElButton
+            >
+            <ElButton
+              v-else-if="row.status === '退款失败'"
+              size="small"
+              type="warning"
+              plain
+              @click="retry(row)"
+              >重新发起</ElButton
+            >
+            <ElButton
+              v-if="canRestoreOrder(row)"
+              size="small"
+              type="info"
+              plain
+              @click="restoreOrder(row)"
+              >确认未退款并恢复订单</ElButton
+            >
           </template>
         </ElTableColumn>
       </ElTable>
@@ -96,10 +144,12 @@
           :closable="false"
           :title="`已找到：${matchedCustomer.nickName}（账号 ${matchedCustomer.userId}，共 ${matchedCustomer.orderCount} 个订单）`"
         />
-        <ElFormItem label="订单 ID" required>
+        <ElFormItem label="订单" required>
           <div class="inline-field">
-            <ElInput v-model.trim="createForm.orderId" placeholder="输入该账号的订单 ID" />
-            <ElButton :disabled="!matchedCustomer" :loading="verifyingOrder" @click="verifyOrder">验证订单</ElButton>
+            <ElInput v-model.trim="createForm.orderKeyword" placeholder="输入订单 ID 或订单号" />
+            <ElButton :loading="verifyingOrder" @click="verifyOrder"
+              >查找订单</ElButton
+            >
           </div>
         </ElFormItem>
         <ElAlert
@@ -131,7 +181,9 @@
       </ElForm>
       <template #footer>
         <ElButton @click="createVisible = false">取消</ElButton>
-        <ElButton type="primary" :loading="submitting" @click="submitAdminRefund">确认并发起退款</ElButton>
+        <ElButton type="primary" :loading="submitting" @click="submitAdminRefund"
+          >确认并发起退款</ElButton
+        >
       </template>
     </ElDialog>
 
@@ -141,7 +193,13 @@
           <ElInput :model-value="currentRefund?.refundNo || ''" disabled />
         </ElFormItem>
         <ElFormItem label="退款金额（元）" required>
-          <ElInputNumber v-model="amountYuan" :min="0.01" :precision="2" :step="1" class="form-full" />
+          <ElInputNumber
+            v-model="amountYuan"
+            :min="0.01"
+            :precision="2"
+            :step="1"
+            class="form-full"
+          />
         </ElFormItem>
       </ElForm>
       <template #footer>
@@ -175,13 +233,16 @@
 </template>
 
 <script setup lang="ts">
+  import FreshImage from '@/components/business/fresh-image/index.vue'
   import { ElMessage, ElMessageBox } from 'element-plus'
   import {
     approveRefund,
     createAdminRefund,
-    getOrderDetail,
+    findOrder,
     getRefunds,
+    reconcileRefund,
     rejectRefund,
+    retryRefund,
     searchCustomers,
     updateRefundAmount,
     type AdminCustomer,
@@ -205,8 +266,8 @@
   const amountYuan = ref(0)
   const matchedCustomer = ref<AdminCustomer | null>(null)
   const verifiedOrder = ref<OrderDetail | null>(null)
-  const filters = reactive({ accountId: '', orderId: '' })
-  const createForm = reactive({ accountId: '', orderId: '', refundAmountYuan: 0, reason: '' })
+  const filters = reactive({ accountId: '', keyword: '' })
+  const createForm = reactive({ accountId: '', orderKeyword: '', refundAmountYuan: 0, reason: '' })
 
   const positiveId = (value: string) => {
     const result = Number(String(value || '').trim())
@@ -227,15 +288,24 @@
     if (value === '退款中') return 'primary'
     return 'warning'
   }
+  const needsStatusSync = (row: Refund) =>
+    row.status === '退款失败' &&
+    (row.failureCode === 'REFUND_REQUEST_MISMATCH' ||
+      row.failureCode === 'REFUND_STATUS_UNCONFIRMED' ||
+      row.failureCode === 'REFUND_IDENTITY_MISMATCH' ||
+      row.failureMessage?.includes('订单金额或退款金额与之前请求不一致'))
+  const canRestoreOrder = (row: Refund) =>
+    row.status === '退款失败' && ['CLOSED', 'ABNORMAL'].includes(row.failureCode || '')
 
   const loadRefunds = async () => {
     loading.value = true
     try {
       const userId = positiveId(filters.accountId)
-      const orderId = positiveId(filters.orderId)
       const result = await getRefunds({
         ...(userId ? { userId } : {}),
-        ...(orderId ? { orderId } : {})
+        ...(filters.keyword ? { keyword: filters.keyword } : {}),
+        page: 1,
+        pageSize: 100
       })
       refunds.value = result.items || []
     } catch (error) {
@@ -247,17 +317,21 @@
 
   const resetFilters = () => {
     filters.accountId = ''
-    filters.orderId = ''
+    filters.keyword = ''
     loadRefunds()
   }
 
   const approve = async (row: Refund) => {
     try {
-      await ElMessageBox.confirm(`确认按 ${money(row.refundAmount)} 通过退款「${row.refundNo}」？`, '审核退款', {
-        type: 'warning',
-        confirmButtonText: '通过退款',
-        cancelButtonText: '取消'
-      })
+      await ElMessageBox.confirm(
+        `确认按 ${money(row.refundAmount)} 通过退款「${row.refundNo}」？`,
+        '审核退款',
+        {
+          type: 'warning',
+          confirmButtonText: '通过退款',
+          cancelButtonText: '取消'
+        }
+      )
     } catch {
       return
     }
@@ -267,6 +341,63 @@
       ElMessage.success('退款已提交')
     } catch (error) {
       ElMessage.error(error instanceof Error ? error.message : '退款审核失败')
+    }
+  }
+
+  const retry = async (row: Refund) => {
+    try {
+      await ElMessageBox.confirm(
+        `将重新向微信发起退款「${row.refundNo}」，确认继续？`,
+        '重新发起退款',
+        { type: 'warning', confirmButtonText: '重新发起', cancelButtonText: '取消' }
+      )
+    } catch {
+      return
+    }
+    try {
+      await retryRefund(row.id)
+      await loadRefunds()
+      ElMessage.success('退款已重新提交，请稍后刷新确认结果')
+    } catch (error) {
+      ElMessage.error(error instanceof Error ? error.message : '重新发起退款失败')
+    }
+  }
+
+  const syncRefundStatus = async (row: Refund) => {
+    try {
+      await ElMessageBox.confirm(
+        `仅向微信查询退款单「${row.refundNo}」的真实状态，不会再次发起退款。是否继续？`,
+        '同步微信退款状态',
+        { type: 'info', confirmButtonText: '查询微信状态', cancelButtonText: '取消' }
+      )
+    } catch {
+      return
+    }
+    try {
+      const result = await reconcileRefund(row.id)
+      await loadRefunds()
+      ElMessage.success(result.status === '退款成功' ? '微信已确认退款成功' : `微信当前状态：${result.status}`)
+    } catch (error) {
+      ElMessage.error(error instanceof Error ? error.message : '微信退款状态查询失败')
+    }
+  }
+
+  const restoreOrder = async (row: Refund) => {
+    try {
+      await ElMessageBox.confirm(
+        `微信已确认退款未成功。确认后将把订单恢复为退款前状态，退款单「${row.refundNo}」将标记为已拒绝。`,
+        '确认未退款并恢复订单',
+        { type: 'warning', confirmButtonText: '确认恢复', cancelButtonText: '取消' }
+      )
+    } catch {
+      return
+    }
+    try {
+      await rejectRefund(row.id, '微信已确认退款未成功，恢复订单处理')
+      await loadRefunds()
+      ElMessage.success('订单已恢复为退款前状态')
+    } catch (error) {
+      ElMessage.error(error instanceof Error ? error.message : '恢复订单失败')
     }
   }
 
@@ -317,7 +448,7 @@
   }
 
   const openCreateRefund = () => {
-    Object.assign(createForm, { accountId: '', orderId: '', refundAmountYuan: 0, reason: '' })
+    Object.assign(createForm, { accountId: '', orderKeyword: '', refundAmountYuan: 0, reason: '' })
     matchedCustomer.value = null
     verifiedOrder.value = null
     createVisible.value = true
@@ -344,16 +475,17 @@
   }
 
   const verifyOrder = async () => {
-    const orderId = positiveId(createForm.orderId)
-    if (!matchedCustomer.value || !orderId) {
-      ElMessage.warning('请先搜索账号并填写订单 ID')
+    const keyword = createForm.orderKeyword.trim()
+    if (!keyword) {
+      ElMessage.warning('请输入订单 ID 或订单号')
       return
     }
     verifyingOrder.value = true
     verifiedOrder.value = null
     try {
-      const order = await getOrderDetail(orderId)
-      if (order.userId !== matchedCustomer.value.userId) {
+      const order = await findOrder(keyword)
+      const enteredUserId = positiveId(createForm.accountId)
+      if (enteredUserId && order.userId !== enteredUserId) {
         ElMessage.error('该订单不属于当前账号')
         return
       }
@@ -361,8 +493,21 @@
         ElMessage.error('该订单尚未支付，不能退款')
         return
       }
+      if (!matchedCustomer.value || matchedCustomer.value.userId !== order.userId) {
+        const customers = await searchCustomers(order.userId)
+        matchedCustomer.value = customers.items?.[0] || {
+          userId: order.userId,
+          nickName: '该订单客户',
+          avatarUrl: '',
+          orderCount: 0
+        }
+      }
+      createForm.accountId = String(order.userId)
       verifiedOrder.value = order
-      const remaining = Math.max(Number(order.paidAmount || 0) - Number(order.refundedAmount || 0), 0)
+      const remaining = Math.max(
+        Number(order.paidAmount || 0) - Number(order.refundedAmount || 0),
+        0
+      )
       createForm.refundAmountYuan = centToYuan(remaining)
     } catch (error) {
       ElMessage.error(error instanceof Error ? error.message : '订单验证失败')
@@ -372,14 +517,8 @@
   }
 
   const submitAdminRefund = async () => {
-    const userId = positiveId(createForm.accountId)
-    const orderId = positiveId(createForm.orderId)
-    if (!matchedCustomer.value || matchedCustomer.value.userId !== userId) {
-      ElMessage.warning('请先搜索并确认账号')
-      return
-    }
-    if (!verifiedOrder.value || verifiedOrder.value.id !== orderId) {
-      ElMessage.warning('请先验证订单')
+    if (!verifiedOrder.value || !matchedCustomer.value) {
+      ElMessage.warning('请先查找并确认订单')
       return
     }
     if (createForm.refundAmountYuan <= 0 || !createForm.reason) {
@@ -398,8 +537,8 @@
     submitting.value = true
     try {
       await createAdminRefund({
-        userId,
-        orderId,
+        userId: verifiedOrder.value.userId,
+        orderId: verifiedOrder.value.id,
         refundAmount: yuanToCent(createForm.refundAmountYuan),
         reason: createForm.reason
       })
