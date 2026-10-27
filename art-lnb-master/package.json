@@ -10,6 +10,8 @@
   "scripts": {
     "dev": "vite --open",
     "build": "vite build && vue-tsc --noEmit",
+    "test:admin-renewal": "node --import tsx --test scripts/admin-renewal.test.mjs",
+    "test:admin-origin": "node --test scripts/admin-origin.test.mjs",
     "serve": "vite preview",
     "lint": "eslint",
     "fix": "eslint --fix",

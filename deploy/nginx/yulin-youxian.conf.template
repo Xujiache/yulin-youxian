@@ -26,6 +26,15 @@ server {
     add_header X-Content-Type-Options nosniff always;
     add_header Referrer-Policy strict-origin-when-cross-origin always;
 
+    location = /admin-renewal.json {
+        alias ${YULIN_ROOT}/runtime/admin-renewal.json;
+        default_type application/json;
+        add_header Cache-Control "no-store" always;
+        add_header X-Content-Type-Options nosniff always;
+        add_header Referrer-Policy strict-origin-when-cross-origin always;
+        limit_except GET { deny all; }
+    }
+
     # SSE must bypass every buffering layer or the dispatch board stalls.
     location = /api/admin/delivery/board/stream {
         proxy_pass http://127.0.0.1:${SERVER_PORT};

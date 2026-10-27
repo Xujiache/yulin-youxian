@@ -7,6 +7,7 @@
     ]"
   >
     <div
+      data-testid="admin-header-toolbar"
       class="relative box-border flex-b h-15 leading-15 select-none"
       :class="[
         tabStyle === 'tab-card' || tabStyle === 'tab-google'
@@ -29,6 +30,7 @@
         <!-- 菜单按钮 -->
         <ArtIconButton
           v-if="isLeftMenu && shouldShowMenuButton"
+          data-testid="admin-menu-toggle"
           icon="ri:menu-2-fill"
           class="ml-3 max-sm:ml-[7px]"
           @click="visibleMenu"
@@ -51,6 +53,7 @@
         <!-- 面包屑 -->
         <ArtBreadcrumb
           v-if="(shouldShowBreadcrumb && isLeftMenu) || (shouldShowBreadcrumb && isDualMenu)"
+          class="min-w-0 overflow-hidden"
         />
 
         <!-- 顶部菜单 -->
@@ -58,12 +61,15 @@
 
         <!-- 混合菜单-顶部 -->
         <ArtMixedMenu v-if="isTopLeftMenu" :list="menuList" />
+
+        <AdminRenewalNotice :active="userStore.isLogin && Boolean(userStore.accessToken)" />
       </div>
 
-      <div class="flex-c gap-2.5">
+      <div class="flex-c gap-2.5" data-testid="admin-header-actions">
         <!-- 搜索 -->
         <div
           v-if="shouldShowGlobalSearch"
+          data-testid="admin-header-search"
           class="flex-cb w-40 h-9 px-2.5 c-p border border-g-400 rounded-custom-sm max-md:!hidden"
           @click="openSearchDialog"
         >
@@ -183,6 +189,7 @@
   import { useCommon } from '@/hooks/core/useCommon'
   import { useHeaderBar } from '@/hooks/core/useHeaderBar'
   import ArtUserMenu from './widget/ArtUserMenu.vue'
+  import AdminRenewalNotice from '@/components/business/admin-renewal-notice/index.vue'
 
   defineOptions({ name: 'ArtHeaderBar' })
 
